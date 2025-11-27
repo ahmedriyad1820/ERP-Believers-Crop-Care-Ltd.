@@ -1,8 +1,11 @@
 import { useState, useMemo, useEffect, useRef } from 'react'
+import { BrowserRouter as Router, Routes, Route } from 'react-router-dom'
 import './App.css'
 import logoImage from './assets/logo.png'
-
-const MANAGEMENT_SLIDE_SIZE = 3
+import SiteHeader from './components/SiteHeader.jsx'
+import AboutSection from './components/AboutSection.jsx'
+import AboutPage from './pages/About.jsx'
+import TeamSection from './components/TeamSection.jsx'
 
 // Translations
 const translations = {
@@ -345,13 +348,15 @@ const translations = {
     },
     hero: {
       title: 'ফসল ফলনে নেইকো ভীতি, এই আমাদের প্রতিশ্রুতি',
-      description: 'জৈব অনুশীলন থেকে আধুনিক কৃষি-প্রযুক্তি সমাধান পর্যন্ত, বেলিভার্স ক্রপ কেয়ার লিমিটেড কৃষক এবং সম্প্রদায়কে উন্নতির জন্য ক্ষমতায়ন করে।',
+      description: 'জৈব অনুশীলন থেকে আধুনিক কৃষি-প্রযুক্তি সমাধান পর্যন্ত, বিলিভার্স ক্রপ কেয়ার লিমিটেড কৃষক এবং সম্প্রদায়কে উন্নতির জন্য ক্ষমতায়ন করে।',
       viewProducts: 'পণ্য দেখুন'
     },
     about: {
+      heroTitle: 'প্রকল্প বিবরণ',
+      heroSubtitle: 'কীভাবে বিলিভার্স ক্রপ কেয়ার আধুনিক এগ্রোনমি, নির্ভরযোগ্য সরবরাহ এবং মাঠ সহযোগিতার মাধ্যমে কৃষকদের পাশে থাকে তা জানুন।',
       tagline: 'আমাদের সম্পর্কে',
-      description: 'বেলিভার্স ক্রপ কেয়ার লিমিটেড কৃষি শিল্পে একটি ক্রমবর্ধমান নাম, যা কৃষকদের তাদের ফসল রক্ষা করতে এবং উৎপাদনশীলতা বাড়াতে সাহায্য করার জন্য নিবেদিত। প্রথম দিন থেকেই, আমাদের লক্ষ্য সহজ ছিল — উচ্চমানের, কার্যকর এবং সাশ্রয়ী ফসল সুরক্ষা পণ্য সরবরাহ করা যা কৃষকরা সত্যিই নির্ভর করতে পারে।',
-      details: 'আমরা বিশ্বাস করি যে সফল কৃষি শুরু হয় সঠিক সহায়তা দিয়ে। তাই আমরা কৃষক, ডিলার এবং ডিস্ট্রিবিউটরদের সাথে ঘনিষ্ঠভাবে কাজ করি তাদের চাহিদা বুঝতে এবং সময়মতো সমাধান প্রদান করতে যা মাঠে সত্যিকারের পার্থক্য তৈরি করে। আমাদের পণ্যগুলি যত্ন সহকারে বিকশিত হয়েছে, কর্মক্ষমতা, নিরাপত্তা এবং পরিবেশগত দায়িত্বের উপর ফোকাস করে।\n\nযা একটি ছোট দল দিয়ে শুরু হয়েছিল একটি বড় স্বপ্ন নিয়ে এখন বাজারে একটি শক্তিশালী উপস্থিতি সহ একটি বিশ্বস্ত কোম্পানিতে পরিণত হয়েছে। আমাদের অংশীদার এবং ডিস্ট্রিবিউটরদের প্রসারিত নেটওয়ার্ক আমাদের প্রতিদিন আরও বেশি কৃষকের কাছে পৌঁছাতে দেয়, তাদের স্বাস্থ্যকর ফসল বৃদ্ধি করতে এবং ভাল ফলন অর্জন করতে সাহায্য করে।\n\nবেলিভার্স ক্রপ কেয়ার লিমিটেডে, আমরা শুধু একটি ফসল সুরক্ষা কোম্পানি নই — আমরা অগ্রগতির অংশীদার। ধারাবাহিক গবেষণা, উদ্ভাবন এবং গুণমানের প্রতি প্রতিশ্রুতির সাথে, আমরা দেশজুড়ে কৃষি সম্প্রদায়ের জন্য একটি উজ্জ্বল, সবুজ ভবিষ্যত তৈরি করার লক্ষ্য রাখি।',
+      description: 'বিলিভার্স ক্রপ কেয়ার লিমিটেড কৃষি শিল্পে একটি ক্রমবর্ধমান নাম, যা কৃষকদের তাদের ফসল রক্ষা করতে এবং উৎপাদনশীলতা বাড়াতে সাহায্য করার জন্য নিবেদিত। প্রথম দিন থেকেই, আমাদের লক্ষ্য সহজ ছিল — উচ্চমানের, কার্যকর এবং সাশ্রয়ী ফসল সুরক্ষা পণ্য সরবরাহ করা যা কৃষকরা সত্যিই নির্ভর করতে পারে।',
+      details: 'আমরা বিশ্বাস করি যে সফল কৃষি শুরু হয় সঠিক সহায়তা দিয়ে। তাই আমরা কৃষক, ডিলার এবং ডিস্ট্রিবিউটরদের সাথে ঘনিষ্ঠভাবে কাজ করি তাদের চাহিদা বুঝতে এবং সময়মতো সমাধান প্রদান করতে যা মাঠে সত্যিকারের পার্থক্য তৈরি করে। আমাদের পণ্যগুলি যত্ন সহকারে বিকশিত হয়েছে, কর্মক্ষমতা, নিরাপত্তা এবং পরিবেশগত দায়িত্বের উপর ফোকাস করে।\n\nযা একটি ছোট দল দিয়ে শুরু হয়েছিল একটি বড় স্বপ্ন নিয়ে এখন বাজারে একটি শক্তিশালী উপস্থিতি সহ একটি বিশ্বস্ত কোম্পানিতে পরিণত হয়েছে। আমাদের অংশীদার এবং ডিস্ট্রিবিউটরদের প্রসারিত নেটওয়ার্ক আমাদের প্রতিদিন আরও বেশি কৃষকের কাছে পৌঁছাতে দেয়, তাদের স্বাস্থ্যকর ফসল বৃদ্ধি করতে এবং ভাল ফলন অর্জন করতে সাহায্য করে।\n\nবিলিভার্স ক্রপ কেয়ার লিমিটেডে, আমরা শুধু একটি ফসল সুরক্ষা কোম্পানি নই — আমরা অগ্রগতির অংশীদার। ধারাবাহিক গবেষণা, উদ্ভাবন এবং গুণমানের প্রতি প্রতিশ্রুতির সাথে, আমরা দেশজুড়ে কৃষি সম্প্রদায়ের জন্য একটি উজ্জ্বল, সবুজ ভবিষ্যত তৈরি করার লক্ষ্য রাখি।',
       visionButton: 'ভিশন',
       missionButton: 'মিশন',
       vision: {
@@ -360,7 +365,7 @@ const translations = {
       },
       mission: {
         title: 'আমাদের মিশন',
-        content: 'বেলিভার্স ক্রপ কেয়ার লিমিটেডে আমাদের মিশন হল উদ্ভাবনী, নির্ভরযোগ্য এবং টেকসই ফসল সুরক্ষা সমাধানের মাধ্যমে কৃষকদের ক্ষমতায়ন করা যা উৎপাদনশীলতা বাড়ায় এবং পরিবেশ রক্ষা করে। আমরা এমন পণ্য সরবরাহ করার চেষ্টা করি যা নিরাপদ এবং দায়িত্বশীল অনুশীলনের মাধ্যমে কৃষকদের ভাল ফলন অর্জনে সাহায্য করে, পাশাপাশি বিশ্বাস, গুণমান এবং পরিষেবা উৎকর্ষের উপর ভিত্তি করে দীর্ঘমেয়াদী সম্পর্ক গড়ে তোলে।\n\nআমরা ধারাবাহিক গবেষণা, পণ্য উন্নয়ন এবং কৃষক শিক্ষার প্রতি প্রতিশ্রুতিবদ্ধ — নিশ্চিত করা যে আমরা যে প্রতিটি ক্ষেত্রের সেবা করি তা আগামী প্রজন্মের জন্য শক্তিশালী, স্বাস্থ্যকর এবং আরও উৎপাদনশীল হয়ে ওঠে।'
+        content: 'বিলিভার্স ক্রপ কেয়ার লিমিটেডে আমাদের মিশন হল উদ্ভাবনী, নির্ভরযোগ্য এবং টেকসই ফসল সুরক্ষা সমাধানের মাধ্যমে কৃষকদের ক্ষমতায়ন করা যা উৎপাদনশীলতা বাড়ায় এবং পরিবেশ রক্ষা করে। আমরা এমন পণ্য সরবরাহ করার চেষ্টা করি যা নিরাপদ এবং দায়িত্বশীল অনুশীলনের মাধ্যমে কৃষকদের ভাল ফলন অর্জনে সাহায্য করে, পাশাপাশি বিশ্বাস, গুণমান এবং পরিষেবা উৎকর্ষের উপর ভিত্তি করে দীর্ঘমেয়াদী সম্পর্ক গড়ে তোলে।\n\nআমরা ধারাবাহিক গবেষণা, পণ্য উন্নয়ন এবং কৃষক শিক্ষার প্রতি প্রতিশ্রুতিবদ্ধ — নিশ্চিত করা যে আমরা যে প্রতিটি ক্ষেত্রের সেবা করি তা আগামী প্রজন্মের জন্য শক্তিশালী, স্বাস্থ্যকর এবং আরও উৎপাদনশীল হয়ে ওঠে।'
       }
     },
     review: {
@@ -371,7 +376,7 @@ const translations = {
     },
     whyChooseUs: {
       tagline: 'কেন আমাদের বেছে নেবেন',
-      title: 'কেন বেছে নেবেন বেলিভার্স ক্রপ কেয়ার লিমিটেড',
+      title: 'কেন বেছে নেবেন বিলিভার্স ক্রপ কেয়ার লিমিটেড',
       features: [
         {
           title: 'মানসম্পন্ন পণ্য',
@@ -401,7 +406,7 @@ const translations = {
     },
     team: {
       tagline: 'আমাদের দল',
-      title: 'বেলিভার্স ক্রপ কেয়ারের পেছনের মানুষ',
+      title: 'বিলিভার্স ক্রপ কেয়ারের পেছনের মানুষ',
       description: 'এগ্রোনমি, উদ্ভাবন এবং সেবা বিশেষজ্ঞদের সমন্বয়ে গঠিত একটি নেতৃত্বদানকারী দল যারা নিশ্চিত করে যে কৃষকরা সবসময় বিশ্বস্ত সহায়তা পান।',
       groups: [
         { key: 'chairman', title: 'চেয়ারম্যান' },
@@ -498,7 +503,7 @@ const translations = {
       title: 'দেশজুড়ে কৃষকের আস্থার নাম',
       cards: [
         {
-          quote: 'বেলিভার্স ক্রপ কেয়ার সময়মতো পণ্য দেয় এবং তাদের এগ্রোনমিস্টরা সবসময় ফোন ধরে। উপকূলীয় মরিচ ক্ষেত সারা মৌসুমে সুরক্ষিত থাকে।',
+          quote: 'বিলিভার্স ক্রপ কেয়ার সময়মতো পণ্য দেয় এবং তাদের এগ্রোনমিস্টরা সবসময় ফোন ধরে। উপকূলীয় মরিচ ক্ষেত সারা মৌসুমে সুরক্ষিত থাকে।',
           name: 'মো. রফিক হাসান',
           role: 'মরিচ চাষি, খুলনা',
           photo: 'https://images.unsplash.com/photo-1509099836639-18ba1795216d?auto=format&fit=crop&w=800&q=80'
@@ -646,7 +651,7 @@ const translations = {
       title: 'বাংলাদেশ জুড়ে আমাদের সেবা কভারেজ',
       description: 'আমরা বাংলাদেশের বিভিন্ন অঞ্চলে কৃষকদের সেবা করতে গর্বিত, সারা দেশে কৃষি সম্প্রদায়ের কাছে মানসম্পন্ন ফসল সুরক্ষা সমাধান নিয়ে আসছি।',
       pill: 'কভারেজের সারসংক্ষেপ',
-      mapAlt: 'বাংলাদেশের মানচিত্রে বেলিভার্স ক্রপ কেয়ারের সেবার কভারেজ দেখানো হয়েছে',
+      mapAlt: 'বাংলাদেশের মানচিত্রে বিলিভার্স ক্রপ কেয়ারের সেবার কভারেজ দেখানো হয়েছে',
       briefTitle: 'প্রতিটি বিভাগে আমাদের উপস্থিতি',
       briefIntro: 'আমাদের এগ্রোনমি নেটওয়ার্ক প্রতিটি বিভাগে কৃষকদের দ্রুত ডেলিভারি, মাঠ পর্যায়ের দিকনির্দেশনা এবং বিক্রয়োত্তর সহায়তা নিশ্চিত করে।',
       briefPoints: [
@@ -656,60 +661,20 @@ const translations = {
       ]
     },
     footer: {
-      copyright: '© ২০২৪ বেলিভার্স ক্রপ কেয়ার লিমিটেড। সর্বস্বত্ব সংরক্ষিত। আলিশা আইটি সলিউশন দ্বারা উন্নয়নকৃত।',
+      copyright: '© ২০২৪ বিলিভার্স ক্রপ কেয়ার লিমিটেড। সর্বস্বত্ব সংরক্ষিত। আলিশা আইটি সলিউশন দ্বারা উন্নয়নকৃত।',
       tagline: 'ফসল ফলনে নেইকো ভীতি, এই আমাদের প্রতিশ্রুতি '
     }
   }
 }
 
-function App() {
-  const [language, setLanguage] = useState('en')
-  const [expandedSection, setExpandedSection] = useState(null) // 'vision' or 'mission' or null
+function HomePage({ language, toggleLanguage, t }) {
   const [currentSlide, setCurrentSlide] = useState(0)
-  const [managementSlide, setManagementSlide] = useState(0)
   const [quantities, setQuantities] = useState({}) // Store quantities for each product
-  const [mobileMenuOpen, setMobileMenuOpen] = useState(false) // Mobile menu state
   const [isMobile, setIsMobile] = useState(false) // Track if in mobile/responsive mode
   const [touchStart, setTouchStart] = useState(null)
   const [touchEnd, setTouchEnd] = useState(null)
+  const [currentTestimonialIndex, setCurrentTestimonialIndex] = useState(0) // Testimonial slider index
   const productsSliderRef = useRef(null)
-  const visionRef = useRef(null)
-  const missionRef = useRef(null)
-  
-  // Memoize translations to ensure automatic updates when language changes
-  const t = useMemo(() => translations[language], [language])
-  const managementMembers = useMemo(
-    () => (t.team?.members || []).filter(member => member.group === 'management'),
-    [t]
-  )
-  const managementSlides = useMemo(() => {
-    const slides = []
-    // In responsive mode, show 1 member per slide; in desktop, show 3
-    const slideSize = isMobile ? 1 : MANAGEMENT_SLIDE_SIZE
-    for (let i = 0; i < managementMembers.length; i += slideSize) {
-      slides.push(managementMembers.slice(i, i + slideSize))
-    }
-    return slides
-  }, [managementMembers, isMobile])
-  const managementMaxSlide = Math.max(0, managementSlides.length - 1)
-
-  const toggleLanguage = () => {
-    setLanguage(prevLanguage => prevLanguage === 'en' ? 'bn' : 'en')
-  }
-
-  const handleVisionClick = () => {
-    setExpandedSection(prev => (prev === 'vision' ? null : 'vision'))
-  }
-
-  const handleMissionClick = () => {
-    setExpandedSection(prev => (prev === 'mission' ? null : 'mission'))
-  }
-
-  const handleLogoClick = () => {
-    window.scrollTo({ top: 0, behavior: 'smooth' })
-    setMobileMenuOpen(false)
-  }
-
   // Only show first 5 products + see all button
   const displayedProducts = t.products.items.slice(0, 5)
   
@@ -760,28 +725,6 @@ function App() {
     }
   }
 
-  const handleManagementNext = () => {
-    setManagementSlide(prev => (prev < managementMaxSlide ? prev + 1 : 0))
-  }
-
-  const handleManagementPrev = () => {
-    setManagementSlide(prev => (prev > 0 ? prev - 1 : managementMaxSlide))
-  }
-
-  // Auto-slide for management team in responsive mode
-  useEffect(() => {
-    if (!isMobile) return // Only auto-slide in responsive mode
-    
-    const interval = setInterval(() => {
-      setManagementSlide(prev => {
-        const maxSlide = Math.max(0, managementSlides.length - 1)
-        return prev < maxSlide ? prev + 1 : 0
-      })
-    }, 3000) // Change slide every 3 seconds
-
-    return () => clearInterval(interval)
-  }, [isMobile, managementSlides.length])
-
   // No need to group products - each product is its own slide in desktop
 
   const handleQuantityChange = (productIndex, change) => {
@@ -811,6 +754,7 @@ function App() {
       // Reset slide when switching between mobile and desktop
       if (wasMobile !== nowMobile) {
         setCurrentSlide(0)
+        setCurrentTestimonialIndex(0)
       }
     }
     checkMobile()
@@ -821,29 +765,21 @@ function App() {
   // Reset slide when language changes
   useEffect(() => {
     setCurrentSlide(0)
-    setManagementSlide(0)
+    setCurrentTestimonialIndex(0)
   }, [language])
 
+  // Auto-advance testimonials in responsive mode (every 5 seconds)
   useEffect(() => {
-    if (expandedSection === 'vision' && visionRef.current) {
-      visionRef.current.scrollIntoView({ behavior: 'smooth', block: 'start' })
-    }
-    if (expandedSection === 'mission' && missionRef.current) {
-      missionRef.current.scrollIntoView({ behavior: 'smooth', block: 'start' })
-    }
-  }, [expandedSection])
+    if (!isMobile || !t.testimonials?.cards?.length) return
 
-  // Prevent body scroll when mobile menu is open
-  useEffect(() => {
-    if (mobileMenuOpen) {
-      document.body.style.overflow = 'hidden'
-    } else {
-      document.body.style.overflow = ''
-    }
-    return () => {
-      document.body.style.overflow = ''
-    }
-  }, [mobileMenuOpen])
+    const interval = setInterval(() => {
+      setCurrentTestimonialIndex((prev) => 
+        prev === t.testimonials.cards.length - 1 ? 0 : prev + 1
+      )
+    }, 5000) // 5 seconds
+
+    return () => clearInterval(interval)
+  }, [isMobile, t.testimonials?.cards?.length])
 
   useEffect(() => {
     const sections = document.querySelectorAll('.fade-section')
@@ -856,7 +792,8 @@ function App() {
         entries.forEach(entry => {
           if (entry.isIntersecting) {
             entry.target.classList.add('visible')
-            observer.unobserve(entry.target)
+          } else {
+            entry.target.classList.remove('visible')
           }
         })
       },
@@ -870,69 +807,7 @@ function App() {
 
   return (
     <div className="app">
-      {/* Header */}
-      <header className="header">
-        <div className="header-content">
-          <div className="logo-container">
-            <button 
-              type="button"
-              className="logo-button"
-              onClick={handleLogoClick}
-              aria-label={language === 'en' ? 'Go to homepage' : 'হোম পেইজে যান'}
-            >
-              <img 
-                src={logoImage} 
-                alt="Believers Crop Care Ltd." 
-                className="logo-image"
-                onLoad={() => console.log('Logo loaded successfully')}
-                onError={(e) => {
-                  console.error('Logo failed to load');
-                  e.target.style.border = '2px solid red';
-                }}
-              />
-            </button>
-          </div>
-          
-          <nav className={`nav-links ${mobileMenuOpen ? 'mobile-menu-open' : ''}`}>
-            <a href="#" className="nav-link active" onClick={() => setMobileMenuOpen(false)}>{t.nav.home}</a>
-            <a href="#" className="nav-link" onClick={() => setMobileMenuOpen(false)}>{t.nav.about}</a>
-            <a href="#" className="nav-link" onClick={() => setMobileMenuOpen(false)}>{t.nav.product}</a>
-            <a href="#" className="nav-link" onClick={() => setMobileMenuOpen(false)}>{t.nav.notices}</a>
-            <a href="#" className="nav-link" onClick={() => setMobileMenuOpen(false)}>{t.nav.career}</a>
-            <a href="#" className="nav-link" onClick={() => setMobileMenuOpen(false)}>{t.nav.blog}</a>
-            <div className="mobile-menu-actions">
-              <button 
-                className="mobile-language-btn" 
-                onClick={() => {
-                  toggleLanguage();
-                  // Keep menu open so user can see language change
-                }}
-                title={language === 'en' ? 'বাংলায় পরিবর্তন করুন' : 'Switch to English'}
-              >
-                <span>{language === 'en' ? 'বাংলা' : 'EN'}</span>
-              </button>
-              <button className="mobile-contact-btn" onClick={() => setMobileMenuOpen(false)}>{t.nav.contact}</button>
-            </div>
-          </nav>
-          
-          <div className="header-right">
-            <button className="language-btn" onClick={toggleLanguage} title={language === 'en' ? 'বাংলায় পরিবর্তন করুন' : 'Switch to English'}>
-              <span>{language === 'en' ? 'বাংলা' : 'EN'}</span>
-            </button>
-            <button className="contact-btn">{t.nav.contact}</button>
-            <button 
-              className="mobile-menu-toggle"
-              onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
-              aria-label="Toggle menu"
-              aria-expanded={mobileMenuOpen}
-            >
-              <span className={`hamburger-line ${mobileMenuOpen ? 'active' : ''}`}></span>
-              <span className={`hamburger-line ${mobileMenuOpen ? 'active' : ''}`}></span>
-              <span className={`hamburger-line ${mobileMenuOpen ? 'active' : ''}`}></span>
-            </button>
-          </div>
-        </div>
-      </header>
+      <SiteHeader language={language} toggleLanguage={toggleLanguage} t={t} />
 
       {/* Hero Section */}
       <main className="hero-section fade-section">
@@ -997,116 +872,7 @@ function App() {
         </div>
       </main>
 
-      {/* About Section */}
-      <section className="about-section fade-section">
-        <div className="about-container">
-          <div className="about-content">
-            {/* Left Side - Text Content */}
-            <div className="about-text-wrapper">
-              <p className="about-tagline">{t.about.tagline}</p>
-              <p className="about-description">{t.about.description}</p>
-              <div className="about-details">
-                {t.about.details.split('\n\n').map((paragraph, index) => (
-                  <p key={index}>{paragraph}</p>
-                ))}
-              </div>
-              <div className="about-buttons">
-                <button 
-                  className={`about-more-btn ${expandedSection === 'vision' ? 'active' : ''}`}
-                  onClick={handleVisionClick}
-                >
-                  {t.about.visionButton}
-                </button>
-                <button 
-                  className={`about-more-btn ${expandedSection === 'mission' ? 'active' : ''}`}
-                  onClick={handleMissionClick}
-                >
-                  {t.about.missionButton}
-                </button>
-              </div>
-            </div>
-
-            {/* Right Side - Image Section */}
-            <div className="about-images-wrapper">
-              {/* Two Oval Images on Left */}
-              <div className="about-oval-images">
-                <div className="about-oval-image about-oval-top">
-                  <img src="/hero-image.jpg" alt="Vineyard landscape" />
-                </div>
-                <div className="about-oval-image about-oval-bottom">
-                  <img src="/hero-image.jpg" alt="Wheat field at sunrise" />
-                </div>
-              </div>
-              
-              {/* Large Circular Image on Right */}
-              <div className="about-circular-image">
-                <img src="/hero-image.jpg" alt="Aerial view of farmland" />
-                <div className="circular-image-overlay">
-                  <p className="overlay-text">{t.about.tagline}</p>
-                </div>
-              </div>
-              
-              {/* Vision and Mission Buttons for Responsive */}
-              <div className="about-buttons-responsive">
-                <button 
-                  className={`about-more-btn ${expandedSection === 'vision' ? 'active' : ''}`}
-                  onClick={handleVisionClick}
-                >
-                  {t.about.visionButton}
-                </button>
-                <button 
-                  className={`about-more-btn ${expandedSection === 'mission' ? 'active' : ''}`}
-                  onClick={handleMissionClick}
-                >
-                  {t.about.missionButton}
-                </button>
-              </div>
-            </div>
-          </div>
-
-          {/* Extended Vision Section */}
-          {expandedSection === 'vision' && (
-            <div className="about-extended-section" ref={visionRef}>
-              <div className="about-extended-content">
-                <div className="about-extended-text">
-                  <h2 className="about-extended-title">{t.about.vision.title}</h2>
-                  <div className="about-extended-description">
-                    {t.about.vision.content.split('\n\n').map((paragraph, index) => (
-                      <p key={index}>{paragraph}</p>
-                    ))}
-                  </div>
-                </div>
-                <div className="about-extended-photo-frame">
-                  <div className="photo-frame">
-                    <img src="/hero-image.jpg" alt="Vision" />
-                  </div>
-                </div>
-              </div>
-            </div>
-          )}
-
-          {/* Extended Mission Section */}
-          {expandedSection === 'mission' && (
-            <div className="about-extended-section" ref={missionRef}>
-              <div className="about-extended-content mission-extended-content">
-                <div className="about-extended-photo-frame mission-photo">
-                  <div className="photo-frame">
-                    <img src="/hero-image.jpg" alt="Mission" />
-                  </div>
-                </div>
-                <div className="about-extended-text mission-text">
-                  <h2 className="about-extended-title">{t.about.mission.title}</h2>
-                  <div className="about-extended-description">
-                    {t.about.mission.content.split('\n\n').map((paragraph, index) => (
-                      <p key={index}>{paragraph}</p>
-                    ))}
-                  </div>
-                </div>
-              </div>
-            </div>
-          )}
-        </div>
-      </section>
+      <AboutSection t={t} />
 
       {/* Why Choose Us Section */}
       <section className="why-choose-us-section fade-section">
@@ -1360,116 +1126,7 @@ function App() {
         </div>
       </section>
 
-      {/* Team Section */}
-      <section className="team-section fade-section">
-        <div className="team-container">
-          <div className="team-header">
-            <p className="team-tagline">{t.team.tagline}</p>
-            <h2 className="team-title">{t.team.title}</h2>
-            <p className="team-description">{t.team.description}</p>
-          </div>
-          <div className="team-groups">
-            {(t.team.groups || [{ key: 'all', title: '' }]).map((group) => {
-              const members = group.key === 'all' ? t.team.members : t.team.members.filter(member => member.group === group.key)
-              if (!members.length) return null
-              const isManagement = group.key === 'management'
-              return (
-                <div key={group.key} className="team-group">
-                  {group.title && (
-                    <div className="team-group-header">
-                      <span className="team-group-label">{group.title}</span>
-                    </div>
-                  )}
-                  {isManagement ? (
-                    <div className="team-management-slider">
-                      <button
-                        type="button"
-                        className="team-slider-btn team-slider-btn-prev"
-                        onClick={handleManagementPrev}
-                        aria-label="Previous management members"
-                        disabled={managementSlides.length <= 1}
-                      >
-                        <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                          <path d="M15 18L9 12L15 6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-                        </svg>
-                      </button>
-                      <div className="team-management-track">
-                        <div
-                          className="team-management-inner"
-                          style={{ transform: `translateX(-${managementSlide * 100}%)` }}
-                        >
-                          {managementSlides.map((slide, slideIndex) => (
-                            <div key={`management-${slideIndex}`} className="team-management-slide">
-                              {slide.map((member) => (
-                                <div key={member.name} className="team-card">
-                                  <img 
-                                    className="team-card-photo"
-                                    src={member.photo} 
-                                    alt={member.name}
-                                    loading="lazy"
-                                    onError={(e) => {
-                                      e.currentTarget.src = '/hero-image.jpg'
-                                    }}
-                                  />
-                                  <div className="team-card-gradient" aria-hidden="true"></div>
-                                  <div className="team-card-body">
-                                    <div className="team-name-row">
-                                      <div className="team-name-block">
-                                        <h3>{member.name}</h3>
-                                        <p className="team-role-line">{member.role}</p>
-                                      </div>
-                                    </div>
-                                  </div>
-                                </div>
-                              ))}
-                            </div>
-                          ))}
-                        </div>
-                      </div>
-                      <button
-                        type="button"
-                        className="team-slider-btn team-slider-btn-next"
-                        onClick={handleManagementNext}
-                        aria-label="Next management members"
-                        disabled={managementSlides.length <= 1}
-                      >
-                        <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                          <path d="M9 18L15 12L9 6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-                        </svg>
-                      </button>
-                    </div>
-                  ) : (
-                    <div className="team-grid">
-                      {members.map((member, index) => (
-                        <div key={`${group.key}-${index}`} className="team-card">
-                          <img 
-                            className="team-card-photo"
-                            src={member.photo} 
-                            alt={member.name}
-                            loading="lazy"
-                            onError={(e) => {
-                              e.currentTarget.src = '/hero-image.jpg'
-                            }}
-                          />
-                          <div className="team-card-gradient" aria-hidden="true"></div>
-                          <div className="team-card-body">
-                            <div className="team-name-row">
-                              <div className="team-name-block">
-                                <h3>{member.name}</h3>
-                                <p className="team-role-line">{member.role}</p>
-                              </div>
-                            </div>
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                </div>
-              )
-            })}
-          </div>
-        </div>
-      </section>
+      <TeamSection t={t} language={language} showManagement={false} />
 
       {/* Testimonials Section */}
       <section className="testimonial-section fade-section">
@@ -1478,16 +1135,16 @@ function App() {
             <p className="testimonial-tagline">{t.testimonials.tagline}</p>
             <h2 className="testimonial-title">{t.testimonials.title}</h2>
           </div>
-          <div className="testimonial-grid">
+          <div className={`testimonial-grid ${isMobile ? 'testimonial-slider' : ''}`}>
             {t.testimonials.cards.map((card, index) => (
               <div 
                 key={index} 
-                className="testimonial-card"
+                className={`testimonial-card ${isMobile && index !== currentTestimonialIndex ? 'testimonial-card-hidden' : ''}`}
                 style={{ backgroundImage: `url(${card.photo})` }}
               >
                 <div className="testimonial-card-overlay"></div>
                 <div className="testimonial-card-content">
-                  <div className="testimonial-quote-icon" aria-hidden="true">“</div>
+                  <div className="testimonial-quote-icon" aria-hidden="true">"</div>
                   <p className="testimonial-quote">"{card.quote}"</p>
                   <div className="testimonial-footer">
                     <div className="testimonial-avatar">
@@ -1583,7 +1240,7 @@ function App() {
           </div>
           <div className="blog-content">
             <div className="blog-featured-grid">
-              {t.blog.featured.map((post, index) => (
+              {(isMobile ? t.blog.featured.slice(0, 1) : t.blog.featured).map((post, index) => (
                 <article key={`featured-${index}`} className="blog-featured-card">
                   <div className="blog-featured-image">
                     <img
@@ -1612,7 +1269,7 @@ function App() {
               ))}
             </div>
             <div className="blog-list">
-              {t.blog.list.map((post, index) => (
+              {(isMobile ? t.blog.list.slice(0, 1) : t.blog.list).map((post, index) => (
                 <article key={`list-${index}`} className="blog-list-card">
                   <div className="blog-list-thumb">
                     <img
@@ -1658,6 +1315,24 @@ function App() {
         </div>
       </footer>
     </div>
+  )
+}
+
+function App() {
+  const [language, setLanguage] = useState('en')
+  const t = useMemo(() => translations[language], [language])
+
+  const toggleLanguage = () => {
+    setLanguage(prevLanguage => (prevLanguage === 'en' ? 'bn' : 'en'))
+  }
+
+  return (
+    <Router>
+      <Routes>
+        <Route path="/" element={<HomePage language={language} toggleLanguage={toggleLanguage} t={t} />} />
+        <Route path="/about" element={<AboutPage language={language} toggleLanguage={toggleLanguage} t={t} />} />
+      </Routes>
+    </Router>
   )
 }
 
