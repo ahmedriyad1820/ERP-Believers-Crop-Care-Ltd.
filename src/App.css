@@ -111,6 +111,22 @@
   font-size: 0.95rem;
 }
 
+@media (max-width: 768px) {
+  .about-values-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 1rem;
+  }
+
+  .about-value-card {
+    padding: 1.1rem 0.75rem;
+  }
+
+  .about-value-card p {
+    font-size: 0.85rem;
+    line-height: 1.4;
+  }
+}
+
 .about-gallery-section {
   padding: 4rem 1.5rem;
 }
@@ -7195,7 +7211,7 @@ html {
   color: #b91c1c;
 }
 
-@media (max-width: 768px) {
+@media (max-width: 1024px) {
   .job-hero-section {
     padding-top: 3rem;
   }
@@ -7206,5 +7222,26 @@ html {
 
   .job-details-grid {
     grid-template-columns: minmax(0, 1fr);
+  }
+
+  .job-details-logo-wrapper {
+    display: none;
+  }
+
+  .job-details-main .job-details-card {
+    order: 1;
+  }
+
+  .job-details-main .job-back-btn {
+    order: 2;
+    margin-top: 1.25rem;
+  }
+
+  .job-cv-card h2 {
+    text-align: center;
+  }
+
+  .job-cv-card .job-summary-text {
+    text-align: center;
   }
 }

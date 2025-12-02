@@ -218,6 +218,7 @@ function JobDetailsPage({ language, toggleLanguage, t }) {
   const [cvFeedback, setCvFeedback] = useState(null)
   const [isSubmittingCv, setIsSubmittingCv] = useState(false)
   const [showCvForm, setShowCvForm] = useState(false)
+  const [isDesktop, setIsDesktop] = useState(true)
 
   useEffect(() => {
     const sections = document.querySelectorAll('.fade-section')
@@ -241,6 +242,17 @@ function JobDetailsPage({ language, toggleLanguage, t }) {
     sections.forEach(section => observer.observe(section))
 
     return () => observer.disconnect()
+  }, [])
+
+  useEffect(() => {
+    const updateIsDesktop = () => {
+      if (typeof window !== 'undefined') {
+        setIsDesktop(window.innerWidth > 1024)
+      }
+    }
+    updateIsDesktop()
+    window.addEventListener('resize', updateIsDesktop)
+    return () => window.removeEventListener('resize', updateIsDesktop)
   }, [])
 
   useEffect(() => {
@@ -461,16 +473,25 @@ function JobDetailsPage({ language, toggleLanguage, t }) {
                     </ul>
                   </div>
                 </aside>
-                {/* Right column: logo, back button, then Profile & requirements */}
+                {/* Right column: logo (desktop only), back button, then Profile & requirements */}
                 <div className="job-details-main">
-                  <div style={{ display: 'flex', justifyContent: 'center', marginTop: '5.5rem' }}>
-                    <img
-                      src={logo2Image}
-                      alt="Believers Crop Care Ltd."
-                      className="footer-logo-image"
-                      style={{ maxWidth: '360px', height: 'auto' }}
-                    />
-                  </div>
+                  {isDesktop && (
+                    <div
+                      className="job-details-logo-wrapper"
+                      style={{
+                        display: 'flex',
+                        justifyContent: 'center',
+                        marginTop: '5.5rem'
+                      }}
+                    >
+                      <img
+                        src={logo2Image}
+                        alt="Believers Crop Care Ltd."
+                        className="footer-logo-image"
+                        style={{ maxWidth: '360px', height: 'auto' }}
+                      />
+                    </div>
+                  )}
                   <button
                     type="button"
                     className="job-back-btn"
@@ -498,7 +519,7 @@ function JobDetailsPage({ language, toggleLanguage, t }) {
             className="job-details-section"
           >
             <div className="job-details-container">
-              <div className="job-details-card">
+              <div className="job-details-card job-cv-card">
                 <h2>{cvCopy.heading}</h2>
                 <p className="job-summary-text">{cvCopy.description}</p>
                 <form
