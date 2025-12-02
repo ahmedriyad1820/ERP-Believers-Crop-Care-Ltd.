@@ -1,10 +1,15 @@
 import { useState, useMemo, useEffect, useRef } from 'react'
-import { BrowserRouter as Router, Routes, Route } from 'react-router-dom'
+import { BrowserRouter as Router, Routes, Route, useNavigate, useLocation } from 'react-router-dom'
 import './App.css'
 import logoImage from './assets/logo.png'
 import SiteHeader from './components/SiteHeader.jsx'
 import AboutSection from './components/AboutSection.jsx'
 import AboutPage from './pages/About.jsx'
+import ProductPage from './pages/Product.jsx'
+import ProductDetails from './pages/ProductDetails.jsx'
+import NoticePage from './pages/Notice.jsx'
+import CareerPage from './pages/Career.jsx'
+import JobDetailsPage from './pages/JobDetails.jsx'
 import TeamSection from './components/TeamSection.jsx'
 
 // Translations
@@ -312,6 +317,41 @@ const translations = {
           description: 'Eco-friendly organic solution for sustainable and safe crop protection.',
           category: 'Organic',
           usage: 'Natural pest and disease control for organic farming, safe for vegetables, fruits, and ornamental plants.'
+        },
+        {
+          name: 'Weed Master',
+          genericName: '2,4-D Amine 58% SL',
+          description: 'Powerful selective herbicide for effective broadleaf weed management in field crops.',
+          category: 'Herbicide',
+          usage: 'Ideal for controlling broadleaf weeds in rice, wheat, maize, and sugarcane fields without harming the main crop.'
+        },
+        {
+          name: 'Disease Fighter',
+          genericName: 'Carbendazim 50% WP',
+          description: 'Systemic fungicide providing long-lasting protection against various plant diseases.',
+          category: 'Fungicide',
+          usage: 'Controls powdery mildew, leaf spot, and other fungal diseases in vegetables, fruits, and field crops.'
+        },
+        {
+          name: 'Pest Eliminator',
+          genericName: 'Imidacloprid 17.8% SL',
+          description: 'Advanced systemic insecticide for comprehensive pest control and plant protection.',
+          category: 'Insecticide',
+          usage: 'Effective against sucking pests like aphids, whiteflies, and thrips in vegetables, cotton, and rice.'
+        },
+        {
+          name: 'Root Booster',
+          genericName: 'Auxin 0.1% SL',
+          description: 'Specialized growth promoter for enhanced root development and plant establishment.',
+          category: 'Growth Promoter',
+          usage: 'Promotes strong root systems, improves nutrient uptake, and enhances overall plant vigor in all crops.'
+        },
+        {
+          name: 'Micro Nutrient Mix',
+          genericName: 'Zn + B + Fe 12%',
+          description: 'Essential micronutrient blend for addressing nutrient deficiencies and improving crop quality.',
+          category: 'Fertilizer',
+          usage: 'Corrects zinc, boron, and iron deficiencies in rice, wheat, vegetables, and fruit crops for better yields.'
         }
       ],
       addToCart: 'ADD TO CART',
@@ -641,6 +681,41 @@ const translations = {
           description: 'টেকসই এবং নিরাপদ ফসল সুরক্ষার জন্য পরিবেশ-বান্ধব জৈব সমাধান।',
           category: 'জৈব',
           usage: 'জৈব চাষের জন্য প্রাকৃতিক পোকামাকড় ও রোগ নিয়ন্ত্রণ, শাকসবজি, ফল এবং সাজসজ্জার উদ্ভিদের জন্য নিরাপদ।'
+        },
+        {
+          name: 'উইড মাস্টার',
+          genericName: '২,৪-ডি অ্যামাইন ৫৮% এসএল',
+          description: 'ক্ষেতের ফসলে কার্যকর চওড়া পাতার আগাছা ব্যবস্থাপনার জন্য শক্তিশালী নির্বাচনী হার্বিসাইড।',
+          category: 'হার্বিসাইড',
+          usage: 'ধান, গম, ভুট্টা এবং আখ ক্ষেতে মূল ফসলের ক্ষতি না করে চওড়া পাতার আগাছা নিয়ন্ত্রণের জন্য আদর্শ।'
+        },
+        {
+          name: 'ডিজিজ ফাইটার',
+          genericName: 'কারবেন্ডাজিম ৫০% ডব্লিউপি',
+          description: 'বিভিন্ন উদ্ভিদ রোগের বিরুদ্ধে দীর্ঘস্থায়ী সুরক্ষা প্রদানকারী সিস্টেমিক ফাঙ্গিসাইড।',
+          category: 'ফাঙ্গিসাইড',
+          usage: 'শাকসবজি, ফল এবং ক্ষেতের ফসলে পাউডারি মিলডিউ, পাতার দাগ এবং অন্যান্য ছত্রাক রোগ নিয়ন্ত্রণ করে।'
+        },
+        {
+          name: 'পেস্ট এলিমিনেটর',
+          genericName: 'ইমিডাক্লোপ্রিড ১৭.৮% এসএল',
+          description: 'ব্যাপক পোকামাকড় নিয়ন্ত্রণ এবং উদ্ভিদ সুরক্ষার জন্য উন্নত সিস্টেমিক ইনসেক্টিসাইড।',
+          category: 'ইনসেক্টিসাইড',
+          usage: 'শাকসবজি, তুলা এবং ধানে এফিড, হোয়াইটফ্লাই এবং থ্রিপসের মতো চোষা পোকামাকড়ের বিরুদ্ধে কার্যকর।'
+        },
+        {
+          name: 'রুট বুস্টার',
+          genericName: 'অক্সিন ০.১% এসএল',
+          description: 'উন্নত মূল বিকাশ এবং উদ্ভিদ প্রতিষ্ঠার জন্য বিশেষায়িত বৃদ্ধি উদ্দীপক।',
+          category: 'গ্রোথ প্রমোটার',
+          usage: 'সব ফসলে শক্তিশালী মূল ব্যবস্থা প্রচার করে, পুষ্টি গ্রহণ উন্নত করে এবং সামগ্রিক উদ্ভিদ শক্তি বৃদ্ধি করে।'
+        },
+        {
+          name: 'মাইক্রো নিউট্রিয়েন্ট মিক্স',
+          genericName: 'জিঙ্ক + বোরন + আয়রন ১২%',
+          description: 'পুষ্টির ঘাটতি মোকাবেলা এবং ফসলের গুণমান উন্নত করার জন্য অপরিহার্য মাইক্রোনিউট্রিয়েন্ট মিশ্রণ।',
+          category: 'সার',
+          usage: 'ধান, গম, শাকসবজি এবং ফল ফসলে জিঙ্ক, বোরন এবং আয়রনের ঘাটতি সংশোধন করে ভাল ফলনের জন্য।'
         }
       ],
       addToCart: 'কার্টে যোগ করুন',
@@ -668,6 +743,7 @@ const translations = {
 }
 
 function HomePage({ language, toggleLanguage, t }) {
+  const navigate = useNavigate()
   const [currentSlide, setCurrentSlide] = useState(0)
   const [quantities, setQuantities] = useState({}) // Store quantities for each product
   const [isMobile, setIsMobile] = useState(false) // Track if in mobile/responsive mode
@@ -685,9 +761,8 @@ function HomePage({ language, toggleLanguage, t }) {
 
   const handleNextSlide = () => {
     if (currentSlide === maxSlides) {
-      // At the end, trigger "See All" action
-      // You can add navigation or modal opening logic here
-      console.log('See All Products clicked')
+      // At the end, navigate to product page
+      navigate('/product')
       return
     }
     setCurrentSlide((prev) => (prev < maxSlides ? prev + 1 : 0))
@@ -823,7 +898,17 @@ function HomePage({ language, toggleLanguage, t }) {
               {t.hero.description}
             </p>
             <div className="hero-actions-wrapper">
-              <button className="learn-more-btn">{t.hero.viewProducts}</button>
+              <button 
+                className="learn-more-btn"
+                onClick={() => {
+                  const productsSection = document.getElementById('products-section')
+                  if (productsSection) {
+                    productsSection.scrollIntoView({ behavior: 'smooth', block: 'start' })
+                  }
+                }}
+              >
+                {t.hero.viewProducts}
+              </button>
             </div>
           </div>
           
@@ -948,7 +1033,7 @@ function HomePage({ language, toggleLanguage, t }) {
       </section>
 
       {/* Products Section */}
-      <section className="products-section fade-section">
+      <section id="products-section" className="products-section fade-section">
         <div className="products-container">
           <div className="products-header">
             <p className="products-tagline">{t.products.tagline}</p>
@@ -996,9 +1081,6 @@ function HomePage({ language, toggleLanguage, t }) {
                                 <p className="product-generic-name">{product.genericName}</p>
                                 <p className="product-category-text">{product.category}</p>
                                 <p className="product-usage">{product.usage}</p>
-                                <div className="product-actions">
-                                  <button className="details-btn">{t.products.details}</button>
-                                </div>
                                 {isMobile && (
                                   <p className="product-swipe-note">
                                     {language === 'en' ? '← Swipe to see more products →' : '← আরও পণ্য দেখতে সোয়াইপ করুন →'}
@@ -1015,7 +1097,12 @@ function HomePage({ language, toggleLanguage, t }) {
                       <div className="product-slide">
                         <div className="product-card product-see-all-card">
                           <div className="product-see-all-content">
-                            <button className="products-see-all-btn">{t.products.seeAll}</button>
+                            <button 
+                              className="products-see-all-btn"
+                              onClick={() => navigate('/product')}
+                            >
+                              {t.products.seeAll}
+                            </button>
                           </div>
                         </div>
                       </div>
@@ -1047,9 +1134,6 @@ function HomePage({ language, toggleLanguage, t }) {
                                 <p className="product-generic-name">{product.genericName}</p>
                                 <p className="product-category-text">{product.category}</p>
                                 <p className="product-usage">{product.usage}</p>
-                                <div className="product-actions">
-                                  <button className="details-btn">{t.products.details}</button>
-                                </div>
                               </div>
                             </div>
                           </div>
@@ -1318,6 +1402,17 @@ function HomePage({ language, toggleLanguage, t }) {
   )
 }
 
+// ScrollToTop component to scroll to top on route change
+function ScrollToTop() {
+  const { pathname } = useLocation()
+
+  useEffect(() => {
+    window.scrollTo({ top: 0, behavior: 'smooth' })
+  }, [pathname])
+
+  return null
+}
+
 function App() {
   const [language, setLanguage] = useState('en')
   const t = useMemo(() => translations[language], [language])
@@ -1328,9 +1423,15 @@ function App() {
 
   return (
     <Router>
+      <ScrollToTop />
       <Routes>
         <Route path="/" element={<HomePage language={language} toggleLanguage={toggleLanguage} t={t} />} />
         <Route path="/about" element={<AboutPage language={language} toggleLanguage={toggleLanguage} t={t} />} />
+        <Route path="/product" element={<ProductPage language={language} toggleLanguage={toggleLanguage} t={t} />} />
+        <Route path="/product/:productIndex" element={<ProductDetails language={language} toggleLanguage={toggleLanguage} t={t} />} />
+        <Route path="/notices" element={<NoticePage language={language} toggleLanguage={toggleLanguage} t={t} />} />
+        <Route path="/career" element={<CareerPage language={language} toggleLanguage={toggleLanguage} t={t} />} />
+        <Route path="/career/:jobId" element={<JobDetailsPage language={language} toggleLanguage={toggleLanguage} t={t} />} />
       </Routes>
     </Router>
   )

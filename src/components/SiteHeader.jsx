@@ -66,9 +66,27 @@ function SiteHeader({ language, toggleLanguage, t }) {
           >
             {t.nav.about}
           </Link>
-          <a href="#" className="nav-link" onClick={() => setMobileMenuOpen(false)}>{t.nav.product}</a>
-          <a href="#" className="nav-link" onClick={() => setMobileMenuOpen(false)}>{t.nav.notices}</a>
-          <a href="#" className="nav-link" onClick={() => setMobileMenuOpen(false)}>{t.nav.career}</a>
+          <Link 
+            to="/product"
+            className={`nav-link ${isActive('/product') ? 'active' : ''}`}
+            onClick={() => setMobileMenuOpen(false)}
+          >
+            {t.nav.product}
+          </Link>
+          <Link 
+            to="/notices"
+            className={`nav-link ${isActive('/notices') ? 'active' : ''}`}
+            onClick={() => setMobileMenuOpen(false)}
+          >
+            {t.nav.notices}
+          </Link>
+          <Link 
+            to="/career"
+            className={`nav-link ${isActive('/career') ? 'active' : ''}`}
+            onClick={() => setMobileMenuOpen(false)}
+          >
+            {t.nav.career}
+          </Link>
           <a href="#" className="nav-link" onClick={() => setMobileMenuOpen(false)}>{t.nav.blog}</a>
           <div className="mobile-menu-actions">
             <button 
