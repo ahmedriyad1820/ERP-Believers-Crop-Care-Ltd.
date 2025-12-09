@@ -1,6 +1,6 @@
 # BCC ERP - Believers Crop Care Ltd.
 
-A responsive React application for Believers Crop Care Ltd. built with Vite and React.
+A responsive React application for Believers Crop Care Ltd. built with Vite and React, with MongoDB backend integration.
 
 ## Getting Started
 
@@ -10,13 +10,60 @@ A responsive React application for Believers Crop Care Ltd. built with Vite and 
 npm install
 ```
 
+This will install both frontend and backend dependencies including:
+- React, Vite (Frontend)
+- Express, Mongoose, CORS (Backend)
+
 ### Development
+
+#### Frontend Development
 
 ```bash
 npm run dev
 ```
 
-The app will be available at `http://localhost:5173`
+The frontend app will be available at `http://localhost:5173`
+
+#### Backend Server
+
+```bash
+npm run server
+```
+
+The backend API server will be available at `http://localhost:5000`
+
+For development with auto-reload:
+```bash
+npm run server:dev
+```
+
+#### Running Both (Recommended - One Command)
+
+Run frontend + backend together:
+
+```bash
+npm run start
+```
+
+This will start:
+- Frontend on `http://localhost:5173`
+- Backend API on `http://localhost:5000`
+
+Env required:
+- Backend `.env` (not committed):  
+  ```
+  MONGODB_URI=your_mongo_uri
+  PORT=5000
+  NODE_ENV=development
+  ```
+- Frontend `.env.local` (not committed):  
+  ```
+  VITE_API_BASE=http://localhost:5000
+  ```
+
+If you prefer separate terminals:
+1. Terminal 1: `npm run dev` (Frontend on port 5173)
+2. Terminal 2: `npm run server` (Backend on port 5000)
 
 ### Mobile Testing
 
@@ -58,6 +105,50 @@ npm run build
 - **Mobile**: 480px - 768px
 - **Small Mobile**: Below 480px
 
+## MongoDB Setup
+
+MongoDB has been configured with the connection string. The database connection is set up in `server/config/config.js`.
+
+**Connection String:**
+```
+mongodb+srv://ahmedriyad1820_db_user:bcc%401892514@bcc.exim7hi.mongodb.net/bcc-erp
+```
+
+**Note:** The `@` symbol in the password is URL-encoded as `%40`.
+
+For more details, see [MONGODB_SETUP.md](./MONGODB_SETUP.md)
+
+### Seeding Database with Existing Data
+
+To populate MongoDB with all your existing data (products, team members, testimonials, blog posts, notices, and career opportunities), run:
+
+```bash
+npm run seed
+```
+
+This will:
+- Clear existing data in the database
+- Insert all products (11 items)
+- Insert all team members (7 members)
+- Insert all testimonials (3 testimonials)
+- Insert all blog posts (5 posts)
+- Insert sample notices (5 notices)
+- Insert all career opportunities (3 positions)
+
+**Note:** The seed script will delete all existing data before inserting new data. Use with caution in production!
+
+## API Endpoints
+
+### Health Check
+- `GET http://localhost:5000/api/health` - Check server and database status
+
+### Contact Messages
+- `POST http://localhost:5000/api/contacts` - Submit a new contact message
+- `GET http://localhost:5000/api/contacts` - Get all contact messages (admin)
+- `GET http://localhost:5000/api/contacts/:id` - Get a single contact message
+- `PATCH http://localhost:5000/api/contacts/:id/status` - Update contact status
+- `DELETE http://localhost:5000/api/contacts/:id` - Delete a contact message
+
 ## Features
 
 - Fully responsive design
@@ -66,3 +157,6 @@ npm run build
 - Touch-friendly interactions
 - Smooth scrolling
 - Optimized images and assets
+- MongoDB database integration
+- RESTful API backend
+- Contact form backend support

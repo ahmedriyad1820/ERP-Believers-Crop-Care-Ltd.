@@ -10,6 +10,10 @@ import ProductDetails from './pages/ProductDetails.jsx'
 import NoticePage from './pages/Notice.jsx'
 import CareerPage from './pages/Career.jsx'
 import JobDetailsPage from './pages/JobDetails.jsx'
+import BlogPage from './pages/Blog.jsx'
+import BlogDetailsPage from './pages/BlogDetails.jsx'
+import ContactPage from './pages/Contact.jsx'
+import AdminPage from './pages/Admin.jsx'
 import TeamSection from './components/TeamSection.jsx'
 
 // Translations
@@ -30,6 +34,8 @@ const translations = {
       viewProducts: 'View Products'
     },
     about: {
+      heroTitle: 'About Us',
+      heroSubtitle: 'Discover how Believers Crop Care supports farmers with scalable programs, modern agronomy, and dependable distribution.',
       tagline: 'About Us',
       description: 'Believers Crop Care Ltd. is a growing name in the agricultural industry, dedicated to helping farmers protect their crops and increase productivity. From day one, our goal has been simple — to provide high-quality, effective, and affordable crop protection products that farmers can truly rely on.',
       details: 'We believe that successful farming starts with the right support. That\'s why we work closely with farmers, dealers, and distributors to understand their needs and offer timely solutions that make a real difference in the field. Our products are developed with care, focusing on performance, safety, and environmental responsibility.\n\nWhat began as a small team with a big dream has now grown into a trusted company with a strong presence in the market. Our expanding network of partners and distributors allows us to reach more farmers every day, helping them grow healthier crops and achieve better yields.\n\nAt Believers Crop Care Ltd., we\'re more than just a crop protection company — we\'re partners in progress. With continuous research, innovation, and a commitment to quality, we aim to create a brighter, greener future for farming communities across the country.',
@@ -742,7 +748,7 @@ const translations = {
   }
 }
 
-function HomePage({ language, toggleLanguage, t }) {
+function HomePage({ language, toggleLanguage, t, heroImage = '/hero-image.jpg' }) {
   const navigate = useNavigate()
   const [currentSlide, setCurrentSlide] = useState(0)
   const [quantities, setQuantities] = useState({}) // Store quantities for each product
@@ -750,7 +756,67 @@ function HomePage({ language, toggleLanguage, t }) {
   const [touchStart, setTouchStart] = useState(null)
   const [touchEnd, setTouchEnd] = useState(null)
   const [currentTestimonialIndex, setCurrentTestimonialIndex] = useState(0) // Testimonial slider index
+  const [contentUpdate, setContentUpdate] = useState(0) // For reactive hero media updates
+  const [currentHeroImageIndex, setCurrentHeroImageIndex] = useState(0) // For hero image slider
   const productsSliderRef = useRef(null)
+
+  // Get hero media from localStorage (reactive)
+  const heroMedia = useMemo(() => {
+    const pageImagesStr = localStorage.getItem('pageImages')
+    const pageImages = pageImagesStr ? JSON.parse(pageImagesStr) : {}
+    const mediaType = pageImages.homeHeroMediaType || 'photos'
+    return {
+      images: pageImages.homeHeroImages || [heroImage],
+      video: pageImages.homeHeroVideo || '',
+      mediaType: mediaType
+    }
+  }, [contentUpdate, heroImage])
+
+  // Listen for content updates
+  useEffect(() => {
+    const handleStorageChange = () => {
+      setContentUpdate(prev => prev + 1)
+    }
+    const handleContentUpdate = () => {
+      setContentUpdate(prev => prev + 1)
+    }
+    
+    window.addEventListener('storage', handleStorageChange)
+    window.addEventListener('contentUpdated', handleContentUpdate)
+    
+    return () => {
+      window.removeEventListener('storage', handleStorageChange)
+      window.removeEventListener('contentUpdated', handleContentUpdate)
+    }
+  }, [])
+
+  // Reset hero image index when images change
+  useEffect(() => {
+    setCurrentHeroImageIndex(0)
+  }, [heroMedia.images.length, heroMedia.mediaType])
+
+  // Preload hero images for smoother transitions
+  useEffect(() => {
+    if (heroMedia.mediaType === 'video') return
+    
+    heroMedia.images.forEach((imageUrl) => {
+      const img = new Image()
+      img.src = imageUrl
+    })
+  }, [heroMedia.images, heroMedia.mediaType])
+
+  // Auto-advance hero images every 10 seconds (only if photos mode and multiple images)
+  useEffect(() => {
+    if (heroMedia.mediaType === 'video' || heroMedia.images.length <= 1) return
+
+    const interval = setInterval(() => {
+      setCurrentHeroImageIndex((prev) => 
+        prev === heroMedia.images.length - 1 ? 0 : prev + 1
+      )
+    }, 10000) // 10 seconds
+
+    return () => clearInterval(interval)
+  }, [heroMedia.mediaType, heroMedia.images.length])
   // Only show first 5 products + see all button
   const displayedProducts = t.products.items.slice(0, 5)
   
@@ -887,7 +953,29 @@ function HomePage({ language, toggleLanguage, t }) {
       {/* Hero Section */}
       <main className="hero-section fade-section">
         <div className="hero-background">
-          <img src="/hero-image.jpg" alt="Crop spraying in field" className="hero-background-image" />
+          {heroMedia.mediaType === 'video' && heroMedia.video ? (
+            <video 
+              src={heroMedia.video} 
+              autoPlay 
+              loop 
+              muted 
+              playsInline
+              className="hero-background-video"
+            />
+          ) : (
+            heroMedia.images.map((image, index) => (
+              <img 
+                key={index}
+                src={image} 
+                alt={`Hero slide ${index + 1}`} 
+                className="hero-background-image"
+                style={{
+                  opacity: index === currentHeroImageIndex ? 1 : 0,
+                  zIndex: index === currentHeroImageIndex ? 1 : 0
+                }}
+              />
+            ))
+          )}
           <div className="hero-overlay"></div>
         </div>
         
@@ -1320,7 +1408,13 @@ function HomePage({ language, toggleLanguage, t }) {
               <p className="blog-tagline">{t.blog.tagline}</p>
               <h2 className="blog-title">{t.blog.title}</h2>
             </div>
-            <button className="blog-cta" type="button">{t.blog.cta}</button>
+            <button
+              className="blog-cta"
+              type="button"
+              onClick={() => navigate('/blog')}
+            >
+              {t.blog.cta}
+            </button>
           </div>
           <div className="blog-content">
             <div className="blog-featured-grid">
@@ -1415,7 +1509,214 @@ function ScrollToTop() {
 
 function App() {
   const [language, setLanguage] = useState('en')
-  const t = useMemo(() => translations[language], [language])
+  const [contentUpdate, setContentUpdate] = useState(0)
+  
+  // Get edited content from localStorage
+  const editedContent = useMemo(() => {
+    try {
+      const saved = localStorage.getItem('editedContent')
+      return saved ? JSON.parse(saved) : {}
+    } catch {
+      return {}
+    }
+  }, [contentUpdate])
+  
+  // Get hero image from localStorage
+  const heroImage = useMemo(() => {
+    const pageImagesStr = localStorage.getItem('pageImages')
+    const pageImages = pageImagesStr ? JSON.parse(pageImagesStr) : {}
+    return pageImages.homeHero || localStorage.getItem('heroImage') || '/hero-image.jpg'
+  }, [contentUpdate])
+  
+  // Listen for storage changes to update content
+  useEffect(() => {
+    const handleStorageChange = () => {
+      setContentUpdate(prev => prev + 1)
+    }
+    window.addEventListener('storage', handleStorageChange)
+    // Also listen for custom event from admin page
+    window.addEventListener('contentUpdated', handleStorageChange)
+    return () => {
+      window.removeEventListener('storage', handleStorageChange)
+      window.removeEventListener('contentUpdated', handleStorageChange)
+    }
+  }, [])
+  
+  // Merge translations with edited content
+  const t = useMemo(() => {
+    const baseTranslations = translations[language]
+    if (!editedContent || Object.keys(editedContent).length === 0) {
+      return baseTranslations
+    }
+    
+    // Deep merge edited content with base translations
+    const merged = JSON.parse(JSON.stringify(baseTranslations))
+    
+    if (editedContent.hero) {
+      if (editedContent.hero.title) merged.hero.title = editedContent.hero.title
+      if (editedContent.hero.description) merged.hero.description = editedContent.hero.description
+      if (editedContent.hero.viewProducts) merged.hero.viewProducts = editedContent.hero.viewProducts
+    }
+    
+    if (editedContent.about) {
+      if (editedContent.about.heroTitle) merged.about.heroTitle = editedContent.about.heroTitle
+      if (editedContent.about.heroSubtitle) merged.about.heroSubtitle = editedContent.about.heroSubtitle
+      if (editedContent.about.tagline) merged.about.tagline = editedContent.about.tagline
+      if (editedContent.about.description) merged.about.description = editedContent.about.description
+      if (editedContent.about.title) merged.about.title = editedContent.about.title
+      if (editedContent.about.visionButton) merged.about.visionButton = editedContent.about.visionButton
+      if (editedContent.about.missionButton) merged.about.missionButton = editedContent.about.missionButton
+      
+      // Handle about details paragraphs
+      if (editedContent.about.details && Array.isArray(editedContent.about.details)) {
+        const originalDetails = merged.about.details.split('\n\n')
+        editedContent.about.details.forEach((para, idx) => {
+          if (para && originalDetails[idx] !== undefined) {
+            originalDetails[idx] = para
+          }
+        })
+        merged.about.details = originalDetails.join('\n\n')
+      }
+      
+      if (editedContent.about.vision) {
+        if (editedContent.about.vision.title) merged.about.vision.title = editedContent.about.vision.title
+        if (editedContent.about.vision.content) {
+          merged.about.vision.content = editedContent.about.vision.content
+        } else if (editedContent.about.vision.paragraphs && Array.isArray(editedContent.about.vision.paragraphs)) {
+          // Reconstruct content from paragraphs
+          merged.about.vision.content = editedContent.about.vision.paragraphs.join('\n\n')
+        }
+      }
+      if (editedContent.about.mission) {
+        if (editedContent.about.mission.title) merged.about.mission.title = editedContent.about.mission.title
+        if (editedContent.about.mission.content) {
+          merged.about.mission.content = editedContent.about.mission.content
+        } else if (editedContent.about.mission.paragraphs && Array.isArray(editedContent.about.mission.paragraphs)) {
+          // Reconstruct content from paragraphs
+          merged.about.mission.content = editedContent.about.mission.paragraphs.join('\n\n')
+        }
+      }
+    }
+    
+    if (editedContent.review) {
+      if (editedContent.review.rating) merged.review.rating = editedContent.review.rating
+      if (editedContent.review.customersReview) merged.review.customersReview = editedContent.review.customersReview
+    }
+    
+    if (editedContent.products) {
+      // Products page header content
+      if (editedContent.products.pageHeading) {
+        // This will be used in Product page
+        merged.products.pageHeading = editedContent.products.pageHeading
+      }
+      if (editedContent.products.pageSubtitle) {
+        merged.products.pageSubtitle = editedContent.products.pageSubtitle
+      }
+      if (editedContent.products.tagline) merged.products.tagline = editedContent.products.tagline
+      if (editedContent.products.title) merged.products.title = editedContent.products.title
+      if (editedContent.products.description) merged.products.description = editedContent.products.description
+      
+      // Product items (array format)
+      if (Array.isArray(editedContent.products)) {
+        editedContent.products.forEach((product, index) => {
+          if (merged.products.items[index]) {
+            if (product.name) merged.products.items[index].name = product.name
+            if (product.description) merged.products.items[index].description = product.description
+          }
+        })
+      }
+      
+      // Product items (object.items format)
+      if (editedContent.products.items && Array.isArray(editedContent.products.items)) {
+        editedContent.products.items.forEach((product, index) => {
+          if (merged.products.items[index]) {
+            if (product.name) merged.products.items[index].name = product.name
+            if (product.genericName) merged.products.items[index].genericName = product.genericName
+            if (product.category) merged.products.items[index].category = product.category
+            if (product.description) merged.products.items[index].description = product.description
+            if (product.usage) merged.products.items[index].usage = product.usage
+          }
+        })
+      }
+    }
+    
+    if (editedContent.whyChooseUs) {
+      if (editedContent.whyChooseUs.title) merged.whyChooseUs.title = editedContent.whyChooseUs.title
+      if (editedContent.whyChooseUs.features && Array.isArray(editedContent.whyChooseUs.features)) {
+        editedContent.whyChooseUs.features.forEach((feature, index) => {
+          if (merged.whyChooseUs.features[index]) {
+            if (feature.title) merged.whyChooseUs.features[index].title = feature.title
+            if (feature.description) merged.whyChooseUs.features[index].description = feature.description
+          }
+        })
+      }
+    }
+    
+    if (editedContent.testimonials) {
+      if (editedContent.testimonials.tagline) merged.testimonials.tagline = editedContent.testimonials.tagline
+      if (editedContent.testimonials.title) merged.testimonials.title = editedContent.testimonials.title
+      if (editedContent.testimonials.cards) {
+        editedContent.testimonials.cards.forEach((card, index) => {
+          if (merged.testimonials.cards[index]) {
+            if (card.quote) merged.testimonials.cards[index].quote = card.quote
+            if (card.name) merged.testimonials.cards[index].name = card.name
+            if (card.role) merged.testimonials.cards[index].role = card.role
+          }
+        })
+      }
+    }
+    
+    if (editedContent.blog) {
+      if (editedContent.blog.tagline) merged.blog.tagline = editedContent.blog.tagline
+      if (editedContent.blog.title) merged.blog.title = editedContent.blog.title
+      if (editedContent.blog.cta) merged.blog.cta = editedContent.blog.cta
+      if (editedContent.blog.list && Array.isArray(editedContent.blog.list)) {
+        editedContent.blog.list.forEach((blog, index) => {
+          if (merged.blog.list[index] && blog.title) {
+            merged.blog.list[index].title = blog.title
+          }
+        })
+      }
+    }
+    
+    if (editedContent.contact) {
+      if (editedContent.contact.title) merged.contact.title = editedContent.contact.title
+      if (editedContent.contact.description) merged.contact.description = editedContent.contact.description
+      if (editedContent.contact.phone) merged.contact.phone = editedContent.contact.phone
+      if (editedContent.contact.email) merged.contact.email = editedContent.contact.email
+      if (editedContent.contact.address) merged.contact.address = editedContent.contact.address
+    }
+    
+    if (editedContent.areasCovered) {
+      if (editedContent.areasCovered.tagline) merged.areasCovered.tagline = editedContent.areasCovered.tagline
+      if (editedContent.areasCovered.title) merged.areasCovered.title = editedContent.areasCovered.title
+      if (editedContent.areasCovered.pill) merged.areasCovered.pill = editedContent.areasCovered.pill
+      if (editedContent.areasCovered.briefTitle) merged.areasCovered.briefTitle = editedContent.areasCovered.briefTitle
+      if (editedContent.areasCovered.briefIntro) merged.areasCovered.briefIntro = editedContent.areasCovered.briefIntro
+      if (editedContent.areasCovered.mapAlt) merged.areasCovered.mapAlt = editedContent.areasCovered.mapAlt
+      if (editedContent.areasCovered.briefPoints && Array.isArray(editedContent.areasCovered.briefPoints)) {
+        editedContent.areasCovered.briefPoints.forEach((point, index) => {
+          if (point && merged.areasCovered.briefPoints[index] !== undefined) {
+            merged.areasCovered.briefPoints[index] = point
+          }
+        })
+      }
+    }
+    
+    if (editedContent.team) {
+      if (editedContent.team.tagline) merged.team.tagline = editedContent.team.tagline
+      if (editedContent.team.title) merged.team.title = editedContent.team.title
+      if (editedContent.team.description) merged.team.description = editedContent.team.description
+    }
+    
+    // Note: aboutStats is handled dynamically in About.jsx since it's not in base translations
+    
+    if (editedContent.footer) {
+      if (editedContent.footer.copyright) merged.footer.copyright = editedContent.footer.copyright
+    }
+    
+    return merged
+  }, [language, editedContent])
 
   const toggleLanguage = () => {
     setLanguage(prevLanguage => (prevLanguage === 'en' ? 'bn' : 'en'))
@@ -1425,13 +1726,17 @@ function App() {
     <Router>
       <ScrollToTop />
       <Routes>
-        <Route path="/" element={<HomePage language={language} toggleLanguage={toggleLanguage} t={t} />} />
+        <Route path="/" element={<HomePage language={language} toggleLanguage={toggleLanguage} t={t} heroImage={heroImage} />} />
         <Route path="/about" element={<AboutPage language={language} toggleLanguage={toggleLanguage} t={t} />} />
-        <Route path="/product" element={<ProductPage language={language} toggleLanguage={toggleLanguage} t={t} />} />
+        <Route path="/product" element={<ProductPage language={language} toggleLanguage={toggleLanguage} t={t} editedContent={editedContent} />} />
         <Route path="/product/:productIndex" element={<ProductDetails language={language} toggleLanguage={toggleLanguage} t={t} />} />
         <Route path="/notices" element={<NoticePage language={language} toggleLanguage={toggleLanguage} t={t} />} />
         <Route path="/career" element={<CareerPage language={language} toggleLanguage={toggleLanguage} t={t} />} />
         <Route path="/career/:jobId" element={<JobDetailsPage language={language} toggleLanguage={toggleLanguage} t={t} />} />
+        <Route path="/blog" element={<BlogPage language={language} toggleLanguage={toggleLanguage} t={t} />} />
+        <Route path="/blog/:postId" element={<BlogDetailsPage language={language} toggleLanguage={toggleLanguage} t={t} />} />
+        <Route path="/contact" element={<ContactPage language={language} toggleLanguage={toggleLanguage} t={t} />} />
+        <Route path="/admin" element={<AdminPage language={language} toggleLanguage={toggleLanguage} t={t} />} />
       </Routes>
     </Router>
   )

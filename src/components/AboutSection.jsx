@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect } from 'react'
+import { useState, useRef, useEffect, useMemo } from 'react'
 import logoImage from '../assets/logo.png'
 import logoImageAlt from '../assets/logo2.png'
 
@@ -17,6 +17,29 @@ function AboutSection({
   const missionRef = useRef(null)
   const [visionAnimated, setVisionAnimated] = useState(false)
   const [missionAnimated, setMissionAnimated] = useState(false)
+  const [imageUpdate, setImageUpdate] = useState(0)
+
+  useEffect(() => {
+    const handleStorageChange = () => {
+      setImageUpdate(prev => prev + 1)
+    }
+    const handleContentUpdate = () => {
+      setImageUpdate(prev => prev + 1)
+    }
+    
+    window.addEventListener('storage', handleStorageChange)
+    window.addEventListener('contentUpdated', handleContentUpdate)
+    
+    return () => {
+      window.removeEventListener('storage', handleStorageChange)
+      window.removeEventListener('contentUpdated', handleContentUpdate)
+    }
+  }, [])
+  
+  const pageImages = useMemo(() => {
+    const pageImagesStr = localStorage.getItem('pageImages')
+    return pageImagesStr ? JSON.parse(pageImagesStr) : {}
+  }, [imageUpdate])
 
   const handleVisionClick = () => {
     setExpandedSection(prev => (prev === 'vision' ? null : 'vision'))
@@ -149,15 +172,15 @@ function AboutSection({
             <div className="about-images-wrapper">
               <div className="about-oval-images">
                 <div className="about-oval-image about-oval-top">
-                  <img src="/hero-image.jpg" alt="Vineyard landscape" />
+                    <img src={pageImages.aboutSectionImage1 || '/hero-image.jpg'} alt="Vineyard landscape" />
                 </div>
                 <div className="about-oval-image about-oval-bottom">
-                  <img src="/hero-image.jpg" alt="Wheat field at sunrise" />
+                    <img src={pageImages.aboutSectionImage2 || '/hero-image.jpg'} alt="Wheat field at sunrise" />
                 </div>
               </div>
               
               <div className="about-circular-image">
-                <img src="/hero-image.jpg" alt="Aerial view of farmland" />
+                  <img src={pageImages.aboutSectionImage3 || '/hero-image.jpg'} alt="Aerial view of farmland" />
                 <div className="circular-image-overlay">
                   <p className="overlay-text">{t.about.tagline}</p>
                 </div>
@@ -212,7 +235,7 @@ function AboutSection({
               </div>
               <div className="about-extended-photo-frame">
                 <div className="photo-frame">
-                  <img src="/hero-image.jpg" alt="Vision" />
+                  <img src={pageImages.visionImage || '/hero-image.jpg'} alt="Vision" />
                 </div>
               </div>
             </div>
@@ -236,7 +259,7 @@ function AboutSection({
             >
               <div className="about-extended-photo-frame mission-photo">
                 <div className="photo-frame">
-                  <img src="/hero-image.jpg" alt="Mission" />
+                  <img src={pageImages.missionImage || '/hero-image.jpg'} alt="Mission" />
                 </div>
               </div>
               <div className="about-extended-text mission-text">

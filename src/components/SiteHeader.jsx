@@ -87,7 +87,13 @@ function SiteHeader({ language, toggleLanguage, t }) {
           >
             {t.nav.career}
           </Link>
-          <a href="#" className="nav-link" onClick={() => setMobileMenuOpen(false)}>{t.nav.blog}</a>
+          <Link 
+            to="/blog"
+            className={`nav-link ${isActive('/blog') ? 'active' : ''}`}
+            onClick={() => setMobileMenuOpen(false)}
+          >
+            {t.nav.blog}
+          </Link>
           <div className="mobile-menu-actions">
             <button 
               className="mobile-language-btn" 
@@ -99,7 +105,13 @@ function SiteHeader({ language, toggleLanguage, t }) {
             >
               <span>{language === 'en' ? 'বাংলা' : 'EN'}</span>
             </button>
-            <button className="mobile-contact-btn" onClick={() => setMobileMenuOpen(false)}>{t.nav.contact}</button>
+            <Link 
+              to="/contact" 
+              className="mobile-contact-btn" 
+              onClick={() => setMobileMenuOpen(false)}
+            >
+              {t.nav.contact}
+            </Link>
           </div>
         </nav>
         
@@ -107,7 +119,9 @@ function SiteHeader({ language, toggleLanguage, t }) {
           <button className="language-btn" onClick={toggleLanguage} title={language === 'en' ? 'বাংলায় পরিবর্তন করুন' : 'Switch to English'}>
             <span>{language === 'en' ? 'বাংলা' : 'EN'}</span>
           </button>
-          <button className="contact-btn">{t.nav.contact}</button>
+          <Link to="/contact" className="contact-btn">
+            {t.nav.contact}
+          </Link>
           <button 
             className="mobile-menu-toggle"
             onClick={() => setMobileMenuOpen(!mobileMenuOpen)}

@@ -1,19 +1,54 @@
-import { useEffect } from 'react'
+import { useEffect, useState, useMemo } from 'react'
 import { Link } from 'react-router-dom'
 import SiteHeader from '../components/SiteHeader.jsx'
 import logoImage from '../assets/logo.png'
 
 function CareerPage({ language, toggleLanguage, t }) {
   const isBn = language === 'bn'
+  const [contentUpdate, setContentUpdate] = useState(0)
 
-  const hero = isBn
-    ? {
-        title: 'ক্যারিয়ার',
-        subtitle: 'বেলিভার্স ক্রপ কেয়ার টিমে যোগ দিয়ে দেশের কৃষি উন্নয়নের অংশ হোন।'
-      }
-    : {
-        title: 'Career',
-        subtitle: 'Join Believers Crop Care and help us build a stronger future for farmers across Bangladesh.'
+  // Listen for content updates
+  useEffect(() => {
+    const handleStorageChange = () => {
+      setContentUpdate(prev => prev + 1)
+    }
+    const handleContentUpdate = () => {
+      setContentUpdate(prev => prev + 1)
+    }
+    
+    window.addEventListener('storage', handleStorageChange)
+    window.addEventListener('contentUpdated', handleContentUpdate)
+    
+    return () => {
+      window.removeEventListener('storage', handleStorageChange)
+      window.removeEventListener('contentUpdated', handleContentUpdate)
+    }
+  }, [])
+
+  // Get edited content from localStorage (reactive to contentUpdate)
+  const editedContentStr = localStorage.getItem('editedContent')
+  const editedContent = editedContentStr ? JSON.parse(editedContentStr) : {}
+  const careerHero = editedContent.career?.hero || {}
+  
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const currentCareerHero = (() => {
+    const str = localStorage.getItem('editedContent')
+    const content = str ? JSON.parse(str) : {}
+    return content.career?.hero || {}
+  })()
+  
+  const displayCareerHero = contentUpdate > 0 ? currentCareerHero : careerHero
+  
+  const pageImages = useMemo(() => {
+    const pageImagesStr = localStorage.getItem('pageImages')
+    return pageImagesStr ? JSON.parse(pageImagesStr) : {}
+  }, [contentUpdate])
+
+  const hero = {
+    title: displayCareerHero.title || (isBn ? 'ক্যারিয়ার' : 'Career'),
+    subtitle: displayCareerHero.subtitle || (isBn
+      ? 'বেলিভার্স ক্রপ কেয়ার টিমে যোগ দিয়ে দেশের কৃষি উন্নয়নের অংশ হোন।'
+      : 'Join Believers Crop Care and help us build a stronger future for farmers across Bangladesh.')
       }
 
   const whyItems = isBn
@@ -145,14 +180,25 @@ function CareerPage({ language, toggleLanguage, t }) {
       <main className="about-page-main">
         {/* Hero */}
         <section className="about-hero-banner fade-section">
-          <div className="about-hero-banner-content" style={{ fontWeight: 700 }}>
+          <div 
+            className="about-hero-banner-content" 
+            style={{ 
+              fontWeight: 700,
+              background: `linear-gradient(135deg, rgba(9, 17, 31, 0.40), rgba(19, 56, 98, 0.40)), url(${pageImages.careerHero || '/hero-image.jpg'}) center 40% / cover no-repeat`
+            }}
+          >
             <h1 className="about-hero-heading">{hero.title}</h1>
             <p className="about-hero-subtitle">{hero.subtitle}</p>
           </div>
         </section>
 
         {/* Why work with us */}
-        <section className="about-values-section fade-section">
+        <section 
+          className="about-values-section fade-section"
+          style={{
+            background: `linear-gradient(180deg, rgba(248, 250, 252, 0.192), rgba(232, 247, 241, 0.192)), url(${pageImages.careerValuesBackground || 'https://images.stockcake.com/public/e/6/e/e6e4865c-08b7-4633-b428-f5658462485e_large/farmers-tending-crops-stockcake.jpg'}) center/cover no-repeat`
+          }}
+        >
           <div className="about-values-container">
             <div className="about-values-header">
               <p className="about-values-eyebrow">

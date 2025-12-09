@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useMemo } from 'react'
 import SiteHeader from '../components/SiteHeader.jsx'
 import logoImage from '../assets/logo.png'
 
@@ -19,15 +19,50 @@ function NoticePage({ language, toggleLanguage, t }) {
   const [isFilterModalOpen, setIsFilterModalOpen] = useState(false)
   const [selectedNotice, setSelectedNotice] = useState(null)
   const [lightboxImage, setLightboxImage] = useState(null)
+  const [contentUpdate, setContentUpdate] = useState(0)
+  
+  const pageImages = useMemo(() => {
+    const pageImagesStr = localStorage.getItem('pageImages')
+    return pageImagesStr ? JSON.parse(pageImagesStr) : {}
+  }, [contentUpdate])
 
-  const heroContent = language === 'bn'
-    ? {
-        title: 'নোটিশ',
-        subtitle: 'সম্প্রতি প্রকাশিত নোটিশ, ঘোষণা এবং গুরুত্বপূর্ণ তথ্য দেখুন।'
-      }
-    : {
-        title: 'Notices',
-        subtitle: 'View recently published notices, announcements, and important information.'
+  // Listen for content updates
+  useEffect(() => {
+    const handleStorageChange = () => {
+      setContentUpdate(prev => prev + 1)
+    }
+    const handleContentUpdate = () => {
+      setContentUpdate(prev => prev + 1)
+    }
+    
+    window.addEventListener('storage', handleStorageChange)
+    window.addEventListener('contentUpdated', handleContentUpdate)
+    
+    return () => {
+      window.removeEventListener('storage', handleStorageChange)
+      window.removeEventListener('contentUpdated', handleContentUpdate)
+    }
+  }, [])
+
+  // Get edited content from localStorage (reactive to contentUpdate)
+  const editedContentStr = localStorage.getItem('editedContent')
+  const editedContent = editedContentStr ? JSON.parse(editedContentStr) : {}
+  const noticeHero = editedContent.notice?.hero || {}
+  
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const currentNoticeHero = (() => {
+    const str = localStorage.getItem('editedContent')
+    const content = str ? JSON.parse(str) : {}
+    return content.notice?.hero || {}
+  })()
+  
+  const displayNoticeHero = contentUpdate > 0 ? currentNoticeHero : noticeHero
+
+  const heroContent = {
+    title: displayNoticeHero.title || (language === 'bn' ? 'নোটিশ' : 'Notices'),
+    subtitle: displayNoticeHero.subtitle || (language === 'bn'
+      ? 'সম্প্রতি প্রকাশিত নোটিশ, ঘোষণা এবং গুরুত্বপূর্ণ তথ্য দেখুন।'
+      : 'View recently published notices, announcements, and important information.')
       }
 
   // Sample notices data - in a real app, this would come from an API
@@ -735,7 +770,13 @@ function NoticePage({ language, toggleLanguage, t }) {
       <SiteHeader language={language} toggleLanguage={toggleLanguage} t={t} />
       <main className="notice-page-main">
         <section className="notice-hero-banner fade-section">
-          <div className="notice-hero-banner-content" style={{ fontWeight: 700 }}>
+          <div 
+            className="notice-hero-banner-content" 
+            style={{ 
+              fontWeight: 700,
+              background: `linear-gradient(135deg, rgba(9, 17, 31, 0.40), rgba(19, 56, 98, 0.40)), url(${pageImages.noticeHero || '/hero-image.jpg'}) center 40% / cover no-repeat`
+            }}
+          >
             <h1 className="notice-hero-heading">{heroContent.title}</h1>
             <p className="notice-hero-subtitle">{heroContent.subtitle}</p>
           </div>

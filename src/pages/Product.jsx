@@ -3,13 +3,36 @@ import { useNavigate } from 'react-router-dom'
 import SiteHeader from '../components/SiteHeader.jsx'
 import logoImage from '../assets/logo.png'
 
-function ProductPage({ language, toggleLanguage, t }) {
+function ProductPage({ language, toggleLanguage, t, editedContent = {} }) {
   const [selectedCategory, setSelectedCategory] = useState('All')
   const [isFilterDropdownOpen, setIsFilterDropdownOpen] = useState(false)
   const [searchQuery, setSearchQuery] = useState('')
+  const [imageUpdate, setImageUpdate] = useState(0)
   const navigate = useNavigate()
 
-  const heroContent = language === 'bn'
+  useEffect(() => {
+    const handleStorageChange = () => {
+      setImageUpdate(prev => prev + 1)
+    }
+    const handleContentUpdate = () => {
+      setImageUpdate(prev => prev + 1)
+    }
+    
+    window.addEventListener('storage', handleStorageChange)
+    window.addEventListener('contentUpdated', handleContentUpdate)
+    
+    return () => {
+      window.removeEventListener('storage', handleStorageChange)
+      window.removeEventListener('contentUpdated', handleContentUpdate)
+    }
+  }, [])
+  
+  const pageImages = useMemo(() => {
+    const pageImagesStr = localStorage.getItem('pageImages')
+    return pageImagesStr ? JSON.parse(pageImagesStr) : {}
+  }, [imageUpdate])
+
+  const baseHeroContent = language === 'bn'
     ? {
         title: 'আমাদের পণ্য',
         subtitle: 'কৃষকদের ভাল ফলন অর্জনে সাহায্য করার জন্য ডিজাইন করা কার্যকর এবং নির্ভরযোগ্য ফসল সুরক্ষা পণ্যের আমাদের পরিসর আবিষ্কার করুন।',
@@ -23,6 +46,13 @@ function ProductPage({ language, toggleLanguage, t }) {
         allCategories: 'All Categories',
         filterBy: 'Category',
         searchPlaceholder: 'Search products...'
+      }
+  
+  // Merge with edited content
+  const heroContent = {
+    ...baseHeroContent,
+    title: editedContent.products?.pageHeading || baseHeroContent.title,
+    subtitle: editedContent.products?.pageSubtitle || baseHeroContent.subtitle
       }
 
   // Extract unique categories
@@ -133,7 +163,13 @@ function ProductPage({ language, toggleLanguage, t }) {
       <SiteHeader language={language} toggleLanguage={toggleLanguage} t={t} />
       <main className="product-page-main">
         <section className="product-hero-banner fade-section">
-          <div className="product-hero-banner-content" style={{ fontWeight: 700 }}>
+          <div 
+            className="product-hero-banner-content" 
+            style={{ 
+              fontWeight: 700,
+              background: `linear-gradient(135deg, rgba(9, 17, 31, 0.40), rgba(19, 56, 98, 0.40)), url(${pageImages.productHero || '/hero-image.jpg'}) center 40% / cover no-repeat`
+            }}
+          >
             <h1 className="product-hero-heading">{heroContent.title}</h1>
             <p className="product-hero-subtitle">{heroContent.subtitle}</p>
           </div>
