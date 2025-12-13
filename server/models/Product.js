@@ -1,6 +1,34 @@
 import mongoose from 'mongoose'
 
 const productSchema = new mongoose.Schema({
+  productId: {
+    type: String,
+    unique: true,
+    trim: true
+  },
+  variants: [{
+    name: {
+      type: String,
+      trim: true
+    },
+    value: {
+      type: String,
+      trim: true
+    },
+    price: {
+      type: Number,
+      default: 0
+    }
+  }],
+  price: {
+    type: Number,
+    default: 0
+  },
+  priceCategory: {
+    type: String,
+    enum: ['single', 'per_variant'],
+    default: 'single'
+  },
   name: {
     type: String,
     required: true,
@@ -44,6 +72,30 @@ const productSchema = new mongoose.Schema({
     trim: true
   },
   usageBn: {
+    type: String,
+    trim: true
+  },
+  benefits: {
+    type: String,
+    trim: true
+  },
+  benefitsBn: {
+    type: String,
+    trim: true
+  },
+  application: {
+    type: String,
+    trim: true
+  },
+  applicationBn: {
+    type: String,
+    trim: true
+  },
+  safety: {
+    type: String,
+    trim: true
+  },
+  safetyBn: {
     type: String,
     trim: true
   },

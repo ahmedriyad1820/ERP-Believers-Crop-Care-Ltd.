@@ -3,12 +3,54 @@ import { useNavigate } from 'react-router-dom'
 import SiteHeader from '../components/SiteHeader.jsx'
 import logoImage from '../assets/logo.png'
 
+// Resolve API base so mobile devices on the LAN can reach the backend.
+const resolveApiBase = () => {
+  const envBase = import.meta.env.VITE_API_BASE
+  if (envBase && !['http://0.0.0.0:5000', 'http://localhost:5000'].includes(envBase)) {
+    return envBase
+  }
+  if (typeof window !== 'undefined' && window.location?.hostname) {
+    const { protocol, hostname } = window.location
+    return `${protocol}//${hostname}:5000`
+  }
+  return 'http://localhost:5000'
+}
+
+const API_BASE = resolveApiBase()
+
 function ProductPage({ language, toggleLanguage, t, editedContent = {} }) {
   const [selectedCategory, setSelectedCategory] = useState('All')
   const [isFilterDropdownOpen, setIsFilterDropdownOpen] = useState(false)
   const [searchQuery, setSearchQuery] = useState('')
   const [imageUpdate, setImageUpdate] = useState(0)
+  const [products, setProducts] = useState([])
+  const [productsLoading, setProductsLoading] = useState(true)
   const navigate = useNavigate()
+
+  // Load products from API
+  useEffect(() => {
+    const loadProducts = async () => {
+      try {
+        setProductsLoading(true)
+        const res = await fetch(`${API_BASE}/api/products`)
+        if (res.ok) {
+          const data = await res.json()
+          const apiProducts = (data.data || []).filter(p => p.isActive !== false)
+          setProducts(apiProducts)
+        } else {
+          // Fallback to static products if API fails
+          setProducts(t.products.items || [])
+        }
+      } catch (err) {
+        console.error('Failed to load products from API, using static data:', err)
+        // Fallback to static products
+        setProducts(t.products.items || [])
+      } finally {
+        setProductsLoading(false)
+      }
+    }
+    loadProducts()
+  }, [t.products.items])
 
   useEffect(() => {
     const handleStorageChange = () => {
@@ -16,6 +58,20 @@ function ProductPage({ language, toggleLanguage, t, editedContent = {} }) {
     }
     const handleContentUpdate = () => {
       setImageUpdate(prev => prev + 1)
+      // Reload products when content is updated
+      const loadProducts = async () => {
+        try {
+          const res = await fetch(`${API_BASE}/api/products`)
+          if (res.ok) {
+            const data = await res.json()
+            const apiProducts = (data.data || []).filter(p => p.isActive !== false)
+            setProducts(apiProducts)
+          }
+        } catch (err) {
+          console.error('Failed to reload products:', err)
+        }
+      }
+      loadProducts()
     }
     
     window.addEventListener('storage', handleStorageChange)
@@ -55,15 +111,18 @@ function ProductPage({ language, toggleLanguage, t, editedContent = {} }) {
     subtitle: editedContent.products?.pageSubtitle || baseHeroContent.subtitle
       }
 
+  // Use API products, fallback to static products
+  const displayProducts = products.length > 0 ? products : (t.products.items || [])
+
   // Extract unique categories
   const categories = useMemo(() => {
-    const uniqueCategories = ['All', ...new Set(t.products.items.map(item => item.category))]
+    const uniqueCategories = ['All', ...new Set(displayProducts.map(item => item.category).filter(Boolean))]
     return uniqueCategories
-  }, [t.products.items])
+  }, [displayProducts])
 
   // Filter products based on selected category and search query
   const filteredProducts = useMemo(() => {
-    let filtered = t.products.items
+    let filtered = displayProducts
 
     // Filter by category
     if (selectedCategory !== 'All') {
@@ -74,16 +133,16 @@ function ProductPage({ language, toggleLanguage, t, editedContent = {} }) {
     if (searchQuery.trim()) {
       const query = searchQuery.toLowerCase().trim()
       filtered = filtered.filter(product => 
-        product.name.toLowerCase().includes(query) ||
-        product.genericName.toLowerCase().includes(query) ||
-        product.description.toLowerCase().includes(query) ||
-        product.usage.toLowerCase().includes(query) ||
-        product.category.toLowerCase().includes(query)
+        (product.name || '').toLowerCase().includes(query) ||
+        (product.genericName || '').toLowerCase().includes(query) ||
+        (product.description || '').toLowerCase().includes(query) ||
+        (product.usage || '').toLowerCase().includes(query) ||
+        (product.category || '').toLowerCase().includes(query)
       )
     }
 
     return filtered
-  }, [selectedCategory, searchQuery, t.products.items])
+  }, [selectedCategory, searchQuery, displayProducts])
 
   useEffect(() => {
     const sections = document.querySelectorAll('.fade-section')
@@ -250,24 +309,30 @@ function ProductPage({ language, toggleLanguage, t, editedContent = {} }) {
             </div>
 
             <div className="products-grid">
-              {filteredProducts.map((product, productIndex) => {
-                // Find the original index in the full products array
-                const originalIndex = t.products.items.findIndex(
-                  item => item.name === product.name && item.genericName === product.genericName
-                )
-                const displayIndex = originalIndex !== -1 ? originalIndex : productIndex
+              {productsLoading ? (
+                <div style={{ gridColumn: '1 / -1', textAlign: 'center', padding: '2rem' }}>
+                  {language === 'en' ? 'Loading products...' : 'পণ্য লোড হচ্ছে...'}
+                </div>
+              ) : filteredProducts.length === 0 ? (
+                <div style={{ gridColumn: '1 / -1', textAlign: 'center', padding: '2rem' }}>
+                  {language === 'en' ? 'No products found' : 'কোন পণ্য পাওয়া যায়নি'}
+                </div>
+              ) : (
+                filteredProducts.map((product, productIndex) => {
+                  const productId = product._id || productIndex
+                  const productImage = product.image || '/product-bottle.png'
                 
                 return (
-                  <div key={displayIndex} id={`product-card-${displayIndex}`} className="product-grid-card">
+                    <div key={productId} id={`product-card-${productId}`} className="product-grid-card">
                     <div className="product-grid-image-wrapper">
                       <div className="product-grid-image">
                         <img 
-                          src="/product-bottle.png" 
+                            src={productImage} 
                           alt={product.name}
                           loading="lazy"
                           onError={(e) => {
                             console.error('Product image failed to load:', e.target.src)
-                            e.target.src = '/hero-image.jpg'
+                              e.target.src = '/product-bottle.png'
                           }}
                         />
                       </div>
@@ -282,10 +347,12 @@ function ProductPage({ language, toggleLanguage, t, editedContent = {} }) {
                         <button 
                           className="product-grid-details-btn"
                           onClick={() => {
-                            // Store the product index in sessionStorage to track it came from product page
+                              // Store the product ID in sessionStorage
                             sessionStorage.setItem('productDetailsFrom', 'product-page')
-                            sessionStorage.setItem('productDetailsIndex', displayIndex.toString())
-                            navigate(`/product/${displayIndex}`)
+                              sessionStorage.setItem('productId', product._id || productId.toString())
+                              // Use _id if available, otherwise use index
+                              const navId = product._id || productIndex.toString()
+                              navigate(`/product/${navId}`)
                           }}
                         >
                           {t.products.details}
@@ -294,7 +361,8 @@ function ProductPage({ language, toggleLanguage, t, editedContent = {} }) {
                     </div>
                   </div>
                 )
-              })}
+                })
+              )}
             </div>
           </div>
         </section>

@@ -1,22 +1,178 @@
-import { useEffect } from 'react'
+import { useEffect, useState } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import SiteHeader from '../components/SiteHeader.jsx'
 import logoImage from '../assets/logo.png'
 
+// Resolve API base
+const resolveApiBase = () => {
+  const envBase = import.meta.env.VITE_API_BASE
+  if (envBase && !['http://0.0.0.0:5000', 'http://localhost:5000'].includes(envBase)) {
+    return envBase
+  }
+  if (typeof window !== 'undefined' && window.location?.hostname) {
+    const { protocol, hostname } = window.location
+    return `${protocol}//${hostname}:5000`
+  }
+  return 'http://localhost:5000'
+}
+
+const API_BASE = resolveApiBase()
+
 function ProductDetails({ language, toggleLanguage, t }) {
   const { productIndex } = useParams()
   const navigate = useNavigate()
-  const productIndexNum = parseInt(productIndex, 10)
+  const [product, setProduct] = useState(null)
+  const [loading, setLoading] = useState(true)
 
-  // Get the product from translations
-  const product = t.products.items[productIndexNum]
-
-  // Redirect if product not found
+  // Try to load product from API first, then fallback to static data
   useEffect(() => {
+    const loadProduct = async () => {
+      try {
+        setLoading(true)
+        setProduct(null) // Reset product
+        
+        console.log('Loading product with ID/index:', productIndex)
+        
+        // Check if productIndex is an ID (MongoDB ObjectId format) or a number
+        const isObjectId = /^[0-9a-fA-F]{24}$/.test(productIndex)
+        console.log('Is ObjectId?', isObjectId)
+        
+        if (isObjectId) {
+          // Try fetching by ID from API first
+          try {
+            console.log('Fetching product by ID from API:', `${API_BASE}/api/products/${productIndex}`)
+            const res = await fetch(`${API_BASE}/api/products/${productIndex}`)
+            if (res.ok) {
+              const data = await res.json()
+              console.log('Product fetched by ID:', data)
+              if (data.data) {
+                setProduct(data.data)
+                setLoading(false)
+                return
+              }
+            } else {
+              console.warn('Product not found by ID, status:', res.status)
+            }
+          } catch (apiErr) {
+            console.error('API fetch by ID failed:', apiErr)
+          }
+        }
+        
+        // Try fetching all products and finding by ID or index
+        try {
+          console.log('Fetching all products from API')
+          const allRes = await fetch(`${API_BASE}/api/products`)
+          if (allRes.ok) {
+            const allData = await allRes.json()
+            const apiProducts = (allData.data || []).filter(p => p.isActive !== false)
+            console.log('All products fetched:', apiProducts.length)
+            
+            // Try to find by ID first
+            let foundProduct = apiProducts.find(p => p._id === productIndex)
+            console.log('Found by ID?', !!foundProduct)
+            
+            // If not found by ID, try by index
+            if (!foundProduct) {
+  const productIndexNum = parseInt(productIndex, 10)
+              console.log('Trying to find by index:', productIndexNum)
+              if (!isNaN(productIndexNum) && apiProducts[productIndexNum]) {
+                foundProduct = apiProducts[productIndexNum]
+                console.log('Found by index:', !!foundProduct)
+              }
+            }
+            
+            if (foundProduct) {
+              console.log('Product found, setting:', foundProduct.name)
+              setProduct(foundProduct)
+              setLoading(false)
+              return
+            }
+          } else {
+            console.warn('Failed to fetch all products, status:', allRes.status)
+          }
+        } catch (apiErr) {
+          console.error('API fetch all products failed:', apiErr)
+        }
+        
+        // Fallback to static products by index
+        const productIndexNum = parseInt(productIndex, 10)
+        console.log('Trying static products, index:', productIndexNum)
+        if (!isNaN(productIndexNum) && t.products.items && t.products.items[productIndexNum]) {
+          console.log('Found in static products:', t.products.items[productIndexNum].name)
+          setProduct(t.products.items[productIndexNum])
+        } else {
+          console.warn('Product not found in static products either')
+        }
+      } catch (err) {
+        console.error('Failed to load product:', err)
+        // Final fallback to static products
+        const productIndexNum = parseInt(productIndex, 10)
+        if (!isNaN(productIndexNum) && t.products.items && t.products.items[productIndexNum]) {
+          setProduct(t.products.items[productIndexNum])
+        }
+      } finally {
+        setLoading(false)
+        console.log('Loading complete, product:', product ? product.name : 'null')
+      }
+    }
+    
+    if (productIndex) {
+      loadProduct()
+    } else {
+      console.warn('No productIndex provided')
+      setLoading(false)
+    }
+  }, [productIndex, t.products.items])
+
+  // Redirect if product not found (with a small delay to allow loading to complete)
+  useEffect(() => {
+    if (!loading && !product && productIndex) {
+      // Small delay to ensure all loading attempts have completed
+      const timer = setTimeout(() => {
     if (!product) {
+          console.warn('Product not found, redirecting to product page')
       navigate('/product')
     }
-  }, [product, navigate])
+      }, 500)
+      return () => clearTimeout(timer)
+    }
+  }, [product, loading, navigate, productIndex])
+
+  // Intersection Observer for fade animations - must be called unconditionally
+  useEffect(() => {
+    const sections = document.querySelectorAll('.fade-section')
+    if (!sections.length) {
+      return
+    }
+
+    const observer = new IntersectionObserver(
+      entries => {
+        entries.forEach(entry => {
+          if (entry.isIntersecting) {
+            entry.target.classList.add('visible')
+          } else {
+            entry.target.classList.remove('visible')
+          }
+        })
+      },
+      { threshold: 0.1, rootMargin: '0px 0px -50px 0px' }
+    )
+
+    sections.forEach(section => observer.observe(section))
+
+    return () => observer.disconnect()
+  }, [product]) // Re-run when product changes
+
+  if (loading) {
+    return (
+      <div className="app product-details-page">
+        <SiteHeader language={language} toggleLanguage={toggleLanguage} t={t} />
+        <main style={{ padding: '2rem', textAlign: 'center' }}>
+          {language === 'en' ? 'Loading product...' : 'পণ্য লোড হচ্ছে...'}
+        </main>
+      </div>
+    )
+  }
 
   if (!product) {
     return null
@@ -43,30 +199,6 @@ function ProductDetails({ language, toggleLanguage, t }) {
         application: 'Application',
         safety: 'Safety',
       }
-
-  useEffect(() => {
-    const sections = document.querySelectorAll('.fade-section')
-    if (!sections.length) {
-      return
-    }
-
-    const observer = new IntersectionObserver(
-      entries => {
-        entries.forEach(entry => {
-          if (entry.isIntersecting) {
-            entry.target.classList.add('visible')
-          } else {
-            entry.target.classList.remove('visible')
-          }
-        })
-      },
-      { threshold: 0.1, rootMargin: '0px 0px -50px 0px' }
-    )
-
-    sections.forEach(section => observer.observe(section))
-
-    return () => observer.disconnect()
-  }, [])
 
   return (
     <div className="app product-details-page">
@@ -103,12 +235,12 @@ function ProductDetails({ language, toggleLanguage, t }) {
             <div className="product-details-image-section">
               <div className="product-details-image-wrapper">
                 <img 
-                  src="/product-bottle.png" 
+                  src={product.image || '/product-bottle.png'} 
                   alt={product.name}
                   className="product-details-image"
                   loading="lazy"
                   onError={(e) => {
-                    e.currentTarget.src = '/hero-image.jpg'
+                    e.currentTarget.src = '/product-bottle.png'
                   }}
                 />
               </div>
@@ -157,6 +289,9 @@ function ProductDetails({ language, toggleLanguage, t }) {
                   <h2>{heroContent.benefits}</h2>
                 </div>
                 <div className="product-details-card-body">
+                  {product.benefits ? (
+                    <div style={{ whiteSpace: 'pre-line' }}>{product.benefits}</div>
+                  ) : (
                   <ul className="product-details-list">
                     <li>Effective and reliable crop protection</li>
                     <li>Safe for use in various crop types</li>
@@ -164,6 +299,7 @@ function ProductDetails({ language, toggleLanguage, t }) {
                     <li>Proven results in field conditions</li>
                     <li>Cost-effective solution for farmers</li>
                   </ul>
+                  )}
                 </div>
               </div>
 
@@ -180,7 +316,11 @@ function ProductDetails({ language, toggleLanguage, t }) {
                   <h2>{heroContent.application}</h2>
                 </div>
                 <div className="product-details-card-body">
+                  {product.application ? (
+                    <div style={{ whiteSpace: 'pre-line' }}>{product.application}</div>
+                  ) : (
                   <p>Apply as directed on the product label. Follow recommended dosage and application timing for optimal results. Consult with agricultural experts for specific crop requirements.</p>
+                  )}
                 </div>
               </div>
 
@@ -196,6 +336,9 @@ function ProductDetails({ language, toggleLanguage, t }) {
                   <h2>{heroContent.safety}</h2>
                 </div>
                 <div className="product-details-card-body">
+                  {product.safety ? (
+                    <div style={{ whiteSpace: 'pre-line' }}>{product.safety}</div>
+                  ) : (
                   <ul className="product-details-list">
                     <li>Read and follow all label instructions carefully</li>
                     <li>Wear appropriate protective equipment during application</li>
@@ -203,6 +346,7 @@ function ProductDetails({ language, toggleLanguage, t }) {
                     <li>Do not contaminate water sources</li>
                     <li>Follow recommended safety intervals before harvest</li>
                   </ul>
+                  )}
                 </div>
               </div>
             </div>

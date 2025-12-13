@@ -9,8 +9,13 @@ const ensureProfile = async () => {
   let profile = await AdminProfile.findOne({ username: 'admin' })
   if (!profile) {
     const passwordHash = await bcrypt.hash('admin123', 10)
-    profile = await AdminProfile.create({ username: 'admin', passwordHash, role: 'Admin' })
+    profile = await AdminProfile.create({ username: 'admin', passwordHash, role: 'Admin', designation: '' })
   } else {
+    // ensure designation exists even on older docs
+    if (typeof profile.designation === 'undefined') {
+      profile.designation = ''
+      await profile.save()
+    }
     // Ensure role is always 'Admin' for admin profile
     if (profile.role !== 'Admin') {
       profile.role = 'Admin'
@@ -31,6 +36,7 @@ router.get('/profile', async (req, res) => {
       phone: profile.phone,
       address: profile.address,
       photo: profile.photo,
+      designation: profile.designation,
       role: 'Admin' // Always return 'Admin' for admin profile
     })
   } catch (err) {
@@ -69,7 +75,7 @@ router.post('/login', async (req, res) => {
     }
     // Always return 'Admin' role for admin login, regardless of stored role
     console.log(`[backend] Login successful: User '${username}' with role 'Admin'`)
-    res.json({ success: true, role: 'Admin', name: profile.name, photo: profile.photo })
+    res.json({ success: true, role: 'Admin', name: profile.name, photo: profile.photo, designation: profile.designation })
   } catch (err) {
     console.error(err)
     res.status(500).json({ message: 'Login failed' })
@@ -79,13 +85,14 @@ router.post('/login', async (req, res) => {
 // UPDATE profile
 router.put('/profile', async (req, res) => {
   try {
-    const { name, email, phone, address, photo, role } = req.body
+    const { name, email, phone, address, photo, role, designation } = req.body
     const profile = await ensureProfile()
     profile.name = name ?? profile.name
     profile.email = email ?? profile.email
     profile.phone = phone ?? profile.phone
     profile.address = address ?? profile.address
     profile.photo = photo ?? profile.photo
+    profile.designation = designation ?? profile.designation
     // Always keep role as 'Admin' for admin profile - don't allow changing it
     profile.role = 'Admin'
     await profile.save()

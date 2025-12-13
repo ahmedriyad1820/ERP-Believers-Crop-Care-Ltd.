@@ -1,4 +1,5 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
+import * as XLSX from 'xlsx'
 
 // Resolve API base so mobile devices on the LAN can reach the backend.
 // If VITE_API_BASE is unset or set to 0.0.0.0/localhost, fall back to the current host.
@@ -66,6 +67,7 @@ const [userRole, setUserRole] = useState('Admin')
     department: ''
   })
   const [profileStatus, setProfileStatus] = useState('')
+  const [showEditProfile, setShowEditProfile] = useState(false)
   const [passwordForm, setPasswordForm] = useState({
     current: '',
     next: '',
@@ -103,6 +105,78 @@ const [userRole, setUserRole] = useState('Admin')
   const navigate = useNavigate()
   const [employees, setEmployees] = useState([])
   const [showEmployeeForm, setShowEmployeeForm] = useState(false)
+  const [dealers, setDealers] = useState([])
+  const [products, setProducts] = useState([])
+  const [orders, setOrders] = useState([])
+  const [orderRequests, setOrderRequests] = useState([])
+  const [showOrderRequests, setShowOrderRequests] = useState(false)
+  const [viewingOrder, setViewingOrder] = useState(null)
+  const [isEditingOrderDetails, setIsEditingOrderDetails] = useState(false)
+  const [editingOrderDetails, setEditingOrderDetails] = useState(null)
+  const [viewingProduct, setViewingProduct] = useState(null)
+  const [dealerOrders, setDealerOrders] = useState([])
+  const [dealerOrdersLoading, setDealerOrdersLoading] = useState(false)
+  const [dealerOrdersStatus, setDealerOrdersStatus] = useState('')
+  const [showDealerOrders, setShowDealerOrders] = useState(false)
+  const [editingDealerOrderPaidAmount, setEditingDealerOrderPaidAmount] = useState(null)
+  const [savingDealerOrderPaidAmount, setSavingDealerOrderPaidAmount] = useState(false)
+  const [editingTotalPaid, setEditingTotalPaid] = useState(false)
+  const [savingTotalPaid, setSavingTotalPaid] = useState(false)
+  const [addCollectionAmount, setAddCollectionAmount] = useState('')
+  const [savingCollection, setSavingCollection] = useState(false)
+  const [orderCart, setOrderCart] = useState([])
+  const [showOrderCart, setShowOrderCart] = useState(false)
+  const [showOrderForm, setShowOrderForm] = useState(false)
+  const [editingOrderId, setEditingOrderId] = useState(null)
+  const [savingOrder, setSavingOrder] = useState(false)
+  const [orderStatus, setOrderStatus] = useState('')
+  const [orderSearch, setOrderSearch] = useState('')
+  const [orderFilter, setOrderFilter] = useState('all') // 'all', 'rejected', 'cancelled'
+  const [orderSortField, setOrderSortField] = useState(null) // null, 'date', 'orderId', 'dealer', 'totalPrice', etc.
+  const [orderSortDirection, setOrderSortDirection] = useState('asc') // 'asc' or 'desc'
+  const [orderForm, setOrderForm] = useState({
+    dealer: '',
+    product: '',
+    variant: { name: '', value: '', price: 0 },
+    quantity: 1,
+    notes: '',
+    status: 'Pending',
+    paidAmount: 0
+  })
+  const [selectedProductVariants, setSelectedProductVariants] = useState([])
+  const [productSearch, setProductSearch] = useState('')
+  const [productStatus, setProductStatus] = useState('')
+  const [productForm, setProductForm] = useState({
+    productId: '',
+    variants: [],
+    price: '',
+    priceCategory: 'single',
+    name: '',
+    nameBn: '',
+    genericName: '',
+    genericNameBn: '',
+    category: 'Herbicide',
+    categoryBn: '',
+    description: '',
+    descriptionBn: '',
+    usage: '',
+    usageBn: '',
+    benefits: '',
+    benefitsBn: '',
+    application: '',
+    applicationBn: '',
+    safety: '',
+    safetyBn: '',
+    image: ''
+  })
+  const [showProductForm, setShowProductForm] = useState(false)
+  const [editingProductId, setEditingProductId] = useState(null)
+  const [savingProduct, setSavingProduct] = useState(false)
+  const [showDealerForm, setShowDealerForm] = useState(false)
+  const [viewingDealer, setViewingDealer] = useState(null)
+  const [dealerSearch, setDealerSearch] = useState('')
+  const [dealerSortField, setDealerSortField] = useState(null) // null, 'dealerId', 'name', 'phone', etc.
+  const [dealerSortDirection, setDealerSortDirection] = useState('asc') // 'asc' or 'desc'
   const [newEmployee, setNewEmployee] = useState({
     name: '',
     email: '',
@@ -118,12 +192,59 @@ const [userRole, setUserRole] = useState('Admin')
     bankBranch: '',
     accountNumber: '',
     department: '',
+    postingArea: '',
     role: '',
     designation: '',
     photo: '',
     status: 'Unpaid'
   })
   const [employeeStatus, setEmployeeStatus] = useState('')
+  const [employeeSearch, setEmployeeSearch] = useState('')
+  const [employeeSortField, setEmployeeSortField] = useState(null) // null, 'employeeId', 'name', 'phone', etc.
+  const [employeeSortDirection, setEmployeeSortDirection] = useState('asc') // 'asc' or 'desc'
+  const [newDealer, setNewDealer] = useState({
+    dealerId: '',
+    name: '',
+    phone: '',
+    email: '',
+    address: '',
+    photo: '',
+    nid: '',
+    tradeLicense: '',
+    pesticideLicense: '',
+    area: '',
+    agreement: '',
+    assignedTo: '',
+    assignedToName: '',
+    assignedToId: ''
+  })
+  const [dealerStatus, setDealerStatus] = useState('')
+  const [isEditingDealer, setIsEditingDealer] = useState(false)
+  const [editingDealerData, setEditingDealerData] = useState(null)
+  const [savingDealer, setSavingDealer] = useState(false)
+
+  // Persist minimal auth state so refresh keeps the user signed in
+  const persistAuthState = (state) => {
+    try {
+      localStorage.setItem('adminAuth', JSON.stringify({
+        isAuthenticated: true,
+        isEmployee: !!state.isEmployee,
+        userRole: state.userRole || 'Admin',
+        loggedInUser: state.loggedInUser || '',
+        loggedInUserId: state.loggedInUserId ?? null
+      }))
+    } catch (err) {
+      console.error('Failed to persist auth state', err)
+    }
+  }
+
+  const getNextDealerId = () => {
+    const nums = dealers
+      .map((d) => parseInt(String(d.dealerId || '').replace(/^D/i, ''), 10))
+      .filter((n) => !isNaN(n))
+    const next = (nums.length ? Math.max(...nums) + 1 : 1)
+    return `D${String(next).padStart(3, '0')}`
+  }
   const [generatedCredentials, setGeneratedCredentials] = useState(null)
   const [viewingEmployee, setViewingEmployee] = useState(null)
   const [isEditingEmployee, setIsEditingEmployee] = useState(false)
@@ -131,6 +252,1320 @@ const [userRole, setUserRole] = useState('Admin')
   const [savingEmployee, setSavingEmployee] = useState(false)
   const [lastGeneratedPassword, setLastGeneratedPassword] = useState('')
   const [showChangePassword, setShowChangePassword] = useState(false)
+  const [showSalesHistory, setShowSalesHistory] = useState(false)
+  const [showAssignedDealers, setShowAssignedDealers] = useState(false)
+  const salesEmployees = useMemo(() => {
+    return (employees || []).filter((emp) => {
+      const role = (emp.role || '').toLowerCase()
+      return role.includes('sales')
+    })
+  }, [employees])
+
+  const filteredDealers = useMemo(() => {
+    const isAdmin = (userRole || '').toLowerCase() === 'admin'
+    let list = isAdmin ? dealers : (dealers || []).filter((d) => {
+      const assignedId = d.assignedTo?._id || d.assignedTo
+      const assignedName = d.assignedToName
+      return (
+        (loggedInUserId && assignedId && String(assignedId) === String(loggedInUserId)) ||
+        (loggedInUser && assignedName && assignedName === loggedInUser)
+      )
+    })
+    if (dealerSearch && dealerSearch.trim()) {
+      const q = dealerSearch.trim().toLowerCase()
+      list = list.filter((d) =>
+        (d.name || '').toLowerCase().includes(q) ||
+        (d.dealerId || '').toLowerCase().includes(q) ||
+        (d.phone || '').toLowerCase().includes(q) ||
+        (d.email || '').toLowerCase().includes(q)
+      )
+    }
+    return list
+  }, [dealers, userRole, loggedInUserId, loggedInUser, dealerSearch])
+
+  // Sorted dealers
+  const sortedDealers = useMemo(() => {
+    if (!dealerSortField) return filteredDealers
+    
+    const sorted = [...filteredDealers].sort((a, b) => {
+      let aValue, bValue
+      
+      switch (dealerSortField) {
+        case 'dealerId':
+          aValue = (a.dealerId || '').toLowerCase()
+          bValue = (b.dealerId || '').toLowerCase()
+          break
+        case 'name':
+          aValue = (a.name || '').toLowerCase()
+          bValue = (b.name || '').toLowerCase()
+          break
+        case 'phone':
+          aValue = (a.phone || '').toLowerCase()
+          bValue = (b.phone || '').toLowerCase()
+          break
+        case 'email':
+          aValue = (a.email || '').toLowerCase()
+          bValue = (b.email || '').toLowerCase()
+          break
+        case 'area':
+          aValue = (a.area || '').toLowerCase()
+          bValue = (b.area || '').toLowerCase()
+          break
+        case 'salesman':
+          aValue = (a.assignedToName || a.assignedToId || '').toLowerCase()
+          bValue = (b.assignedToName || b.assignedToId || '').toLowerCase()
+          break
+        case 'dueAmount':
+          // Calculate due amount for sorting
+          const aDealerOrders = (orders || []).filter(order => 
+            order.dealerId === a.dealerId && order.status !== 'Cancelled'
+          )
+          const bDealerOrders = (orders || []).filter(order => 
+            order.dealerId === b.dealerId && order.status !== 'Cancelled'
+          )
+          aValue = aDealerOrders.reduce((sum, order) => {
+            const due = order.dueAmount !== undefined 
+              ? parseFloat(order.dueAmount) 
+              : Math.max(0, parseFloat(order.totalPrice || 0) - parseFloat(order.paidAmount || 0))
+            return sum + due
+          }, 0)
+          bValue = bDealerOrders.reduce((sum, order) => {
+            const due = order.dueAmount !== undefined 
+              ? parseFloat(order.dueAmount) 
+              : Math.max(0, parseFloat(order.totalPrice || 0) - parseFloat(order.paidAmount || 0))
+            return sum + due
+          }, 0)
+          break
+        default:
+          return 0
+      }
+      
+      if (typeof aValue === 'string' && typeof bValue === 'string') {
+        return dealerSortDirection === 'asc' 
+          ? aValue.localeCompare(bValue)
+          : bValue.localeCompare(aValue)
+      } else {
+        return dealerSortDirection === 'asc' 
+          ? aValue - bValue
+          : bValue - aValue
+      }
+    })
+    
+    return sorted
+  }, [filteredDealers, dealerSortField, dealerSortDirection, orders])
+
+  // Handle sort column click for dealers
+  const handleSortDealers = (field) => {
+    if (dealerSortField === field) {
+      // Toggle direction if clicking the same field
+      setDealerSortDirection(dealerSortDirection === 'asc' ? 'desc' : 'asc')
+    } else {
+      // Set new field and default to ascending
+      setDealerSortField(field)
+      setDealerSortDirection('asc')
+    }
+  }
+
+  const filteredEmployees = useMemo(() => {
+    let list = employees || []
+    if (employeeSearch && employeeSearch.trim()) {
+      const q = employeeSearch.trim().toLowerCase()
+      list = list.filter((e) =>
+        (e.name || '').toLowerCase().includes(q) ||
+        (e.employeeId || '').toLowerCase().includes(q) ||
+        (e.phone || '').toLowerCase().includes(q) ||
+        (e.email || '').toLowerCase().includes(q) ||
+        (e.designation || '').toLowerCase().includes(q)
+      )
+    }
+    return list
+  }, [employees, employeeSearch])
+
+  // Sorted employees
+  const sortedEmployees = useMemo(() => {
+    if (!employeeSortField) return filteredEmployees
+    
+    const sorted = [...filteredEmployees].sort((a, b) => {
+      let aValue, bValue
+      
+      switch (employeeSortField) {
+        case 'employeeId':
+          aValue = (a.employeeId || '').toLowerCase()
+          bValue = (b.employeeId || '').toLowerCase()
+          break
+        case 'name':
+          aValue = (a.name || '').toLowerCase()
+          bValue = (b.name || '').toLowerCase()
+          break
+        case 'phone':
+          aValue = (a.phone || '').toLowerCase()
+          bValue = (b.phone || '').toLowerCase()
+          break
+        case 'designation':
+          aValue = (a.designation || '').toLowerCase()
+          bValue = (b.designation || '').toLowerCase()
+          break
+        case 'postingArea':
+          aValue = ((a.postingArea || a.area) || '').toLowerCase()
+          bValue = ((b.postingArea || b.area) || '').toLowerCase()
+          break
+        case 'salary':
+          aValue = parseFloat(a.salary || 0)
+          bValue = parseFloat(b.salary || 0)
+          break
+        case 'salesTarget':
+          aValue = parseFloat(a.salesTarget || 0)
+          bValue = parseFloat(b.salesTarget || 0)
+          break
+        case 'salaryStatus':
+          aValue = (normalizeSalaryStatus(a.status) || '').toLowerCase()
+          bValue = (normalizeSalaryStatus(b.status) || '').toLowerCase()
+          break
+        default:
+          return 0
+      }
+      
+      if (typeof aValue === 'string' && typeof bValue === 'string') {
+        return employeeSortDirection === 'asc' 
+          ? aValue.localeCompare(bValue)
+          : bValue.localeCompare(aValue)
+      } else {
+        return employeeSortDirection === 'asc' 
+          ? aValue - bValue
+          : bValue - aValue
+      }
+    })
+    
+    return sorted
+  }, [filteredEmployees, employeeSortField, employeeSortDirection])
+
+  // Handle sort column click for employees
+  const handleSortEmployees = (field) => {
+    if (employeeSortField === field) {
+      // Toggle direction if clicking the same field
+      setEmployeeSortDirection(employeeSortDirection === 'asc' ? 'desc' : 'asc')
+    } else {
+      // Set new field and default to ascending
+      setEmployeeSortField(field)
+      setEmployeeSortDirection('asc')
+    }
+  }
+
+  // Totals across all dealers/orders
+  const { totalCollection, totalDue } = useMemo(() => {
+    const totals = (orders || []).reduce((acc, order) => {
+      // Exclude cancelled and rejected orders from calculations
+      if (order.status === 'Cancelled' || order.approvalStatus === 'Rejected') {
+        return acc
+      }
+      
+      // Total Collection: sum of all paidAmount (default to 0 if not set)
+      const paid = order?.paidAmount !== undefined && order?.paidAmount !== null
+        ? Number(order.paidAmount)
+        : 0
+      
+      // Total Due: use dueAmount if set, otherwise calculate as totalPrice - paidAmount
+      const due = order?.dueAmount !== undefined && order?.dueAmount !== null
+        ? Number(order.dueAmount)
+        : Math.max(0, Number(order.totalPrice || 0) - Number(paid || 0))
+      
+      acc.totalCollection += Number(paid || 0)
+      acc.totalDue += Number(due || 0)
+      return acc
+    }, { totalCollection: 0, totalDue: 0 })
+    return totals
+  }, [orders])
+
+  const filteredOrders = useMemo(() => {
+    let list = orders || []
+    
+    // Always exclude pending orders - only show approved orders
+    list = list.filter((o) => o.approvalStatus !== 'Pending')
+    
+    // Filter by order filter (rejected, cancelled, or all)
+    if (orderFilter === 'rejected') {
+      list = list.filter((o) => o.approvalStatus === 'Rejected')
+    } else if (orderFilter === 'cancelled') {
+      list = list.filter((o) => o.status === 'Cancelled')
+    } else {
+      // For 'all', exclude rejected and cancelled from default view (they can be viewed via buttons)
+      list = list.filter((o) => 
+        o.approvalStatus !== 'Rejected' && o.status !== 'Cancelled'
+      )
+    }
+    
+    // Apply search filter
+    if (orderSearch && orderSearch.trim()) {
+      const q = orderSearch.trim().toLowerCase()
+      list = list.filter((o) =>
+        (o.orderId || '').toLowerCase().includes(q) ||
+        (o.dealerName || '').toLowerCase().includes(q) ||
+        (o.dealerId || '').toLowerCase().includes(q) ||
+        (o.requestedByName || '').toLowerCase().includes(q) ||
+        (o.status || '').toLowerCase().includes(q) ||
+        (o.approvalStatus || '').toLowerCase().includes(q)
+      )
+    }
+    return list
+  }, [orders, orderSearch, orderFilter])
+
+  // Sorted orders
+  const sortedOrders = useMemo(() => {
+    if (!orderSortField) return filteredOrders
+    
+    const sorted = [...filteredOrders].sort((a, b) => {
+      let aValue, bValue
+      
+      switch (orderSortField) {
+        case 'date':
+          aValue = a.createdAt ? new Date(a.createdAt).getTime() : 0
+          bValue = b.createdAt ? new Date(b.createdAt).getTime() : 0
+          break
+        case 'orderId':
+          aValue = (a.orderId || '').toLowerCase()
+          bValue = (b.orderId || '').toLowerCase()
+          break
+        case 'dealer':
+          aValue = (a.dealerName || a.dealer?.name || '').toLowerCase()
+          bValue = (b.dealerName || b.dealer?.name || '').toLowerCase()
+          break
+        case 'dealerId':
+          aValue = (a.dealerId || a.dealer?.dealerId || '').toLowerCase()
+          bValue = (b.dealerId || b.dealer?.dealerId || '').toLowerCase()
+          break
+        case 'product':
+          aValue = (a.productName || a.product?.name || '').toLowerCase()
+          bValue = (b.productName || b.product?.name || '').toLowerCase()
+          break
+        case 'quantity':
+          aValue = parseFloat(a.quantity || 0)
+          bValue = parseFloat(b.quantity || 0)
+          break
+        case 'createdBy':
+          aValue = (a.requestedByName || a.requestedByRole || '').toLowerCase()
+          bValue = (b.requestedByName || b.requestedByRole || '').toLowerCase()
+          break
+        case 'totalPrice':
+          aValue = parseFloat(a.totalPrice || 0)
+          bValue = parseFloat(b.totalPrice || 0)
+          break
+        case 'paidAmount':
+          aValue = parseFloat(a.paidAmount || 0)
+          bValue = parseFloat(b.paidAmount || 0)
+          break
+        case 'dueAmount':
+          aValue = a.dueAmount !== undefined && a.dueAmount !== null
+            ? parseFloat(a.dueAmount)
+            : Math.max(0, parseFloat(a.totalPrice || 0) - parseFloat(a.paidAmount || 0))
+          bValue = b.dueAmount !== undefined && b.dueAmount !== null
+            ? parseFloat(b.dueAmount)
+            : Math.max(0, parseFloat(b.totalPrice || 0) - parseFloat(b.paidAmount || 0))
+          break
+        case 'status':
+          aValue = (a.status || 'Pending').toLowerCase()
+          bValue = (b.status || 'Pending').toLowerCase()
+          break
+        default:
+          return 0
+      }
+      
+      if (typeof aValue === 'string' && typeof bValue === 'string') {
+        return orderSortDirection === 'asc' 
+          ? aValue.localeCompare(bValue)
+          : bValue.localeCompare(aValue)
+      } else {
+        return orderSortDirection === 'asc' 
+          ? aValue - bValue
+          : bValue - aValue
+      }
+    })
+    
+    return sorted
+  }, [filteredOrders, orderSortField, orderSortDirection])
+
+  // Handle sort column click
+  const handleSortOrders = (field) => {
+    if (orderSortField === field) {
+      // Toggle direction if clicking the same field
+      setOrderSortDirection(orderSortDirection === 'asc' ? 'desc' : 'asc')
+    } else {
+      // Set new field and default to ascending
+      setOrderSortField(field)
+      setOrderSortDirection('asc')
+    }
+  }
+
+  // Restore persisted auth state on first load
+  useEffect(() => {
+    const savedAuth = localStorage.getItem('adminAuth')
+    if (!savedAuth) return
+
+    try {
+      const parsed = JSON.parse(savedAuth)
+      if (parsed?.isAuthenticated) {
+        setIsAuthenticated(true)
+        setIsEmployee(!!parsed.isEmployee)
+        setUserRole(parsed.userRole || 'Admin')
+        setLoggedInUser(parsed.loggedInUser || '')
+        setLoggedInUserId(parsed.loggedInUserId ?? null)
+      }
+    } catch (err) {
+      console.error('Failed to restore auth state', err)
+      localStorage.removeItem('adminAuth')
+    }
+  }, [])
+
+  const loadDealers = async () => {
+    try {
+      const res = await fetch(`${API_BASE}/api/dealers`)
+      if (res.ok) {
+        const data = await res.json()
+        setDealers(data.data || [])
+      }
+    } catch (err) {
+      console.error('Failed to load dealers', err)
+    }
+  }
+
+  useEffect(() => {
+    loadDealers()
+  }, [userRole, loggedInUserId, loggedInUser])
+
+  const loadProducts = async () => {
+    try {
+      setProductStatus('')
+      const res = await fetch(`${API_BASE}/api/products`)
+      if (!res.ok) {
+        throw new Error('Failed to load products')
+      }
+      const data = await res.json()
+      setProducts(data.data || [])
+    } catch (err) {
+      console.error('Failed to load products', err)
+      setProducts(Array.isArray(t?.products?.items) ? [...t.products.items] : [])
+      setProductStatus(language === 'en' 
+        ? 'Showing static products while API is unavailable.'
+        : 'এপিআই অনুপলব্ধ থাকায় ডিফল্ট পণ্য দেখানো হচ্ছে।')
+    }
+  }
+
+  useEffect(() => {
+    loadProducts()
+  }, [])
+
+  const loadOrderRequests = async () => {
+    try {
+      const res = await fetch(`${API_BASE}/api/orders?approvalStatus=Pending`)
+      if (res.ok) {
+        const data = await res.json()
+        const pending = data.data || []
+        const isAdmin = (userRole || '').toLowerCase() === 'admin'
+        if (isAdmin) {
+          setOrderRequests(pending)
+        } else {
+          const filtered = pending.filter((o) => {
+            const requesterId = o.requestedBy?._id || o.requestedBy
+            const requesterName = o.requestedByName
+            return (
+              (loggedInUserId && requesterId && String(requesterId) === String(loggedInUserId)) ||
+              (loggedInUser && requesterName && requesterName === loggedInUser)
+            )
+          })
+          setOrderRequests(filtered)
+        }
+      }
+    } catch (err) {
+      console.error('Failed to load order requests', err)
+    }
+  }
+
+  const loadOrders = async () => {
+    try {
+      // Load dealers if not already loaded (needed for employee order filtering)
+      const isAdmin = (userRole || '').toLowerCase() === 'admin'
+      if (!isAdmin && (!dealers || dealers.length === 0)) {
+        await loadDealers()
+      }
+      
+      const res = await fetch(`${API_BASE}/api/orders`)
+      if (res.ok) {
+        const data = await res.json()
+        // Exclude pending orders - only show approved orders (and rejected/cancelled if viewing those filters)
+        const allOrders = (data.data || []).filter((o) => o.approvalStatus !== 'Pending')
+        const filtered = isAdmin
+          ? allOrders
+          : allOrders.filter((o) => {
+              // Show orders created by this employee
+              const requesterId = o.requestedBy?._id || o.requestedBy
+              const requesterName = o.requestedByName
+              const isEmployeeOrder = (
+                (loggedInUserId && requesterId && String(requesterId) === String(loggedInUserId)) ||
+                (loggedInUser && requesterName && requesterName === loggedInUser)
+              )
+              
+              // Also show orders created by admin where the dealer is assigned to this employee
+              const isAdminCreated = o.requestedByRole && o.requestedByRole.toLowerCase() === 'admin'
+              let isAssignedToEmployee = false
+              
+              if (isAdminCreated && loggedInUserId) {
+                // Check if the order's dealer is assigned to this employee
+                const dealerId = o.dealerId
+                const dealer = (dealers || []).find(d => d.dealerId === dealerId)
+                if (dealer) {
+                  const assignedToId = dealer.assignedTo?._id || dealer.assignedTo
+                  isAssignedToEmployee = assignedToId && String(assignedToId) === String(loggedInUserId)
+                }
+              }
+              
+              return isEmployeeOrder || isAssignedToEmployee
+            })
+        setOrders(filtered)
+      }
+    } catch (err) {
+      console.error('Failed to load orders', err)
+    }
+  }
+
+  useEffect(() => {
+    if (activeTab === 'orders') {
+      loadOrders()
+      if (showOrderRequests) {
+        loadOrderRequests()
+      }
+    }
+  }, [activeTab, userRole, showOrderRequests])
+
+  // Load orders when Revenue tab is active (needed for Total Collection and Total Due calculations)
+  useEffect(() => {
+    if (activeTab === 'revenue') {
+      loadOrders()
+    }
+  }, [activeTab])
+
+  // Load orders when CRM tab is active (needed for Due Amount calculations in dealers table)
+  useEffect(() => {
+    if (activeTab === 'crm') {
+      loadOrders()
+    }
+  }, [activeTab])
+
+  // Ensure orders are loaded when viewing sales history (even outside Orders tab)
+  useEffect(() => {
+    if (showSalesHistory && (!orders || orders.length === 0)) {
+      loadOrders()
+    }
+  }, [showSalesHistory])
+
+  // Update variants when product changes
+  useEffect(() => {
+    if (orderForm.product) {
+      const selectedProduct = products.find(p => p._id === orderForm.product)
+      if (selectedProduct && selectedProduct.variants && selectedProduct.variants.length > 0) {
+        setSelectedProductVariants(selectedProduct.variants)
+        // Reset variant if product changed
+        setOrderForm(prev => ({ ...prev, variant: { name: '', value: '', price: 0 } }))
+      } else {
+        setSelectedProductVariants([])
+        setOrderForm(prev => ({ ...prev, variant: { name: '', value: '', price: 0 } }))
+      }
+    } else {
+      setSelectedProductVariants([])
+    }
+  }, [orderForm.product, products])
+
+  const resetOrderForm = () => {
+    setOrderForm({
+      dealer: '',
+      product: '',
+      variant: { name: '', value: '', price: 0 },
+      quantity: 1,
+      notes: '',
+      status: 'Pending',
+      paidAmount: 0
+    })
+    setSelectedProductVariants([])
+    setEditingOrderId(null)
+  }
+
+  const handleSaveOrder = async (e) => {
+    e.preventDefault()
+    if (!orderForm.dealer || !orderForm.product || !orderForm.quantity) {
+      setOrderStatus(language === 'en' ? 'Please fill all required fields' : 'প্রয়োজনীয় সব ঘর পূরণ করুন')
+      return
+    }
+
+    try {
+      setSavingOrder(true)
+      setOrderStatus('')
+      
+      const selectedProduct = products.find(p => p._id === orderForm.product)
+      const orderData = {
+        dealer: orderForm.dealer,
+        product: orderForm.product,
+        quantity: parseFloat(orderForm.quantity) || 1,
+        notes: orderForm.notes || '',
+        status: orderForm.status || 'Pending',
+        approvalStatus: userRole === 'Admin' ? 'Approved' : 'Pending',
+        requestedBy: loggedInUserId || null,
+        requestedByName: loggedInUser || '',
+        requestedByRole: userRole || ''
+      }
+
+      // Add variant if product has variants and one is selected
+      if (selectedProduct && selectedProduct.priceCategory === 'per_variant' && orderForm.variant && orderForm.variant.value) {
+        orderData.variant = orderForm.variant
+      }
+
+      const method = editingOrderId ? 'PUT' : 'POST'
+      const url = editingOrderId
+        ? `${API_BASE}/api/orders/${editingOrderId}`
+        : `${API_BASE}/api/orders`
+
+      const res = await fetch(url, {
+        method,
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(orderData)
+      })
+
+      const data = await res.json().catch(() => ({}))
+
+      if (!res.ok) {
+        throw new Error(data.message || data.error || 'Failed to save order')
+      }
+
+      await loadOrders()
+      setOrderStatus(language === 'en' ? (editingOrderId ? 'Order updated' : 'Order created') : (editingOrderId ? 'অর্ডার আপডেট হয়েছে' : 'অর্ডার তৈরি হয়েছে'))
+      resetOrderForm()
+      setShowOrderForm(false)
+      
+      // Dispatch event to refresh other pages if needed
+      window.dispatchEvent(new Event('contentUpdated'))
+    } catch (err) {
+      console.error('Order save error:', err)
+      setOrderStatus(language === 'en' ? err.message : err.message)
+    } finally {
+      setSavingOrder(false)
+    }
+  }
+
+  const handleEditOrder = (order) => {
+    if (!order) return
+    const existingItems = Array.isArray(order.items) && order.items.length
+      ? order.items
+      : [{
+          product: order.product?._id || order.product || '',
+          productName: order.productName || '',
+          productId: order.productId || '',
+          variant: order.variant || { name: '', value: '', price: 0 },
+          quantity: order.quantity || 1,
+          notes: order.notes || '',
+          status: order.status || 'Pending'
+        }]
+    setOrderCart(existingItems.map((it) => ({
+      product: it.product,
+      productName: it.productName,
+      productId: it.productId,
+      variant: it.variant,
+      quantity: it.quantity,
+      notes: it.notes,
+      status: it.status || 'Pending'
+    })))
+    setShowOrderCart(true)
+    setOrderForm({
+      dealer: order.dealer?._id || order.dealer || '',
+      product: existingItems[0]?.product || '',
+      variant: existingItems[0]?.variant || { name: '', value: '', price: 0 },
+      quantity: existingItems[0]?.quantity || 1,
+      notes: order.notes || '',
+      status: order.status || 'Pending',
+      paidAmount: order.paidAmount || 0
+    })
+    setEditingOrderId(order._id)
+    setShowOrderForm(true)
+    setOrderStatus('')
+  }
+
+  const handleDeleteOrder = async (id) => {
+    if (!window.confirm(language === 'en' ? 'Are you sure you want to delete this order?' : 'আপনি কি এই অর্ডারটি মুছতে চান?')) {
+      return
+    }
+
+    try {
+      const res = await fetch(`${API_BASE}/api/orders/${id}`, {
+        method: 'DELETE'
+      })
+
+      if (!res.ok) {
+        throw new Error('Failed to delete order')
+      }
+
+      // Reload orders and employees to reflect the deletion
+      await loadOrders()
+      await loadEmployees()
+      
+      // If viewing an employee, refresh their data
+      if (viewingEmployee) {
+        const empRes = await fetch(`${API_BASE}/api/employees/${viewingEmployee._id}`)
+        if (empRes.ok) {
+          const empData = await empRes.json()
+          if (empData.success && empData.data) {
+            setViewingEmployee({ ...empData.data, status: normalizeSalaryStatus(empData.data.status) })
+          }
+        }
+      }
+      
+      window.dispatchEvent(new Event('contentUpdated'))
+    } catch (err) {
+      console.error('Order delete error:', err)
+      alert(language === 'en' ? 'Failed to delete order' : 'অর্ডার মুছতে ব্যর্থ')
+    }
+  }
+
+  const handleExportOrders = () => {
+    try {
+      // Prepare data for export
+      const exportData = sortedOrders.map((order) => {
+        const dueAmount = order.dueAmount !== undefined && order.dueAmount !== null
+          ? parseFloat(order.dueAmount)
+          : Math.max(0, parseFloat(order.totalPrice || 0) - parseFloat(order.paidAmount || 0))
+        
+        return {
+          'Date': order.createdAt ? new Date(order.createdAt).toLocaleDateString() : '-',
+          'Order ID': order.orderId || '-',
+          'Dealer': order.dealerName || order.dealer?.name || '-',
+          'Dealer ID': order.dealerId || order.dealer?.dealerId || '-',
+          'Product': order.productName || order.product?.name || '-',
+          'Variant': order.variant?.value ? (order.variant.name || order.variant.value) : '-',
+          'Quantity': order.quantity || 0,
+          'Created By': order.requestedByName || order.requestedByRole || '-',
+          'Total Price': parseFloat(order.totalPrice || 0).toFixed(2),
+          'Paid Amount': parseFloat(order.paidAmount || 0).toFixed(2),
+          'Due Amount': dueAmount.toFixed(2),
+          'Status': order.status || 'Pending',
+          'Approval Status': order.approvalStatus || '-'
+        }
+      })
+
+      // Create workbook and worksheet
+      const ws = XLSX.utils.json_to_sheet(exportData)
+      const wb = XLSX.utils.book_new()
+      XLSX.utils.book_append_sheet(wb, ws, 'Orders')
+
+      // Generate filename with current date
+      const dateStr = new Date().toISOString().split('T')[0]
+      const filename = `Orders_${dateStr}.xlsx`
+
+      // Write file and trigger download
+      XLSX.writeFile(wb, filename)
+    } catch (err) {
+      console.error('Export error:', err)
+      alert(language === 'en' ? 'Failed to export orders' : 'অর্ডার রপ্তানি করতে ব্যর্থ')
+    }
+  }
+
+  const handleShowDealerOrders = async (dealer = null) => {
+    const targetDealer = dealer || viewingDealer
+    if (!targetDealer?._id && !targetDealer?.dealerId) return
+    try {
+      setDealerOrdersLoading(true)
+      setDealerOrdersStatus('')
+      const res = await fetch(`${API_BASE}/api/orders`)
+      if (!res.ok) {
+        throw new Error('Failed to fetch orders')
+      }
+      const data = await res.json()
+      
+      // Filter orders to show ONLY this specific dealer's orders - match strictly by dealerId
+      const targetDealerId = targetDealer.dealerId
+      if (!targetDealerId) {
+        setDealerOrdersStatus(language === 'en' ? 'Dealer ID not found.' : 'ডিলার আইডি পাওয়া যায়নি।')
+        setDealerOrders([])
+        setShowDealerOrders(true)
+        setDealerOrdersLoading(false)
+        return
+      }
+      
+      const filtered = (data.data || []).filter((order) => {
+        // Exclude cancelled orders
+        if (order.status === 'Cancelled') {
+          return false
+        }
+        
+        // STRICT MATCH: Prioritize dealerId string match
+        const orderDealerId = order.dealerId
+        
+        // First try: Match by dealerId string (most reliable)
+        if (orderDealerId && orderDealerId === targetDealerId) {
+          return true
+        }
+        
+        // Second try: If dealerId doesn't exist or doesn't match, try dealer._id
+        // This handles cases where orders might reference dealer by ObjectId
+        if (targetDealer._id) {
+          const orderDealerObjectId = order.dealer?._id || order.dealer
+          if (orderDealerObjectId && String(orderDealerObjectId) === String(targetDealer._id)) {
+            return true
+          }
+        }
+        
+        // No match found - exclude this order
+        return false
+      })
+      
+      console.log('Dealer Orders Filter (STRICT):', {
+        targetDealerId: targetDealerId,
+        viewingDealer: { dealerId: targetDealer.dealerId, _id: targetDealer._id, name: targetDealer.name },
+        totalOrders: (data.data || []).length,
+        filteredOrders: filtered.length,
+        filteredOrderDetails: filtered.map(o => ({ 
+          orderId: o.orderId, 
+          dealerId: o.dealerId, 
+          dealerName: o.dealerName,
+          totalPrice: o.totalPrice,
+          paidAmount: o.paidAmount,
+          dueAmount: o.dueAmount
+        }))
+      })
+      
+      setDealerOrders(filtered)
+      setShowDealerOrders(true)
+      if (!filtered.length) {
+        setDealerOrdersStatus(language === 'en' ? 'No orders for this dealer yet.' : 'এই ডিলারের কোনো অর্ডার নেই।')
+      }
+    } catch (err) {
+      console.error('Dealer orders load error:', err)
+      setDealerOrdersStatus(language === 'en' ? (err.message || 'Failed to load orders') : (err.message || 'অর্ডার লোড ব্যর্থ'))
+    } finally {
+      setDealerOrdersLoading(false)
+    }
+  }
+
+  const handleSaveDealerOrderPaidAmount = async (orderId, newPaidAmount) => {
+    if ((userRole || '').toLowerCase() !== 'admin') return
+    
+    try {
+      setSavingDealerOrderPaidAmount(true)
+      const paidAmount = parseFloat(newPaidAmount) || 0
+      const order = dealerOrders.find(o => o._id === orderId)
+      if (!order) return
+      
+      const totalPrice = parseFloat(order.totalPrice) || 0
+      const dueAmount = Math.max(0, totalPrice - paidAmount)
+      
+      const res = await fetch(`${API_BASE}/api/orders/${orderId}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          paidAmount: paidAmount,
+          dueAmount: dueAmount
+        })
+      })
+
+      if (!res.ok) {
+        throw new Error('Failed to update paid amount')
+      }
+
+      // Reload dealer orders to get updated data
+      await handleShowDealerOrders()
+      setEditingDealerOrderPaidAmount(null)
+      
+      // Also reload main orders list
+      await loadOrders()
+    } catch (err) {
+      console.error('Failed to update paid amount:', err)
+      alert(language === 'en' ? 'Failed to update paid amount' : 'পরিশোধিত পরিমাণ আপডেট ব্যর্থ')
+    } finally {
+      setSavingDealerOrderPaidAmount(false)
+    }
+  }
+
+  const handleSaveTotalPaid = async (newTotalPaid) => {
+    if ((userRole || '').toLowerCase() !== 'admin') return
+    
+    try {
+      setSavingTotalPaid(true)
+      const newTotalPaidValue = parseFloat(newTotalPaid) || 0
+      const currentTotalPaid = dealerOrders.reduce((sum, order) => {
+        return sum + (parseFloat(order.paidAmount) || 0)
+      }, 0)
+      
+      const difference = newTotalPaidValue - currentTotalPaid
+      
+      if (difference === 0) {
+        setEditingTotalPaid(false)
+        return
+      }
+      
+      // Sort orders by due amount (highest first) to reduce due amounts one by one
+      const sortedOrders = [...dealerOrders].map(order => {
+        const totalPrice = parseFloat(order.totalPrice) || 0
+        const paidAmount = parseFloat(order.paidAmount) || 0
+        const dueAmount = order.dueAmount !== undefined 
+          ? parseFloat(order.dueAmount) 
+          : Math.max(0, totalPrice - paidAmount)
+        return { ...order, calculatedDue: dueAmount }
+      }).sort((a, b) => b.calculatedDue - a.calculatedDue)
+      
+      let remainingDifference = difference
+      
+      // Update orders one by one, reducing due amounts
+      for (const order of sortedOrders) {
+        if (remainingDifference === 0) break
+        
+        const totalPrice = parseFloat(order.totalPrice) || 0
+        const currentPaid = parseFloat(order.paidAmount) || 0
+        const currentDue = order.calculatedDue
+        
+        if (remainingDifference > 0) {
+          // Increase paid amount - reduce due amount
+          const amountToAdd = Math.min(remainingDifference, currentDue)
+          const newPaidAmount = currentPaid + amountToAdd
+          const newDueAmount = Math.max(0, totalPrice - newPaidAmount)
+          
+          const res = await fetch(`${API_BASE}/api/orders/${order._id}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              paidAmount: newPaidAmount,
+              dueAmount: newDueAmount
+            })
+          })
+
+          if (!res.ok) {
+            throw new Error(`Failed to update order ${order.orderId}`)
+          }
+          
+          remainingDifference -= amountToAdd
+        } else {
+          // Decrease paid amount - increase due amount
+          const amountToReduce = Math.min(Math.abs(remainingDifference), currentPaid)
+          const newPaidAmount = Math.max(0, currentPaid - amountToReduce)
+          const newDueAmount = Math.max(0, totalPrice - newPaidAmount)
+          
+          const res = await fetch(`${API_BASE}/api/orders/${order._id}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              paidAmount: newPaidAmount,
+              dueAmount: newDueAmount
+            })
+          })
+
+          if (!res.ok) {
+            throw new Error(`Failed to update order ${order.orderId}`)
+          }
+          
+          remainingDifference += amountToReduce
+        }
+      }
+
+      // Reload dealer orders to get updated data
+      await handleShowDealerOrders()
+      setEditingTotalPaid(false)
+      
+      // Also reload main orders list
+      await loadOrders()
+    } catch (err) {
+      console.error('Failed to update total paid:', err)
+      alert(language === 'en' ? 'Failed to update total paid' : 'মোট পরিশোধিত আপডেট ব্যর্থ')
+    } finally {
+      setSavingTotalPaid(false)
+    }
+  }
+
+  const handleAddCollection = async (collectionAmount) => {
+    if ((userRole || '').toLowerCase() !== 'admin') return
+    
+    const amount = parseFloat(collectionAmount) || 0
+    if (amount <= 0) {
+      setAddCollectionAmount('')
+      return
+    }
+    
+    try {
+      setSavingCollection(true)
+      
+      // Sort orders by due amount (highest first) to reduce due amounts one by one
+      const sortedOrders = [...dealerOrders].map(order => {
+        const totalPrice = parseFloat(order.totalPrice) || 0
+        const paidAmount = parseFloat(order.paidAmount) || 0
+        const dueAmount = order.dueAmount !== undefined 
+          ? parseFloat(order.dueAmount) 
+          : Math.max(0, totalPrice - paidAmount)
+        return { ...order, calculatedDue: dueAmount }
+      }).sort((a, b) => b.calculatedDue - a.calculatedDue)
+      
+      let remainingAmount = amount
+      
+      // Update orders one by one, reducing due amounts
+      for (const order of sortedOrders) {
+        if (remainingAmount <= 0) break
+        
+        const totalPrice = parseFloat(order.totalPrice) || 0
+        const currentPaid = parseFloat(order.paidAmount) || 0
+        const currentDue = order.calculatedDue
+        
+        // Add to paid amount - reduce due amount
+        const amountToAdd = Math.min(remainingAmount, currentDue)
+        const newPaidAmount = currentPaid + amountToAdd
+        const newDueAmount = Math.max(0, totalPrice - newPaidAmount)
+        
+        const res = await fetch(`${API_BASE}/api/orders/${order._id}`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            paidAmount: newPaidAmount,
+            dueAmount: newDueAmount
+          })
+        })
+
+        if (!res.ok) {
+          throw new Error(`Failed to update order ${order.orderId}`)
+        }
+        
+        remainingAmount -= amountToAdd
+      }
+
+      // Reload dealer orders to get updated data
+      await handleShowDealerOrders()
+      setAddCollectionAmount('')
+      
+      // Also reload main orders list
+      await loadOrders()
+    } catch (err) {
+      console.error('Failed to add collection:', err)
+      alert(language === 'en' ? 'Failed to add collection' : 'সংগ্রহ যোগ করতে ব্যর্থ')
+    } finally {
+      setSavingCollection(false)
+    }
+  }
+
+
+  const handleAddOrderToCart = () => {
+    if (!orderForm.dealer) {
+      setOrderStatus(language === 'en' ? 'Please select a dealer' : 'দয়া করে ডিলার নির্বাচন করুন')
+      return
+    }
+    if (!orderForm.product) {
+      setOrderStatus(language === 'en' ? 'Please select a product' : 'দয়া করে পণ্য নির্বাচন করুন')
+      return
+    }
+    const selectedProduct = products.find((p) => p._id === orderForm.product)
+    if (selectedProduct && selectedProduct.priceCategory === 'per_variant' && selectedProduct.variants?.length) {
+      if (!orderForm.variant?.value) {
+        setOrderStatus(language === 'en' ? 'Please select a variant' : 'দয়া করে ভ্যারিয়েন্ট নির্বাচন করুন')
+        return
+      }
+    }
+
+    const qty = parseFloat(orderForm.quantity) || 1
+    const item = {
+      product: orderForm.product,
+      productName: selectedProduct?.name || '',
+      productId: selectedProduct?.productId || '',
+      variant: orderForm.variant?.value ? { ...orderForm.variant } : null,
+      quantity: qty,
+      notes: orderForm.notes || '',
+        status: orderForm.status || 'Pending',
+        approvalStatus: userRole === 'Admin' ? 'Approved' : 'Pending',
+        requestedBy: loggedInUserId || null,
+        requestedByName: loggedInUser || '',
+        requestedByRole: userRole || ''
+    }
+
+    setOrderCart((prev) => [...prev, item])
+    setShowOrderCart(true)
+    setOrderStatus(language === 'en' ? 'Added to cart' : 'কার্টে যোগ হয়েছে')
+
+    // Reset item-specific fields but keep dealer/status
+    setOrderForm((prev) => ({
+      ...prev,
+      product: '',
+      variant: { name: '', value: '', price: 0 },
+      quantity: 1,
+      notes: ''
+    }))
+    setSelectedProductVariants([])
+  }
+
+  const handleRemoveCartItem = (idx) => {
+    setOrderCart((prev) => prev.filter((_, i) => i !== idx))
+  }
+
+  const getCartItemTotal = (item) => {
+    const product = products.find((p) => p._id === item.product)
+    const qty = parseFloat(item.quantity) || 0
+    let unitPrice = 0
+
+    if (item.variant && item.variant.price !== undefined && item.variant.price !== null) {
+      unitPrice = parseFloat(item.variant.price) || 0
+    }
+
+    if (!unitPrice && product) {
+      if (product.priceCategory === 'per_variant' && item.variant?.value) {
+        const pv = product.variants?.find((v) => v.value === item.variant.value)
+        if (pv) {
+          unitPrice = pv.price || 0
+        }
+      }
+      if (!unitPrice) {
+        unitPrice = product.price || 0
+      }
+    }
+
+    return unitPrice * qty
+  }
+
+  const getOrderCartTotal = () => {
+    return orderCart.reduce((sum, item) => sum + getCartItemTotal(item), 0)
+  }
+
+  const handleConfirmOrders = async () => {
+    if (!orderForm.dealer) {
+      setOrderStatus(language === 'en' ? 'Please select a dealer' : 'দয়া করে ডিলার নির্বাচন করুন')
+      return
+    }
+    if (!orderCart.length) {
+      setOrderStatus(language === 'en' ? 'Cart is empty' : 'কার্ট খালি')
+      return
+    }
+
+    try {
+      setSavingOrder(true)
+      setOrderStatus('')
+
+      const payload = {
+        dealer: orderForm.dealer,
+        items: orderCart.map((item) => ({
+          product: item.product,
+          variant: item.variant && item.variant.value ? {
+            name: item.variant.name || '',
+            value: item.variant.value,
+            price: item.variant.price || 0
+          } : undefined,
+          quantity: item.quantity,
+          notes: item.notes || ''
+        })),
+        status: editingOrderId ? (orderForm.status || 'Pending') : (orderCart[0]?.status || 'Pending'),
+        approvalStatus: userRole === 'Admin' ? 'Approved' : 'Pending',
+        requestedBy: loggedInUserId || null,
+        requestedByName: loggedInUser || '',
+        requestedByRole: userRole || '',
+        ...(editingOrderId && {
+          paidAmount: orderForm.paidAmount || 0
+        })
+      }
+
+      const method = editingOrderId ? 'PUT' : 'POST'
+      const url = editingOrderId
+        ? `${API_BASE}/api/orders/${editingOrderId}`
+        : `${API_BASE}/api/orders`
+
+      const res = await fetch(url, {
+        method,
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      })
+
+      const data = await res.json().catch(() => ({}))
+      if (!res.ok) {
+        throw new Error(data.message || data.error || 'Failed to save order')
+      }
+
+      await loadOrders()
+      await loadOrderRequests()
+      setOrderStatus(language === 'en' ? (editingOrderId ? 'Order updated' : 'Order created') : (editingOrderId ? 'অর্ডার আপডেট হয়েছে' : 'অর্ডার তৈরি হয়েছে'))
+      setOrderCart([])
+      setShowOrderCart(false)
+      resetOrderForm()
+      setEditingOrderId(null)
+      window.dispatchEvent(new Event('contentUpdated'))
+    } catch (err) {
+      console.error('Order confirm error:', err)
+      setOrderStatus(language === 'en' ? err.message : err.message)
+    } finally {
+      setSavingOrder(false)
+    }
+  }
+
+  const resetProductForm = () => {
+    setProductForm({
+      productId: '',
+      variants: [],
+      price: '',
+      priceCategory: 'single',
+      name: '',
+      nameBn: '',
+      genericName: '',
+      genericNameBn: '',
+      category: 'Herbicide',
+      categoryBn: '',
+      description: '',
+      descriptionBn: '',
+      usage: '',
+      usageBn: '',
+      benefits: '',
+      benefitsBn: '',
+      application: '',
+      applicationBn: '',
+      safety: '',
+      safetyBn: '',
+      image: ''
+    })
+    setEditingProductId(null)
+  }
+
+  const handleSaveProduct = async (e) => {
+    e.preventDefault()
+    if (!productForm.name || !productForm.genericName || !productForm.category || !productForm.description || !productForm.usage) {
+      setProductStatus(language === 'en' ? 'Please fill all required fields' : 'প্রয়োজনীয় সব ঘর পূরণ করুন')
+      return
+    }
+    try {
+      setSavingProduct(true)
+      setProductStatus('')
+      const method = editingProductId ? 'PUT' : 'POST'
+      const url = editingProductId
+        ? `${API_BASE}/api/products/${editingProductId}`
+        : `${API_BASE}/api/products`
+
+      // Prepare data to send - ensure all fields are included
+      const dataToSend = {
+        productId: productForm.productId || '',
+        variants: productForm.variants || [],
+        price: productForm.price || '',
+        priceCategory: productForm.priceCategory || 'single',
+        name: productForm.name || '',
+        nameBn: productForm.nameBn || '',
+        genericName: productForm.genericName || '',
+        genericNameBn: productForm.genericNameBn || '',
+        category: productForm.category || 'Herbicide',
+        categoryBn: productForm.categoryBn || '',
+        description: productForm.description || '',
+        descriptionBn: productForm.descriptionBn || '',
+        usage: productForm.usage || '',
+        usageBn: productForm.usageBn || '',
+        benefits: productForm.benefits || '',
+        benefitsBn: productForm.benefitsBn || '',
+        application: productForm.application || '',
+        applicationBn: productForm.applicationBn || '',
+        safety: productForm.safety || '',
+        safetyBn: productForm.safetyBn || '',
+        image: productForm.image || ''
+      }
+
+      console.log('Saving product:', { 
+        method, 
+        url, 
+        productForm: { 
+          ...dataToSend, 
+          image: dataToSend.image ? (dataToSend.image.length > 100 ? '[...base64...]' : dataToSend.image) : '' 
+        } 
+      })
+
+      const res = await fetch(url, {
+        method,
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(dataToSend)
+      })
+
+      const data = await res.json()
+      console.log('Product save response:', { status: res.status, ok: res.ok, data })
+
+      if (!res.ok) {
+        const errorMsg = data.message || 'Failed to save product'
+        console.error('Product save error:', errorMsg, data)
+        setProductStatus(language === 'en' ? errorMsg : errorMsg)
+        return
+      }
+
+      const saved = data.data
+      setProducts((prev) => {
+        if (editingProductId) {
+          return prev.map((item) => (item._id === editingProductId ? saved : item))
+        }
+        return [saved, ...prev]
+      })
+      setProductStatus(language === 'en' ? (editingProductId ? 'Product updated' : 'Product added') : 'পণ্য সংরক্ষণ সম্পন্ন')
+      resetProductForm()
+      setShowProductForm(false)
+      // Dispatch event to notify other pages of product update
+      window.dispatchEvent(new Event('contentUpdated'))
+    } catch (err) {
+      console.error('Failed to save product', err)
+      setProductStatus(language === 'en' ? `Failed to save product: ${err.message}` : `পণ্য সংরক্ষণ ব্যর্থ: ${err.message}`)
+    } finally {
+      setSavingProduct(false)
+    }
+  }
+
+  const handleEditProduct = (product) => {
+    if (!product) return
+    setProductForm({
+      productId: product.productId || '',
+      variants: Array.isArray(product.variants) ? product.variants.map(v => ({ ...v, price: v.price || 0 })) : [],
+      price: product.price || '',
+      priceCategory: product.priceCategory || 'single',
+      name: product.name || '',
+      nameBn: product.nameBn || '',
+      genericName: product.genericName || '',
+      genericNameBn: product.genericNameBn || '',
+      category: product.category || 'Herbicide',
+      categoryBn: product.categoryBn || '',
+      description: product.description || '',
+      descriptionBn: product.descriptionBn || '',
+      usage: product.usage || '',
+      usageBn: product.usageBn || '',
+      benefits: product.benefits || '',
+      benefitsBn: product.benefitsBn || '',
+      application: product.application || '',
+      applicationBn: product.applicationBn || '',
+      safety: product.safety || '',
+      safetyBn: product.safetyBn || '',
+      image: product.image || ''
+    })
+    setEditingProductId(product._id || null)
+    setShowProductForm(true)
+    setProductStatus('')
+  }
+
+  const addVariant = () => {
+    setProductForm({
+      ...productForm,
+      variants: [...(productForm.variants || []), { name: '', value: '', price: 0 }]
+    })
+  }
+
+  const removeVariant = (index) => {
+    const newVariants = [...(productForm.variants || [])]
+    newVariants.splice(index, 1)
+    setProductForm({ ...productForm, variants: newVariants })
+  }
+
+  const updateVariant = (index, field, value) => {
+    const newVariants = [...(productForm.variants || [])]
+    newVariants[index] = { ...newVariants[index], [field]: value }
+    setProductForm({ ...productForm, variants: newVariants })
+  }
+
+  const handleDeleteProduct = async (productId) => {
+    if (!productId) return
+    const confirmed = window.confirm(language === 'en' ? 'Delete this product?' : 'এই পণ্যটি মুছবেন?')
+    if (!confirmed) return
+    try {
+      const res = await fetch(`${API_BASE}/api/products/${productId}`, { method: 'DELETE' })
+      if (!res.ok) {
+        throw new Error('Failed to delete product')
+      }
+      setProducts((prev) => prev.filter((item) => item._id !== productId))
+      setProductStatus(language === 'en' ? 'Product deleted' : 'পণ্য মুছে ফেলা হয়েছে')
+      // Dispatch event to notify other pages of product deletion
+      window.dispatchEvent(new Event('contentUpdated'))
+    } catch (err) {
+      console.error('Failed to delete product', err)
+      setProductStatus(language === 'en' ? 'Delete failed' : 'মুছে ফেলা ব্যর্থ')
+    }
+  }
 
   const fileToBase64 = (file) => new Promise((resolve, reject) => {
     const reader = new FileReader()
@@ -164,6 +1599,7 @@ const [userRole, setUserRole] = useState('Admin')
           bankBranch: editingEmployeeData.bankBranch,
           accountNumber: editingEmployeeData.accountNumber,
           department: editingEmployeeData.department,
+          postingArea: editingEmployeeData.postingArea,
           designation: editingEmployeeData.designation,
           photo: editingEmployeeData.photo,
           status: editingEmployeeData.status
@@ -197,6 +1633,126 @@ const [userRole, setUserRole] = useState('Admin')
     }
   }
 
+  const handleAddDealer = async (e) => {
+    e.preventDefault()
+    const finalDealerId = newDealer.dealerId || getNextDealerId()
+    if (!newDealer.name) {
+      setDealerStatus(language === 'en' ? 'Name is required' : 'নাম প্রয়োজন')
+      return
+    }
+    try {
+      setDealerStatus(language === 'en' ? 'Saving...' : 'সংরক্ষণ করা হচ্ছে...')
+      const selectedEmp = employees.find((emp) => String(emp._id) === String(newDealer.assignedTo))
+      const res = await fetch(`${API_BASE}/api/dealers`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          dealerId: finalDealerId,
+          name: newDealer.name,
+          phone: newDealer.phone,
+          email: newDealer.email,
+          address: newDealer.address,
+          photo: newDealer.photo,
+          nid: newDealer.nid,
+          tradeLicense: newDealer.tradeLicense,
+          pesticideLicense: newDealer.pesticideLicense,
+          area: newDealer.area,
+          agreement: newDealer.agreement,
+          assignedTo: newDealer.assignedTo || undefined,
+          assignedToName: selectedEmp?.name || newDealer.assignedToName || '',
+          assignedToId: selectedEmp?.employeeId || newDealer.assignedToId || ''
+        })
+      })
+      if (!res.ok) throw new Error('Failed to save dealer')
+      const data = await res.json()
+      const saved = data.data
+      setDealers((prev) => [saved, ...prev])
+      setDealerStatus(language === 'en' ? 'Dealer saved' : 'ডিলার সংরক্ষিত')
+      setNewDealer({
+        dealerId: getNextDealerId(),
+        name: '',
+        phone: '',
+        email: '',
+        address: '',
+        photo: '',
+        nid: '',
+        tradeLicense: '',
+        pesticideLicense: '',
+        area: '',
+        agreement: '',
+        assignedTo: '',
+        assignedToName: '',
+        assignedToId: ''
+      })
+      setShowDealerForm(false)
+    } catch (err) {
+      console.error('Dealer save failed', err)
+      setDealerStatus(language === 'en' ? 'Save failed' : 'সংরক্ষণ ব্যর্থ')
+    }
+  }
+
+  const handleSaveDealerEdit = async () => {
+    if (!editingDealerData || !viewingDealer?._id) return
+    try {
+      setSavingDealer(true)
+      const selectedEmp = employees.find((emp) => String(emp._id) === String(editingDealerData.assignedTo))
+      const res = await fetch(`${API_BASE}/api/dealers/${viewingDealer._id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          dealerId: editingDealerData.dealerId,
+          name: editingDealerData.name,
+          phone: editingDealerData.phone,
+          email: editingDealerData.email,
+          address: editingDealerData.address,
+          photo: editingDealerData.photo,
+          nid: editingDealerData.nid,
+          tradeLicense: editingDealerData.tradeLicense,
+          pesticideLicense: editingDealerData.pesticideLicense,
+          area: editingDealerData.area,
+          agreement: editingDealerData.agreement,
+          assignedTo: editingDealerData.assignedTo || undefined,
+          assignedToName: selectedEmp?.name || editingDealerData.assignedToName || '',
+          assignedToId: selectedEmp?.employeeId || editingDealerData.assignedToId || ''
+        })
+      })
+
+      if (!res.ok) throw new Error('Failed to update dealer')
+
+      const updated = await res.json()
+      setViewingDealer(updated.data)
+      setDealers((prev) =>
+        prev.map((d) => (d._id === viewingDealer._id ? updated.data : d))
+      )
+      setIsEditingDealer(false)
+      setEditingDealerData(null)
+      setSavingDealer(false)
+    } catch (err) {
+      console.error('Dealer update failed', err)
+      alert(language === 'en' ? 'Failed to update dealer' : 'ডিলার আপডেট ব্যর্থ')
+      setSavingDealer(false)
+    }
+  }
+
+  const handleDeleteDealer = async () => {
+    if (!viewingDealer?._id) return
+    if (!window.confirm(language === 'en' ? 'Delete this dealer?' : 'এই ডিলারকে মুছবেন?')) return
+
+    try {
+      const res = await fetch(`${API_BASE}/api/dealers/${viewingDealer._id}`, {
+        method: 'DELETE'
+      })
+      if (!res.ok) throw new Error('Failed to delete dealer')
+      setDealers((prev) => prev.filter((d) => d._id !== viewingDealer._id))
+      setViewingDealer(null)
+      setIsEditingDealer(false)
+      setEditingDealerData(null)
+    } catch (err) {
+      console.error('Dealer delete failed', err)
+      alert(language === 'en' ? 'Failed to delete dealer' : 'ডিলার মুছে ফেলতে ব্যর্থ')
+    }
+  }
+
   // Check if user is already logged in
   useEffect(() => {
     const fetchInitial = async () => {
@@ -204,17 +1760,18 @@ const [userRole, setUserRole] = useState('Admin')
         // Only load admin profile on initial load if not authenticated yet
         // Profile will be loaded after login
         if (!isAuthenticated) {
-          const resProfile = await fetch(`${API_BASE}/api/admin/profile`)
-          if (resProfile.ok) {
-            const data = await resProfile.json()
-            setProfileData({
-              name: data.name || 'Admin',
-              email: data.email || 'admin@example.com',
-              phone: data.phone || '+880 1234 567890',
-              address: data.address || 'Dhaka, Bangladesh',
-              photo: data.photo || '',
-              role: 'Admin'
-            })
+        const resProfile = await fetch(`${API_BASE}/api/admin/profile`)
+        if (resProfile.ok) {
+          const data = await resProfile.json()
+          setProfileData({
+            name: data.name || 'Admin',
+            email: data.email || 'admin@example.com',
+            phone: data.phone || '+880 1234 567890',
+            address: data.address || 'Dhaka, Bangladesh',
+            photo: data.photo || '',
+            designation: data.designation || '',
+            role: 'Admin'
+          })
           }
         }
         const resPassword = await fetch(`${API_BASE}/api/admin/password`)
@@ -244,6 +1801,17 @@ const [userRole, setUserRole] = useState('Admin')
     }
     fetchInitial()
   }, [])
+
+  // Reload profile after authentication toggles
+  useEffect(() => {
+    if (isAuthenticated) {
+      if (isEmployee && loggedInUserId) {
+        loadUserProfile('employee', loggedInUserId)
+      } else {
+        loadUserProfile('admin')
+      }
+    }
+  }, [isAuthenticated, isEmployee, loggedInUserId])
 
   // Page images updates now come from API; no storage listener
 
@@ -1925,15 +3493,15 @@ const [userRole, setUserRole] = useState('Admin')
       } else {
         // Save admin profile
         const res = await fetch(`${API_BASE}/api/admin/profile`, {
-          method: 'PUT',
-          headers: { 'Content-Type': 'application/json' },
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(profileData)
-        })
-        if (!res.ok) throw new Error('Failed to save profile')
-        setProfileStatus(language === 'en' ? 'Saved to database' : 'ডাটাবেজে সংরক্ষিত')
-        if (profileData.name) {
-          setLoggedInUser(profileData.name)
-        }
+      })
+      if (!res.ok) throw new Error('Failed to save profile')
+      setProfileStatus(language === 'en' ? 'Saved to database' : 'ডাটাবেজে সংরক্ষিত')
+      if (profileData.name) {
+        setLoggedInUser(profileData.name)
+      }
         // Always set Admin role for admin profile
         setUserRole('Admin')
         // Reload admin profile
@@ -1982,7 +3550,7 @@ const [userRole, setUserRole] = useState('Admin')
         throw new Error(errorMessage)
       }
       if (!isEmployee) {
-        setAdminPassword(next)
+      setAdminPassword(next)
       } else {
         // If employee changed password, refresh employee list to show updated password
         try {
@@ -2028,9 +3596,27 @@ const [userRole, setUserRole] = useState('Admin')
           setIsEmployee(false)
           setLoggedInUserId(null)
           if (data.name) setLoggedInUser(data.name)
+          // Sync profile data immediately on login, preserving designation if present
+          setProfileData((prev) => ({
+            ...prev,
+            name: data.name || prev.name || 'Admin',
+            email: data.email || prev.email || 'admin@example.com',
+            phone: data.phone || prev.phone || '+880 1234 567890',
+            address: data.address || prev.address || 'Dhaka, Bangladesh',
+            photo: data.photo || prev.photo || '',
+            role: 'Admin',
+            designation: data.designation ?? prev.designation ?? '',
+            department: ''
+          }))
           // Load admin profile
           loadUserProfile('admin')
           setIsAuthenticated(true)
+          persistAuthState({
+            isEmployee: false,
+            userRole: 'Admin',
+            loggedInUser: data.name || '',
+            loggedInUserId: null
+          })
           return Promise.resolve(null) // Return resolved promise to skip employee login
         }
         // If admin login fails, try employee login
@@ -2053,6 +3639,12 @@ const [userRole, setUserRole] = useState('Admin')
         // Load employee profile
         loadUserProfile('employee', data.id)
         setIsAuthenticated(true)
+        persistAuthState({
+          isEmployee: true,
+          userRole: data.role,
+          loggedInUser: data.name || '',
+          loggedInUserId: data.id || null
+        })
       })
       .catch((err) => {
         setLoginError(err.message)
@@ -2077,16 +3669,17 @@ const [userRole, setUserRole] = useState('Admin')
         const resProfile = await fetch(`${API_BASE}/api/admin/profile`)
         if (resProfile.ok) {
           const data = await resProfile.json()
-          setProfileData({
-            name: data.name || 'Admin',
-            email: data.email || 'admin@example.com',
-            phone: data.phone || '+880 1234 567890',
-            address: data.address || 'Dhaka, Bangladesh',
-            photo: data.photo || '',
+          setProfileData((prev) => ({
+            ...prev,
+            name: data.name || prev.name || 'Admin',
+            email: data.email || prev.email || 'admin@example.com',
+            phone: data.phone || prev.phone || '+880 1234 567890',
+            address: data.address || prev.address || 'Dhaka, Bangladesh',
+            photo: data.photo || prev.photo || '',
             role: 'Admin',
-            designation: '',
+            designation: data.designation ?? prev.designation ?? '',
             department: ''
-          })
+          }))
           if (data.name) setLoggedInUser(data.name)
           setUserRole('Admin')
         }
@@ -2321,8 +3914,9 @@ const [userRole, setUserRole] = useState('Admin')
   }
 
   // Mock data for demonstration
+  const productCount = products.length || t.products.items.length
   const stats = {
-    totalProducts: t.products.items.length,
+    totalProducts: productCount,
     totalBlogs: t.blog.featured.length + t.blog.list.length,
     totalContacts: 24,
     recentActivity: [
@@ -2331,6 +3925,20 @@ const [userRole, setUserRole] = useState('Admin')
       { type: 'contact', action: 'New message from', item: 'Md. Rafiq Hasan', time: '2 days ago' }
     ]
   }
+
+  const productList = products.length ? products : t.products.items
+  const filteredProducts = productList.filter((product) => {
+    if (!productSearch.trim()) return true
+    const query = productSearch.toLowerCase().trim()
+    return (
+      (product.productId || '').toLowerCase().includes(query) ||
+      (product.name || '').toLowerCase().includes(query) ||
+      (product.genericName || '').toLowerCase().includes(query) ||
+      (product.description || '').toLowerCase().includes(query) ||
+      (product.usage || '').toLowerCase().includes(query) ||
+      (product.category || '').toLowerCase().includes(query)
+    )
+  })
 
   return (
     <div className="app admin-page">
@@ -2372,160 +3980,160 @@ const [userRole, setUserRole] = useState('Admin')
               {adminContent.profile}
             </button>
             {canAccessTab('crm') && (
-              <button
-                className={`admin-nav-item ${activeTab === 'crm' ? 'active' : ''}`}
-                onClick={() => setActiveTab('crm')}
-              >
-                <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                  <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-                  <circle cx="9" cy="7" r="4" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-                  <path d="M23 21v-2a4 4 0 0 0-3-3.87" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-                  <path d="M16 3.13a4 4 0 0 1 0 7.75" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-                </svg>
-                {adminContent.crm}
-              </button>
+            <button
+              className={`admin-nav-item ${activeTab === 'crm' ? 'active' : ''}`}
+              onClick={() => setActiveTab('crm')}
+            >
+              <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                <circle cx="9" cy="7" r="4" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                <path d="M23 21v-2a4 4 0 0 0-3-3.87" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                <path d="M16 3.13a4 4 0 0 1 0 7.75" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+              </svg>
+              {adminContent.crm}
+            </button>
             )}
             {canAccessTab('hr') && (
-              <button
-                className={`admin-nav-item ${activeTab === 'hr' ? 'active' : ''}`}
-                onClick={() => setActiveTab('hr')}
-              >
-                <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                  <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-                  <circle cx="9" cy="7" r="4" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-                  <path d="M23 21v-2a4 4 0 0 0-3-3.87" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-                  <path d="M16 3.13a4 4 0 0 1 0 7.75" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-                </svg>
-                {adminContent.hr}
-              </button>
+            <button
+              className={`admin-nav-item ${activeTab === 'hr' ? 'active' : ''}`}
+              onClick={() => setActiveTab('hr')}
+            >
+              <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                <circle cx="9" cy="7" r="4" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                <path d="M23 21v-2a4 4 0 0 0-3-3.87" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                <path d="M16 3.13a4 4 0 0 1 0 7.75" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+              </svg>
+              {adminContent.hr}
+            </button>
             )}
             {canAccessTab('products') && (
-              <button
-                className={`admin-nav-item ${activeTab === 'products' ? 'active' : ''}`}
-                onClick={() => setActiveTab('products')}
-              >
-                <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                  <path d="M6 2L3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4H6z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-                  <path d="M3 6h18" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-                  <path d="M16 10a4 4 0 0 1-8 0" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-                </svg>
-                {adminContent.products}
-              </button>
+            <button
+              className={`admin-nav-item ${activeTab === 'products' ? 'active' : ''}`}
+              onClick={() => setActiveTab('products')}
+            >
+              <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <path d="M6 2L3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4H6z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                <path d="M3 6h18" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                <path d="M16 10a4 4 0 0 1-8 0" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+              </svg>
+              {adminContent.products}
+            </button>
             )}
             {canAccessTab('orders') && (
-              <button
-                className={`admin-nav-item ${activeTab === 'orders' ? 'active' : ''}`}
-                onClick={() => setActiveTab('orders')}
-              >
-                <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                  <path d="M6 2L3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4H6z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-                  <path d="M3 6h18" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-                  <path d="M16 10a4 4 0 0 1-8 0" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-                </svg>
-                {adminContent.orders}
-              </button>
+            <button
+              className={`admin-nav-item ${activeTab === 'orders' ? 'active' : ''}`}
+              onClick={() => setActiveTab('orders')}
+            >
+              <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <path d="M6 2L3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4H6z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                <path d="M3 6h18" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                <path d="M16 10a4 4 0 0 1-8 0" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+              </svg>
+              {adminContent.orders}
+            </button>
             )}
             {canAccessTab('revenue') && (
-              <button
-                className={`admin-nav-item ${activeTab === 'revenue' ? 'active' : ''}`}
-                onClick={() => setActiveTab('revenue')}
-              >
-                <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                  <line x1="12" y1="1" x2="12" y2="23" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-                  <path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-                </svg>
-                {adminContent.revenue}
-              </button>
+            <button
+              className={`admin-nav-item ${activeTab === 'revenue' ? 'active' : ''}`}
+              onClick={() => setActiveTab('revenue')}
+            >
+              <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <line x1="12" y1="1" x2="12" y2="23" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                <path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+              </svg>
+              {adminContent.revenue}
+            </button>
             )}
             {canAccessTab('inventory') && (
-              <button
-                className={`admin-nav-item ${activeTab === 'inventory' ? 'active' : ''}`}
-                onClick={() => setActiveTab('inventory')}
-              >
-                <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                  <path d="M6 2L3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4H6z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-                  <path d="M3 6h18" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-                  <path d="M8 10h8" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-                  <path d="M8 14h8" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-                </svg>
-                {adminContent.inventory}
-              </button>
+            <button
+              className={`admin-nav-item ${activeTab === 'inventory' ? 'active' : ''}`}
+              onClick={() => setActiveTab('inventory')}
+            >
+              <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <path d="M6 2L3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4H6z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                <path d="M3 6h18" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                <path d="M8 10h8" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                <path d="M8 14h8" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+              </svg>
+              {adminContent.inventory}
+            </button>
             )}
             {canAccessTab('manageAsset') && (
-              <button
-                className={`admin-nav-item ${activeTab === 'manageAsset' ? 'active' : ''}`}
-                onClick={() => setActiveTab('manageAsset')}
-              >
-                <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                  <rect x="3" y="3" width="18" height="18" rx="2" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-                  <path d="M3 9h18" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-                  <path d="M9 21V9" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-                </svg>
-                {adminContent.manageAsset}
-              </button>
+            <button
+              className={`admin-nav-item ${activeTab === 'manageAsset' ? 'active' : ''}`}
+              onClick={() => setActiveTab('manageAsset')}
+            >
+              <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <rect x="3" y="3" width="18" height="18" rx="2" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                <path d="M3 9h18" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                <path d="M9 21V9" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+              </svg>
+              {adminContent.manageAsset}
+            </button>
             )}
             {canAccessTab('contacts') && (
-              <button
-                className={`admin-nav-item ${activeTab === 'contacts' ? 'active' : ''}`}
-                onClick={() => setActiveTab('contacts')}
-              >
-                <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                  <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-                </svg>
-                {adminContent.contacts}
-              </button>
+            <button
+              className={`admin-nav-item ${activeTab === 'contacts' ? 'active' : ''}`}
+              onClick={() => setActiveTab('contacts')}
+            >
+              <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+              </svg>
+              {adminContent.contacts}
+            </button>
             )}
             {canAccessTab('blogs') && (
-              <button
-                className={`admin-nav-item ${activeTab === 'blogs' ? 'active' : ''}`}
-                onClick={() => setActiveTab('blogs')}
-              >
-                <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                  <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-                  <path d="M14 2v6h6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-                  <path d="M16 13H8" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-                  <path d="M16 17H8" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-                  <path d="M10 9H9" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-                </svg>
-                {adminContent.blogs}
-              </button>
+            <button
+              className={`admin-nav-item ${activeTab === 'blogs' ? 'active' : ''}`}
+              onClick={() => setActiveTab('blogs')}
+            >
+              <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                <path d="M14 2v6h6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                <path d="M16 13H8" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                <path d="M16 17H8" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                <path d="M10 9H9" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+              </svg>
+              {adminContent.blogs}
+            </button>
             )}
             {canAccessTab('content') && (
-              <button
-                className={`admin-nav-item ${activeTab === 'content' ? 'active' : ''}`}
-                onClick={() => setActiveTab('content')}
-              >
-                <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                  <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-                  <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-                </svg>
-                {adminContent.contentManagement}
-              </button>
+            <button
+              className={`admin-nav-item ${activeTab === 'content' ? 'active' : ''}`}
+              onClick={() => setActiveTab('content')}
+            >
+              <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+              </svg>
+              {adminContent.contentManagement}
+            </button>
             )}
             {canAccessTab('career') && (
-              <button
-                className={`admin-nav-item ${activeTab === 'career' ? 'active' : ''}`}
-                onClick={() => setActiveTab('career')}
-              >
-                <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                  <path d="M6 7V5a3 3 0 0 1 3-3h6a3 3 0 0 1 3 3v2" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-                  <rect x="3" y="7" width="18" height="13" rx="2" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-                  <path d="M9 12h6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-                </svg>
-                {adminContent.careerManagement}
-              </button>
+            <button
+              className={`admin-nav-item ${activeTab === 'career' ? 'active' : ''}`}
+              onClick={() => setActiveTab('career')}
+            >
+              <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <path d="M6 7V5a3 3 0 0 1 3-3h6a3 3 0 0 1 3 3v2" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                <rect x="3" y="7" width="18" height="13" rx="2" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                <path d="M9 12h6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+              </svg>
+              {adminContent.careerManagement}
+            </button>
             )}
             {canAccessTab('settings') && (
-              <button
-                className={`admin-nav-item ${activeTab === 'settings' ? 'active' : ''}`}
-                onClick={() => setActiveTab('settings')}
-              >
-                <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                  <circle cx="12" cy="12" r="3" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-                  <path d="M12 1v6m0 6v6M5.64 5.64l4.24 4.24m4.24 4.24l4.24 4.24M1 12h6m6 0h6M5.64 18.36l4.24-4.24m4.24-4.24l4.24-4.24" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-                </svg>
-                {adminContent.settings}
-              </button>
+            <button
+              className={`admin-nav-item ${activeTab === 'settings' ? 'active' : ''}`}
+              onClick={() => setActiveTab('settings')}
+            >
+              <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <circle cx="12" cy="12" r="3" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                <path d="M12 1v6m0 6v6M5.64 5.64l4.24 4.24m4.24 4.24l4.24 4.24M1 12h6m6 0h6M5.64 18.36l4.24-4.24m4.24-4.24l4.24-4.24" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+              </svg>
+              {adminContent.settings}
+            </button>
             )}
           </nav>
           <button className="admin-logout-btn" onClick={handleLogout}>
@@ -2631,46 +4239,886 @@ const [userRole, setUserRole] = useState('Admin')
           {/* Products Tab */}
           {activeTab === 'products' && (
             <div className="admin-tab-content">
-              <div className="admin-tab-header">
-                <h1 className="admin-page-title">{adminContent.manageProducts}</h1>
-                <button className="admin-add-btn">
-                  <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                    <line x1="12" y1="5" x2="12" y2="19" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
-                    <line x1="5" y1="12" x2="19" y2="12" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
-                  </svg>
-                  {adminContent.addNew}
-                </button>
+              <div className="admin-tab-header" style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', flexWrap: 'wrap' }}>
+                <h1 className="admin-page-title" style={{ flex: 1 }}>{adminContent.manageProducts}</h1>
+                {(userRole || '').toLowerCase() === 'admin' && (
+                  <button 
+                    className="admin-add-btn"
+                    onClick={() => {
+                      resetProductForm()
+                      setShowProductForm(true)
+                      setProductStatus('')
+                    }}
+                  >
+                    <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                      <line x1="12" y1="5" x2="12" y2="19" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
+                      <line x1="5" y1="12" x2="19" y2="12" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
+                    </svg>
+                    {adminContent.addNew}
+                  </button>
+                )}
               </div>
+              {productStatus && (
+                <div
+                  style={{
+                    marginBottom: '1rem',
+                    padding: '0.75rem 1rem',
+                    borderRadius: '0.5rem',
+                    backgroundColor: productStatus.toLowerCase().includes('fail') || productStatus.toLowerCase().includes('ব্যর্থ')
+                      ? '#fef2f2'
+                      : '#ecfdf3',
+                    color: productStatus.toLowerCase().includes('fail') || productStatus.toLowerCase().includes('ব্যর্থ')
+                      ? '#b91c1c'
+                      : '#166534',
+                    border: productStatus.toLowerCase().includes('fail') || productStatus.toLowerCase().includes('ব্যর্থ')
+                      ? '1px solid #fecaca'
+                      : '1px solid #bbf7d0',
+                    fontWeight: 600
+                  }}
+                >
+                  {productStatus}
+                </div>
+              )}
+              {showProductForm && (
+                <div style={{
+                  position: 'fixed',
+                  top: 0,
+                  left: 0,
+                  right: 0,
+                  bottom: 0,
+                  backgroundColor: 'rgba(0, 0, 0, 0.5)',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  zIndex: 1000,
+                  padding: '1rem'
+                }} onClick={() => {
+                  resetProductForm()
+                  setShowProductForm(false)
+                  setProductStatus('')
+                }}>
+                  <div style={{
+                    position: 'relative',
+                    background: 'linear-gradient(135deg, #f8fafc 0%, #eef2ff 100%)',
+                    borderRadius: '0.75rem',
+                    padding: '2rem',
+                    maxWidth: '900px',
+                    width: '100%',
+                    maxHeight: '90vh',
+                    overflowY: 'auto',
+                    boxShadow: '0 25px 50px -12px rgba(0,0,0,0.25)'
+                  }} onClick={(e) => e.stopPropagation()}>
+                    <div style={{
+                      position: 'absolute',
+                      inset: 0,
+                      pointerEvents: 'none',
+                      overflow: 'hidden',
+                      borderRadius: '0.75rem'
+                    }}>
+                      <div style={{
+                        position: 'absolute',
+                        width: '260px',
+                        height: '260px',
+                        top: '-120px',
+                        left: '-80px',
+                        background: 'radial-gradient(circle at 30% 30%, rgba(59,130,246,0.25), transparent 60%)',
+                        filter: 'blur(20px)'
+                      }} />
+                      <div style={{
+                        position: 'absolute',
+                        width: '240px',
+                        height: '240px',
+                        bottom: '-140px',
+                        right: '-100px',
+                        background: 'radial-gradient(circle at 70% 70%, rgba(16,185,129,0.22), transparent 60%)',
+                        filter: 'blur(20px)'
+                      }} />
+                    </div>
+
+                    <div style={{ position: 'relative', display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem', gap: '1rem' }}>
+                      <div>
+                        <h2 style={{ margin: 0, fontSize: '1.5rem', fontWeight: 800, color: '#0f172a' }}>
+                          {editingProductId
+                            ? (language === 'en' ? 'Edit Product' : 'পণ্য সম্পাদনা')
+                            : (language === 'en' ? 'Add Product' : 'পণ্য যোগ করুন')}
+                        </h2>
+                        <p style={{ margin: '0.25rem 0 0 0', color: '#475569', fontWeight: 600 }}>
+                          {language === 'en' ? 'Fill in product details and save' : 'পণ্যের বিবরণ পূরণ করুন এবং সংরক্ষণ করুন'}
+                        </p>
+                      </div>
+                      <button
+                        onClick={() => {
+                          resetProductForm()
+                          setShowProductForm(false)
+                          setProductStatus('')
+                        }}
+                        style={{
+                          background: '#e2e8f0',
+                          border: 'none',
+                          padding: '0.4rem 0.65rem',
+                          borderRadius: '0.375rem',
+                          cursor: 'pointer',
+                          fontWeight: 700,
+                          color: '#475569'
+                        }}
+                      >
+                        ×
+                      </button>
+                    </div>
+
+                    <div style={{ position: 'relative', zIndex: 1 }}>
+                    {productStatus && (
+                      <div style={{
+                        padding: '0.75rem',
+                        marginBottom: '1rem',
+                        borderRadius: '0.5rem',
+                        border: productStatus.includes('error') || productStatus.includes('Failed') ? '1px solid #fecaca' : '1px solid #bbf7d0',
+                        backgroundColor: productStatus.includes('error') || productStatus.includes('Failed') ? '#fef2f2' : '#ecfdf3',
+                        color: productStatus.includes('error') || productStatus.includes('Failed') ? '#b91c1c' : '#065f46',
+                        fontWeight: 700
+                      }}>
+                        {productStatus}
+                      </div>
+                    )}
+                    <form onSubmit={handleSaveProduct}>
+                      <div className="admin-form-grid">
+                        <div className="admin-form-group">
+                          <label>{language === 'en' ? 'Product ID' : 'পণ্য আইডি'}</label>
+                          <input
+                            type="text"
+                            value={productForm.productId || ''}
+                            onChange={(e) => setProductForm({ ...productForm, productId: e.target.value })}
+                            placeholder={language === 'en' ? 'Auto-generated (BP001, BP002...)' : 'স্বয়ংক্রিয়ভাবে তৈরি (BP001, BP002...)'}
+                            style={{ backgroundColor: editingProductId ? 'white' : '#f3f4f6', cursor: editingProductId ? 'text' : 'not-allowed' }}
+                            readOnly={!editingProductId}
+                            title={language === 'en' ? 'Product ID is auto-generated for new products' : 'নতুন পণ্যের জন্য পণ্য আইডি স্বয়ংক্রিয়ভাবে তৈরি হয়'}
+                          />
+                          {!editingProductId && (
+                            <small style={{ color: '#6b7280', fontSize: '0.75rem', marginTop: '0.25rem', display: 'block' }}>
+                              {language === 'en' ? 'Will be auto-generated as BP001, BP002, etc.' : 'BP001, BP002 ইত্যাদি হিসাবে স্বয়ংক্রিয়ভাবে তৈরি হবে'}
+                            </small>
+                          )}
+                        </div>
+                        <div className="admin-form-group">
+                          <label>{adminContent.productName} {language === 'en' ? '(English)' : '(ইংরেজি)'}</label>
+                          <input
+                            type="text"
+                            value={productForm.name}
+                            onChange={(e) => setProductForm({ ...productForm, name: e.target.value })}
+                            required
+                          />
+                        </div>
+                        <div className="admin-form-group">
+                          <label>{adminContent.productName} {language === 'en' ? '(Bangla)' : '(বাংলা)'}</label>
+                          <input
+                            type="text"
+                            value={productForm.nameBn}
+                            onChange={(e) => setProductForm({ ...productForm, nameBn: e.target.value })}
+                            placeholder={language === 'en' ? 'Product name in Bangla (optional)' : 'বাংলায় পণ্যের নাম (ঐচ্ছিক)'}
+                          />
+                        </div>
+                        <div className="admin-form-group">
+                          <label>{language === 'en' ? 'Generic Name' : 'জেনেরিক নাম'} {language === 'en' ? '(English)' : '(ইংরেজি)'}</label>
+                          <input
+                            type="text"
+                            value={productForm.genericName}
+                            onChange={(e) => setProductForm({ ...productForm, genericName: e.target.value })}
+                            required
+                          />
+                        </div>
+                        <div className="admin-form-group">
+                          <label>{language === 'en' ? 'Generic Name' : 'জেনেরিক নাম'} {language === 'en' ? '(Bangla)' : '(বাংলা)'}</label>
+                          <input
+                            type="text"
+                            value={productForm.genericNameBn}
+                            onChange={(e) => setProductForm({ ...productForm, genericNameBn: e.target.value })}
+                            placeholder={language === 'en' ? 'Generic name in Bangla (optional)' : 'বাংলায় জেনেরিক নাম (ঐচ্ছিক)'}
+                          />
+                        </div>
+                        <div className="admin-form-group">
+                          <label>{adminContent.category} {language === 'en' ? '(English)' : '(ইংরেজি)'}</label>
+                          <select
+                            value={productForm.category}
+                            onChange={(e) => setProductForm({ ...productForm, category: e.target.value })}
+                            style={{ width: '100%', padding: '0.5rem', border: '1px solid #d1d5db', borderRadius: '0.375rem' }}
+                          >
+                            {['Herbicide', 'Fungicide', 'Insecticide', 'Growth Promoter', 'Fertilizer', 'Organic'].map((cat) => (
+                              <option key={cat} value={cat}>{cat}</option>
+                            ))}
+                          </select>
+                        </div>
+                        <div className="admin-form-group">
+                          <label>{adminContent.category} {language === 'en' ? '(Bangla)' : '(বাংলা)'}</label>
+                          <input
+                            type="text"
+                            value={productForm.categoryBn}
+                            onChange={(e) => setProductForm({ ...productForm, categoryBn: e.target.value })}
+                            placeholder={language === 'en' ? 'Category in Bangla (optional)' : 'বাংলায় ক্যাটাগরি (ঐচ্ছিক)'}
+                          />
+                        </div>
+                        <div className="admin-form-group">
+                          <label>{language === 'en' ? 'Price Category' : 'মূল্য বিভাগ'}</label>
+                          <select
+                            value={productForm.priceCategory}
+                            onChange={(e) => setProductForm({ ...productForm, priceCategory: e.target.value })}
+                            style={{ width: '100%', padding: '0.5rem', border: '1px solid #d1d5db', borderRadius: '0.375rem' }}
+                          >
+                            <option value="single">{language === 'en' ? 'Single Price' : 'একক মূল্য'}</option>
+                            <option value="per_variant">{language === 'en' ? 'Per Variant' : 'প্রতি ভ্যারিয়েন্ট'}</option>
+                          </select>
+                        </div>
+                        {productForm.priceCategory === 'single' && (
+                          <div className="admin-form-group">
+                            <label>{language === 'en' ? 'Price' : 'মূল্য'}</label>
+                            <input
+                              type="number"
+                              step="0.01"
+                              min="0"
+                              value={productForm.price || ''}
+                              onChange={(e) => setProductForm({ ...productForm, price: e.target.value })}
+                              placeholder={language === 'en' ? '0.00' : '০.০০'}
+                            />
+                          </div>
+                        )}
+                        <div className="admin-form-group" style={{ gridColumn: '1 / -1' }}>
+                          <label>{language === 'en' ? 'Variants' : 'ভ্যারিয়েন্ট'}</label>
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+                            {(productForm.variants || []).map((variant, index) => (
+                              <div key={index} style={{ display: 'flex', gap: '0.5rem', alignItems: 'center', flexWrap: 'wrap' }}>
+                                <input
+                                  type="text"
+                                  value={variant.name || ''}
+                                  onChange={(e) => updateVariant(index, 'name', e.target.value)}
+                                  placeholder={language === 'en' ? 'Variant name (e.g., Size, Color)' : 'ভ্যারিয়েন্ট নাম (যেমন, আকার, রঙ)'}
+                                  style={{ flex: 1, minWidth: '150px', padding: '0.5rem', border: '1px solid #d1d5db', borderRadius: '0.375rem' }}
+                                />
+                                <input
+                                  type="text"
+                                  value={variant.value || ''}
+                                  onChange={(e) => updateVariant(index, 'value', e.target.value)}
+                                  placeholder={language === 'en' ? 'Variant value (e.g., Large, Red)' : 'ভ্যারিয়েন্ট মান (যেমন, বড়, লাল)'}
+                                  style={{ flex: 1, minWidth: '150px', padding: '0.5rem', border: '1px solid #d1d5db', borderRadius: '0.375rem' }}
+                                />
+                                {productForm.priceCategory === 'per_variant' && (
+                                  <input
+                                    type="number"
+                                    step="0.01"
+                                    min="0"
+                                    value={variant.price || ''}
+                                    onChange={(e) => updateVariant(index, 'price', parseFloat(e.target.value) || 0)}
+                                    placeholder={language === 'en' ? 'Price' : 'মূল্য'}
+                                    style={{ width: '120px', padding: '0.5rem', border: '1px solid #d1d5db', borderRadius: '0.375rem' }}
+                                  />
+                                )}
+                                <button
+                                  type="button"
+                                  onClick={() => removeVariant(index)}
+                                  style={{
+                                    padding: '0.5rem 0.75rem',
+                                    backgroundColor: '#fee2e2',
+                                    color: '#b91c1c',
+                                    border: '1px solid #fecaca',
+                                    borderRadius: '0.375rem',
+                                    cursor: 'pointer',
+                                    fontWeight: 600
+                                  }}
+                                >
+                                  {language === 'en' ? 'Remove' : 'মুছুন'}
+                                </button>
+                              </div>
+                            ))}
+                            <button
+                              type="button"
+                              onClick={addVariant}
+                              style={{
+                                padding: '0.5rem 1rem',
+                                backgroundColor: '#dbeafe',
+                                color: '#1e40af',
+                                border: '1px dashed #93c5fd',
+                                borderRadius: '0.375rem',
+                                cursor: 'pointer',
+                                fontWeight: 600,
+                                alignSelf: 'flex-start'
+                              }}
+                            >
+                              + {language === 'en' ? 'Add Variant' : 'ভ্যারিয়েন্ট যোগ করুন'}
+                            </button>
+                          </div>
+                        </div>
+                        <div className="admin-form-group">
+                          <label>{adminContent.description} {language === 'en' ? '(English)' : '(ইংরেজি)'}</label>
+                          <textarea
+                            rows={3}
+                            value={productForm.description}
+                            onChange={(e) => setProductForm({ ...productForm, description: e.target.value })}
+                          />
+                        </div>
+                        <div className="admin-form-group">
+                          <label>{adminContent.description} {language === 'en' ? '(Bangla)' : '(বাংলা)'}</label>
+                          <textarea
+                            rows={3}
+                            value={productForm.descriptionBn}
+                            onChange={(e) => setProductForm({ ...productForm, descriptionBn: e.target.value })}
+                            placeholder={language === 'en' ? 'Description in Bangla (optional)' : 'বাংলায় বিবরণ (ঐচ্ছিক)'}
+                          />
+                        </div>
+                        <div className="admin-form-group">
+                          <label>{language === 'en' ? 'Usage' : 'ব্যবহার'} {language === 'en' ? '(English)' : '(ইংরেজি)'}</label>
+                          <textarea
+                            rows={3}
+                            value={productForm.usage}
+                            onChange={(e) => setProductForm({ ...productForm, usage: e.target.value })}
+                          />
+                        </div>
+                        <div className="admin-form-group">
+                          <label>{language === 'en' ? 'Usage' : 'ব্যবহার'} {language === 'en' ? '(Bangla)' : '(বাংলা)'}</label>
+                          <textarea
+                            rows={3}
+                            value={productForm.usageBn}
+                            onChange={(e) => setProductForm({ ...productForm, usageBn: e.target.value })}
+                            placeholder={language === 'en' ? 'Usage instructions in Bangla (optional)' : 'বাংলায় ব্যবহারের নির্দেশাবলী (ঐচ্ছিক)'}
+                          />
+                        </div>
+                        <div className="admin-form-group">
+                          <label>{language === 'en' ? 'Benefits' : 'সুবিধা'} {language === 'en' ? '(English)' : '(ইংরেজি)'}</label>
+                          <textarea
+                            rows={4}
+                            value={productForm.benefits}
+                            onChange={(e) => setProductForm({ ...productForm, benefits: e.target.value })}
+                            placeholder={language === 'en' ? 'List the key benefits of this product...' : 'এই পণ্যের মূল সুবিধাগুলি তালিকাভুক্ত করুন...'}
+                          />
+                        </div>
+                        <div className="admin-form-group">
+                          <label>{language === 'en' ? 'Benefits' : 'সুবিধা'} {language === 'en' ? '(Bangla)' : '(বাংলা)'}</label>
+                          <textarea
+                            rows={4}
+                            value={productForm.benefitsBn}
+                            onChange={(e) => setProductForm({ ...productForm, benefitsBn: e.target.value })}
+                            placeholder={language === 'en' ? 'Benefits in Bangla (optional)' : 'বাংলায় সুবিধা (ঐচ্ছিক)'}
+                          />
+                        </div>
+                        <div className="admin-form-group">
+                          <label>{language === 'en' ? 'Application' : 'আবেদন'} {language === 'en' ? '(English)' : '(ইংরেজি)'}</label>
+                          <textarea
+                            rows={4}
+                            value={productForm.application}
+                            onChange={(e) => setProductForm({ ...productForm, application: e.target.value })}
+                            placeholder={language === 'en' ? 'Application instructions and guidelines...' : 'আবেদনের নির্দেশাবলী এবং নির্দেশিকা...'}
+                          />
+                        </div>
+                        <div className="admin-form-group">
+                          <label>{language === 'en' ? 'Application' : 'আবেদন'} {language === 'en' ? '(Bangla)' : '(বাংলা)'}</label>
+                          <textarea
+                            rows={4}
+                            value={productForm.applicationBn}
+                            onChange={(e) => setProductForm({ ...productForm, applicationBn: e.target.value })}
+                            placeholder={language === 'en' ? 'Application instructions in Bangla (optional)' : 'বাংলায় আবেদনের নির্দেশাবলী (ঐচ্ছিক)'}
+                          />
+                        </div>
+                        <div className="admin-form-group">
+                          <label>{language === 'en' ? 'Safety' : 'নিরাপত্তা'} {language === 'en' ? '(English)' : '(ইংরেজি)'}</label>
+                          <textarea
+                            rows={4}
+                            value={productForm.safety}
+                            onChange={(e) => setProductForm({ ...productForm, safety: e.target.value })}
+                            placeholder={language === 'en' ? 'Safety precautions and guidelines...' : 'নিরাপত্তা সতর্কতা এবং নির্দেশিকা...'}
+                          />
+                        </div>
+                        <div className="admin-form-group">
+                          <label>{language === 'en' ? 'Safety' : 'নিরাপত্তা'} {language === 'en' ? '(Bangla)' : '(বাংলা)'}</label>
+                          <textarea
+                            rows={4}
+                            value={productForm.safetyBn}
+                            onChange={(e) => setProductForm({ ...productForm, safetyBn: e.target.value })}
+                            placeholder={language === 'en' ? 'Safety precautions in Bangla (optional)' : 'বাংলায় নিরাপত্তা সতর্কতা (ঐচ্ছিক)'}
+                          />
+                        </div>
+                        <div className="admin-form-group">
+                          <label>{language === 'en' ? 'Image' : 'ছবি'}</label>
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+                            <input
+                              type="text"
+                              value={productForm.image}
+                              onChange={(e) => setProductForm({ ...productForm, image: e.target.value })}
+                              placeholder="https://... (optional)"
+                            />
+                            <div style={{ display: 'flex', gap: '0.75rem', alignItems: 'center', flexWrap: 'wrap' }}>
+                              <label
+                                style={{
+                                  display: 'inline-flex',
+                                  alignItems: 'center',
+                                  gap: '0.35rem',
+                                  padding: '0.5rem 0.75rem',
+                                  border: '1px dashed #cbd5e1',
+                                  borderRadius: '0.375rem',
+                                  background: '#f8fafc',
+                                  color: '#0f172a',
+                                  cursor: 'pointer',
+                                  fontWeight: 600
+                                }}
+                              >
+                                <input
+                                  type="file"
+                                  accept="image/*"
+                                  style={{ display: 'none' }}
+                                  onChange={async (e) => {
+                                    const file = e.target.files?.[0]
+                                    if (!file) return
+                                    try {
+                                      const base64 = await fileToBase64(file)
+                                      setProductForm((prev) => ({ ...prev, image: base64 }))
+                                      setProductStatus('')
+                                    } catch (err) {
+                                      console.error('Product image upload failed', err)
+                                      setProductStatus(language === 'en' ? 'Image upload failed' : 'ছবি আপলোড ব্যর্থ')
+                                    }
+                                  }}
+                                />
+                                <svg viewBox="0 0 24 24" width="18" height="18" fill="none" xmlns="http://www.w3.org/2000/svg">
+                                  <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                                  <polyline points="17 8 12 3 7 8" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                                  <line x1="12" y1="3" x2="12" y2="15" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                                </svg>
+                                {language === 'en' ? 'Upload image' : 'ছবি আপলোড করুন'}
+                              </label>
+                              {productForm.image && (
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                                  <img
+                                    src={productForm.image}
+                                    alt="Product preview"
+                                    style={{ width: 72, height: 72, objectFit: 'cover', borderRadius: '0.5rem', border: '1px solid #e2e8f0' }}
+                                    onError={(e) => { e.target.style.display = 'none' }}
+                                  />
+                                  <button
+                                    type="button"
+                                    onClick={() => setProductForm((prev) => ({ ...prev, image: '' }))}
+                                    style={{
+                                      padding: '0.4rem 0.65rem',
+                                      background: '#fee2e2',
+                                      color: '#b91c1c',
+                                      border: '1px solid #fecaca',
+                                      borderRadius: '0.375rem',
+                                      fontWeight: 600,
+                                      cursor: 'pointer'
+                                    }}
+                                  >
+                                    {language === 'en' ? 'Remove' : 'মুছুন'}
+                                  </button>
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                      <div style={{ display: 'flex', gap: '0.75rem', marginTop: '1rem' }}>
+                        <button
+                          type="submit"
+                          disabled={savingProduct}
+                          style={{
+                            padding: '0.65rem 1.2rem',
+                            backgroundColor: '#16a34a',
+                            color: 'white',
+                            border: 'none',
+                            borderRadius: '0.375rem',
+                            fontWeight: 700,
+                            cursor: savingProduct ? 'not-allowed' : 'pointer'
+                          }}
+                        >
+                          {savingProduct
+                            ? (language === 'en' ? 'Saving...' : 'সংরক্ষণ হচ্ছে...')
+                            : adminContent.save}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            resetProductForm()
+                            setShowProductForm(false)
+                            setProductStatus('')
+                          }}
+                          style={{
+                            padding: '0.65rem 1.2rem',
+                            backgroundColor: '#e5e7eb',
+                            color: '#0f172a',
+                            border: '1px solid #cbd5e1',
+                            borderRadius: '0.375rem',
+                            fontWeight: 700,
+                            cursor: 'pointer'
+                          }}
+                        >
+                          {adminContent.cancel}
+                        </button>
+                      </div>
+                    </form>
+                    </div>
+                  </div>
+                </div>
+              )}
               <div className="admin-table-container">
                 <div className="admin-search-bar">
-                  <input type="text" placeholder={adminContent.search} />
+                  <input 
+                    type="text" 
+                    placeholder={adminContent.search} 
+                    value={productSearch}
+                    onChange={(e) => setProductSearch(e.target.value)}
+                  />
                 </div>
                 <table className="admin-table">
                   <thead>
                     <tr>
+                      <th>{language === 'en' ? 'Product ID' : 'পণ্য আইডি'}</th>
                       <th>{adminContent.productName}</th>
                       <th>{adminContent.category}</th>
-                      <th>{adminContent.description}</th>
+                      <th>{language === 'en' ? 'Price' : 'মূল্য'}</th>
                       <th>{language === 'en' ? 'Actions' : 'কার্যক্রম'}</th>
                     </tr>
                   </thead>
                   <tbody>
-                    {t.products.items.slice(0, 10).map((product, index) => (
-                      <tr key={index}>
+                    {filteredProducts.length ? filteredProducts.map((product, index) => {
+                      const hasVariants = product.priceCategory === 'per_variant' && Array.isArray(product.variants) && product.variants.length > 0
+                      const displayPrice = hasVariants ? null : (product.price || 0)
+                      
+                      return (
+                        <tr key={product._id || product.name || index}>
+                          <td>{product.productId || '-'}</td>
                         <td>{product.name}</td>
                         <td>{product.category}</td>
-                        <td>{product.description.substring(0, 50)}...</td>
+                          <td>
+                            {hasVariants ? (
+                              <select 
+                                style={{
+                                  padding: '0.4rem 0.6rem',
+                                  border: '1px solid #cbd5e1',
+                                  borderRadius: '0.375rem',
+                                  fontSize: '0.875rem',
+                                  backgroundColor: 'white',
+                                  cursor: 'pointer',
+                                  minWidth: '120px'
+                                }}
+                                onChange={(e) => {
+                                  // Display only, not editable
+                                  e.target.blur()
+                                }}
+                              >
+                                <option value="">{language === 'en' ? 'Select variant' : 'ভ্যারিয়েন্ট নির্বাচন করুন'}</option>
+                                {product.variants.map((variant, vIndex) => (
+                                  <option key={vIndex} value={variant.value}>
+                                    {variant.name || variant.value}: ৳{variant.price || 0}
+                                  </option>
+                                ))}
+                              </select>
+                            ) : (
+                              <span style={{ fontWeight: 600, color: '#16a34a' }}>
+                                ৳{displayPrice.toFixed(2)}
+                              </span>
+                            )}
+                          </td>
                         <td>
                           <div className="admin-action-buttons">
-                            <button className="admin-action-btn edit">{adminContent.edit}</button>
-                            <button className="admin-action-btn delete">{adminContent.delete}</button>
+                              <button 
+                                className="admin-action-btn edit"
+                                style={{ backgroundColor: '#e0e7ff', color: '#1d4ed8' }}
+                                onClick={() => setViewingProduct(product)}
+                              >
+                                {language === 'en' ? 'View' : 'দেখুন'}
+                              </button>
                           </div>
+                        </td>
+                      </tr>
+                      )
+                    }) : (
+                      <tr>
+                        <td colSpan="5" style={{ textAlign: 'center', padding: '1.5rem' }}>
+                          {adminContent.noData}
+                        </td>
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
+
+              {/* Product Details Card */}
+              {viewingProduct && (
+                <div style={{
+                  position: 'fixed',
+                  top: 0,
+                  left: 0,
+                  right: 0,
+                  bottom: 0,
+                  backgroundColor: 'rgba(0, 0, 0, 0.5)',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  zIndex: 1000,
+                  padding: '1rem'
+                }} onClick={() => setViewingProduct(null)}>
+                  <div style={{
+                    position: 'relative',
+                    background: 'linear-gradient(135deg, #f8fafc 0%, #eef2ff 100%)',
+                    borderRadius: '0.75rem',
+                    padding: '2rem',
+                    maxWidth: '900px',
+                    width: '100%',
+                    maxHeight: '90vh',
+                    overflowY: 'auto',
+                    boxShadow: '0 25px 50px -12px rgba(0,0,0,0.25)'
+                  }} onClick={(e) => e.stopPropagation()}>
+                    <div style={{
+                      position: 'absolute',
+                      inset: 0,
+                      pointerEvents: 'none',
+                      overflow: 'hidden',
+                      borderRadius: '0.75rem'
+                    }}>
+                      <div style={{
+                        position: 'absolute',
+                        width: '260px',
+                        height: '260px',
+                        top: '-120px',
+                        left: '-80px',
+                        background: 'radial-gradient(circle at 30% 30%, rgba(59,130,246,0.25), transparent 60%)',
+                        filter: 'blur(20px)'
+                      }} />
+                      <div style={{
+                        position: 'absolute',
+                        width: '240px',
+                        height: '240px',
+                        bottom: '-140px',
+                        right: '-100px',
+                        background: 'radial-gradient(circle at 70% 70%, rgba(16,185,129,0.22), transparent 60%)',
+                        filter: 'blur(20px)'
+                      }} />
+                    </div>
+
+                    <div style={{ position: 'relative', display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem', gap: '1rem' }}>
+                      <div>
+                        <h2 style={{ margin: 0, fontSize: '1.5rem', fontWeight: 800, color: '#0f172a' }}>
+                          {language === 'en' ? 'Product Details' : 'পণ্যের বিবরণ'}
+                        </h2>
+                        <p style={{ margin: '0.25rem 0 0 0', color: '#475569', fontWeight: 600 }}>
+                          {viewingProduct.productId || viewingProduct.name || 'N/A'}
+                        </p>
+                      </div>
+                      <button
+                        onClick={() => setViewingProduct(null)}
+                        style={{
+                          background: '#e2e8f0',
+                          border: 'none',
+                          padding: '0.4rem 0.65rem',
+                          borderRadius: '0.375rem',
+                          cursor: 'pointer',
+                          fontWeight: 700,
+                          color: '#475569'
+                        }}
+                      >
+                        ×
+                      </button>
+                    </div>
+
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))', gap: '1rem', position: 'relative', zIndex: 1 }}>
+                      {/* Product ID */}
+                      <div style={{ padding: '1rem', backgroundColor: '#f9fafb', borderRadius: '0.375rem' }}>
+                        <label style={{ fontSize: '0.875rem', color: '#6b7280', fontWeight: 600 }}>
+                          {language === 'en' ? 'Product ID' : 'পণ্য আইডি'}
+                        </label>
+                        <p style={{ margin: '0.5rem 0 0 0', fontSize: '1rem', fontWeight: 600, color: '#111827' }}>
+                          {viewingProduct.productId || 'N/A'}
+                        </p>
+                      </div>
+
+                      {/* Product Name */}
+                      <div style={{ padding: '1rem', backgroundColor: '#f9fafb', borderRadius: '0.375rem' }}>
+                        <label style={{ fontSize: '0.875rem', color: '#6b7280', fontWeight: 600 }}>
+                          {language === 'en' ? 'Product Name' : 'পণ্যের নাম'}
+                        </label>
+                        <p style={{ margin: '0.5rem 0 0 0', fontSize: '1rem', color: '#111827' }}>
+                          {viewingProduct.name || 'N/A'}
+                        </p>
+                      </div>
+
+                      {/* Category */}
+                      <div style={{ padding: '1rem', backgroundColor: '#f9fafb', borderRadius: '0.375rem' }}>
+                        <label style={{ fontSize: '0.875rem', color: '#6b7280', fontWeight: 600 }}>
+                          {language === 'en' ? 'Category' : 'বিভাগ'}
+                        </label>
+                        <p style={{ margin: '0.5rem 0 0 0', fontSize: '1rem', color: '#111827' }}>
+                          {viewingProduct.category || 'N/A'}
+                        </p>
+                      </div>
+
+                      {/* Price Category */}
+                      <div style={{ padding: '1rem', backgroundColor: '#f9fafb', borderRadius: '0.375rem' }}>
+                        <label style={{ fontSize: '0.875rem', color: '#6b7280', fontWeight: 600 }}>
+                          {language === 'en' ? 'Price Category' : 'মূল্যের বিভাগ'}
+                        </label>
+                        <p style={{ margin: '0.5rem 0 0 0', fontSize: '1rem', color: '#111827' }}>
+                          {viewingProduct.priceCategory === 'per_variant' ? (language === 'en' ? 'Per Variant' : 'প্রতি ভ্যারিয়েন্ট') : (language === 'en' ? 'Single Price' : 'একক মূল্য')}
+                        </p>
+                      </div>
+
+                      {/* Price */}
+                      {viewingProduct.priceCategory === 'single' && (
+                        <div style={{ padding: '1rem', backgroundColor: '#f9fafb', borderRadius: '0.375rem' }}>
+                          <label style={{ fontSize: '0.875rem', color: '#6b7280', fontWeight: 600 }}>
+                            {language === 'en' ? 'Price' : 'মূল্য'}
+                          </label>
+                          <p style={{ margin: '0.5rem 0 0 0', fontSize: '1rem', fontWeight: 600, color: '#16a34a' }}>
+                            ৳{parseFloat(viewingProduct.price || 0).toFixed(2)}
+                          </p>
+                        </div>
+                      )}
+
+                      {/* Generic Name */}
+                      {(viewingProduct.genericName || viewingProduct.genericNameBn) && (
+                        <div style={{ padding: '1rem', backgroundColor: '#f9fafb', borderRadius: '0.375rem' }}>
+                          <label style={{ fontSize: '0.875rem', color: '#6b7280', fontWeight: 600 }}>
+                            {language === 'en' ? 'Generic Name' : 'জেনেরিক নাম'}
+                          </label>
+                          <p style={{ margin: '0.5rem 0 0 0', fontSize: '1rem', color: '#111827' }}>
+                            {language === 'en' ? (viewingProduct.genericName || 'N/A') : (viewingProduct.genericNameBn || viewingProduct.genericName || 'N/A')}
+                          </p>
+                        </div>
+                      )}
+
+                      {/* Description */}
+                      {(viewingProduct.description || viewingProduct.descriptionBn) && (
+                        <div style={{ gridColumn: '1 / -1', padding: '1rem', backgroundColor: '#f9fafb', borderRadius: '0.375rem' }}>
+                          <label style={{ fontSize: '0.875rem', color: '#6b7280', fontWeight: 600 }}>
+                            {language === 'en' ? 'Description' : 'বিবরণ'}
+                          </label>
+                          <p style={{ margin: '0.5rem 0 0 0', fontSize: '1rem', color: '#111827', whiteSpace: 'pre-wrap' }}>
+                            {language === 'en' ? (viewingProduct.description || 'N/A') : (viewingProduct.descriptionBn || viewingProduct.description || 'N/A')}
+                          </p>
+                        </div>
+                      )}
+
+                      {/* Variants Table (if per_variant) */}
+                      {viewingProduct.priceCategory === 'per_variant' && viewingProduct.variants && Array.isArray(viewingProduct.variants) && viewingProduct.variants.length > 0 && (
+                        <div style={{ gridColumn: '1 / -1', padding: '1rem', backgroundColor: '#f9fafb', borderRadius: '0.375rem' }}>
+                          <label style={{ fontSize: '0.875rem', color: '#6b7280', fontWeight: 600, marginBottom: '0.75rem', display: 'block' }}>
+                            {language === 'en' ? 'Variants' : 'ভ্যারিয়েন্ট'}
+                          </label>
+                          <div style={{ border: '1px solid #e5e7eb', borderRadius: '0.5rem', overflow: 'hidden', backgroundColor: '#fff' }}>
+                            <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                              <thead>
+                                <tr style={{ backgroundColor: '#f9fafb', borderBottom: '2px solid #e5e7eb' }}>
+                                  <th style={{ padding: '0.75rem', textAlign: 'left', fontSize: '0.875rem', fontWeight: 600, color: '#6b7280' }}>
+                                    {language === 'en' ? 'Name' : 'নাম'}
+                                  </th>
+                                  <th style={{ padding: '0.75rem', textAlign: 'left', fontSize: '0.875rem', fontWeight: 600, color: '#6b7280' }}>
+                                    {language === 'en' ? 'Value' : 'মান'}
+                                  </th>
+                                  <th style={{ padding: '0.75rem', textAlign: 'right', fontSize: '0.875rem', fontWeight: 600, color: '#6b7280' }}>
+                                    {language === 'en' ? 'Price' : 'মূল্য'}
+                                  </th>
+                                </tr>
+                              </thead>
+                              <tbody>
+                                {viewingProduct.variants.map((variant, idx) => (
+                                  <tr key={idx} style={{ borderBottom: '1px solid #f3f4f6' }}>
+                                    <td style={{ padding: '0.75rem', fontSize: '0.875rem', color: '#111827' }}>
+                                      {variant.name || '-'}
+                                    </td>
+                                    <td style={{ padding: '0.75rem', fontSize: '0.875rem', color: '#111827' }}>
+                                      {variant.value || '-'}
+                                    </td>
+                                    <td style={{ padding: '0.75rem', fontSize: '0.875rem', color: '#111827', fontWeight: 600, textAlign: 'right' }}>
+                                      ৳{parseFloat(variant.price || 0).toFixed(2)}
                         </td>
                       </tr>
                     ))}
                   </tbody>
                 </table>
               </div>
+                        </div>
+                      )}
+
+                      {/* Product Image */}
+                      {viewingProduct.image && (
+                        <div style={{ gridColumn: '1 / -1', padding: '1rem', backgroundColor: '#f9fafb', borderRadius: '0.375rem' }}>
+                          <label style={{ fontSize: '0.875rem', color: '#6b7280', fontWeight: 600, marginBottom: '0.75rem', display: 'block' }}>
+                            {language === 'en' ? 'Product Image' : 'পণ্যের ছবি'}
+                          </label>
+                          <img 
+                            src={viewingProduct.image} 
+                            alt={viewingProduct.name}
+                            style={{
+                              maxWidth: '100%',
+                              maxHeight: '300px',
+                              borderRadius: '0.5rem',
+                              border: '2px solid #e5e7eb'
+                            }}
+                            onError={(e) => {
+                              e.target.style.display = 'none'
+                            }}
+                          />
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Action Buttons */}
+                    <div style={{ position: 'relative', display: 'flex', gap: '0.75rem', marginTop: '1.5rem', zIndex: 1 }}>
+                      {(userRole || '').toLowerCase() === 'admin' && (
+                        <>
+                          <button
+                            onClick={() => {
+                              handleEditProduct(viewingProduct)
+                              setViewingProduct(null)
+                            }}
+                            style={{
+                              padding: '0.5rem 1.5rem',
+                              backgroundColor: '#3b82f6',
+                              color: 'white',
+                              border: 'none',
+                              borderRadius: '0.5rem',
+                              cursor: 'pointer',
+                              fontWeight: 700,
+                              boxShadow: '0 10px 20px rgba(59,130,246,0.35)'
+                            }}
+                          >
+                            {adminContent.edit}
+                          </button>
+                          {viewingProduct._id && (
+                            <button
+                              onClick={async () => {
+                                if (window.confirm(language === 'en' ? 'Are you sure you want to delete this product?' : 'আপনি কি এই পণ্যটি মুছতে চান?')) {
+                                  await handleDeleteProduct(viewingProduct._id)
+                                  setViewingProduct(null)
+                                }
+                              }}
+                              style={{
+                                padding: '0.5rem 1.5rem',
+                                backgroundColor: '#ef4444',
+                                color: 'white',
+                                border: 'none',
+                                borderRadius: '0.5rem',
+                                cursor: 'pointer',
+                                fontWeight: 700,
+                                boxShadow: '0 10px 20px rgba(239,68,68,0.35)'
+                              }}
+                            >
+                              {adminContent.delete}
+                            </button>
+                          )}
+                        </>
+                      )}
+                      <button
+                        onClick={() => setViewingProduct(null)}
+                        style={{
+                          padding: '0.5rem 1.5rem',
+                          backgroundColor: '#6b7280',
+                          color: 'white',
+                          border: 'none',
+                          borderRadius: '0.5rem',
+                          cursor: 'pointer',
+                          fontWeight: 700
+                        }}
+                      >
+                        {language === 'en' ? 'Close' : 'বন্ধ করুন'}
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              )}
             </div>
           )}
 
@@ -2780,15 +5228,13 @@ const [userRole, setUserRole] = useState('Admin')
                 </button>
               </div>
               
-              {showPreview && (
+              {showPreview ? (
                 <div className="admin-preview-container">
                   <div className="admin-preview-header">
                     <div className="admin-preview-controls">
                       <button 
                         className={`admin-preview-nav-btn ${editMode ? 'active' : ''}`}
-                        onClick={() => {
-                          setEditMode(!editMode)
-                        }}
+                        onClick={() => setEditMode(!editMode)}
                         style={{ background: editMode ? '#22c55e' : '#334155' }}
                       >
                         <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" style={{ width: '16px', height: '16px', marginRight: '0.5rem' }}>
@@ -2799,37 +5245,25 @@ const [userRole, setUserRole] = useState('Admin')
                       </button>
                       <button 
                         className="admin-preview-nav-btn"
-                        onClick={() => {
-                          setPreviewUrl('/')
-                          refreshPreview()
-                        }}
+                        onClick={() => { setPreviewUrl('/'); refreshPreview() }}
                       >
                         {language === 'en' ? 'Home' : 'হোম'}
                       </button>
                       <button 
                         className="admin-preview-nav-btn"
-                        onClick={() => {
-                          setPreviewUrl('/about')
-                          refreshPreview()
-                        }}
+                        onClick={() => { setPreviewUrl('/about'); refreshPreview() }}
                       >
                         {language === 'en' ? 'About' : 'আমাদের সম্পর্কে'}
                       </button>
                       <button 
                         className="admin-preview-nav-btn"
-                        onClick={() => {
-                          setPreviewUrl('/product')
-                          refreshPreview()
-                        }}
+                        onClick={() => { setPreviewUrl('/product'); refreshPreview() }}
                       >
                         {language === 'en' ? 'Products' : 'পণ্য'}
                       </button>
                       <button 
                         className="admin-preview-nav-btn"
-                        onClick={() => {
-                          setPreviewUrl('/contact')
-                          refreshPreview()
-                        }}
+                        onClick={() => { setPreviewUrl('/contact'); refreshPreview() }}
                       >
                         {language === 'en' ? 'Contact' : 'যোগাযোগ'}
                       </button>
@@ -2867,7 +5301,7 @@ const [userRole, setUserRole] = useState('Admin')
                     title="Live Preview"
                   />
                 </div>
-              )}
+              ) : null}
 
               {/* Photo Management Section */}
               <div className="admin-content-section">
@@ -3500,43 +5934,170 @@ const [userRole, setUserRole] = useState('Admin')
               <div className="admin-tab-header">
                 <h1 className="admin-page-title">{adminContent.profile}</h1>
               </div>
-              <div className="admin-settings-section">
-                <div className="admin-settings-card" style={{ display: 'grid', gridTemplateColumns: '260px 1fr', gap: '1.5rem', alignItems: 'flex-start' }}>
-                  <div style={{ textAlign: 'center' }}>
-                    <div style={{ width: 180, height: 180, margin: '0 auto 1rem', borderRadius: '50%', overflow: 'hidden', border: '2px solid #e5e7eb', background: '#f8fafc', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+              <div className="admin-settings-section" style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
+                {/* Profile summary */}
+                <div className="admin-settings-card" style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '1.5rem',
+                  padding: '1.5rem',
+                  background: 'rgba(255, 255, 255, 0.65)',
+                  border: '1px solid rgba(255,255,255,0.4)',
+                  boxShadow: '0 25px 60px -18px rgba(15,23,42,0.35)',
+                  backdropFilter: 'blur(14px)',
+                  WebkitBackdropFilter: 'blur(14px)',
+                  borderRadius: '18px'
+                }}>
+                  <div style={{ width: 140, height: 140, borderRadius: '50%', overflow: 'hidden', border: '3px solid #e5e7eb', background: '#f8fafc', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
                       {profileData.photo ? (
                         <img src={profileData.photo} alt="Profile" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
                       ) : (
-                        <div style={{ fontSize: '2.5rem', color: '#64748b', fontWeight: 700 }}>
+                      <div style={{ fontSize: '3rem', color: '#64748b', fontWeight: 700 }}>
                           {(profileData.name || 'A').charAt(0)}
                         </div>
                       )}
                     </div>
+                    <div style={{ flex: 1, display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '0.75rem' }}>
+                    <div>
+                      <div style={{ fontWeight: 700, fontSize: '1.1rem', color: '#0f172a' }}>{profileData.name || 'Admin'}</div>
+                      {profileData.designation ? (
+                        <div style={{ color: '#475569', fontWeight: 600, marginTop: '0.15rem' }}>{profileData.designation}</div>
+                      ) : null}
+                    </div>
+                    <div>
+                      <div style={{ color: '#6b7280', fontWeight: 600 }}>{language === 'en' ? 'Email' : 'ইমেইল'}</div>
+                      <div style={{ color: '#0f172a' }}>{profileData.email}</div>
+                    </div>
+                    <div>
+                      <div style={{ color: '#6b7280', fontWeight: 600 }}>{language === 'en' ? 'Phone' : 'ফোন'}</div>
+                      <div style={{ color: '#0f172a' }}>{profileData.phone}</div>
+                    </div>
+                    <div>
+                      <div style={{ color: '#6b7280', fontWeight: 600 }}>{language === 'en' ? 'Address' : 'ঠিকানা'}</div>
+                      <div style={{ color: '#0f172a' }}>{profileData.address}</div>
+                    </div>
+                  </div>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', flexShrink: 0, width: 200 }}>
                     <label className="admin-upload-btn" style={{ justifyContent: 'center', width: '100%' }}>
                       {language === 'en' ? 'Upload Photo' : 'ছবি আপলোড করুন'}
                       <input type="file" accept="image/*" onChange={handleProfilePhotoFileChange} style={{ display: 'none' }} />
                     </label>
                     <button
                       className="admin-save-btn"
-                      style={{ width: '100%', marginTop: '0.75rem', backgroundColor: showChangePassword ? '#6b7280' : undefined }}
+                      onClick={() => setShowEditProfile(true)}
+                    >
+                      {language === 'en' ? 'Edit Profile' : 'প্রোফাইল সম্পাদনা'}
+                    </button>
+                    <button
+                      className="admin-save-btn"
                       onClick={() => {
-                        setShowChangePassword((prev) => !prev)
-                        if (showChangePassword) {
+                        setShowChangePassword(true)
                           setPasswordForm({ current: '', next: '', confirm: '', status: '' })
-                        }
                       }}
                     >
-                      {showChangePassword
-                        ? (language === 'en' ? 'Close' : 'বন্ধ করুন')
-                        : (language === 'en' ? 'Change Password' : 'পাসওয়ার্ড পরিবর্তন করুন')}
+                      {language === 'en' ? 'Change Password' : 'পাসওয়ার্ড পরিবর্তন করুন'}
                     </button>
                   </div>
-                  <div>
-                    <h3 style={{ marginTop: 0 }}>{language === 'en' ? 'User Profile' : 'ব্যবহারকারী প্রোফাইল'}</h3>
+                </div>
+
+                {/* Profile form */}
+                {showEditProfile && (
+                  <div style={{
+                    position: 'fixed',
+                    top: 0,
+                    left: 0,
+                    right: 0,
+                    bottom: 0,
+                    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    zIndex: 1000,
+                    padding: '1rem'
+                  }} onClick={() => {
+                    setShowEditProfile(false)
+                    setProfileStatus('')
+                  }}>
+                    <div style={{
+                      position: 'relative',
+                      background: 'linear-gradient(135deg, #f8fafc 0%, #eef2ff 100%)',
+                      borderRadius: '0.75rem',
+                      padding: '2rem',
+                      maxWidth: '900px',
+                      width: '100%',
+                      maxHeight: '90vh',
+                      overflowY: 'auto',
+                      boxShadow: '0 25px 50px -12px rgba(0,0,0,0.25)'
+                    }} onClick={(e) => e.stopPropagation()}>
+                      <div style={{
+                        position: 'absolute',
+                        inset: 0,
+                        pointerEvents: 'none',
+                        overflow: 'hidden',
+                        borderRadius: '0.75rem'
+                      }}>
+                        <div style={{
+                          position: 'absolute',
+                          width: '260px',
+                          height: '260px',
+                          top: '-120px',
+                          left: '-80px',
+                          background: 'radial-gradient(circle at 30% 30%, rgba(59,130,246,0.25), transparent 60%)',
+                          filter: 'blur(20px)'
+                        }} />
+                        <div style={{
+                          position: 'absolute',
+                          width: '240px',
+                          height: '240px',
+                          bottom: '-140px',
+                          right: '-100px',
+                          background: 'radial-gradient(circle at 70% 70%, rgba(16,185,129,0.22), transparent 60%)',
+                          filter: 'blur(20px)'
+                        }} />
+                      </div>
+
+                      <div style={{ position: 'relative', display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem', gap: '1rem' }}>
+                        <div>
+                          <h2 style={{ margin: 0, fontSize: '1.5rem', fontWeight: 800, color: '#0f172a' }}>
+                            {language === 'en' ? 'Edit Profile' : 'প্রোফাইল সম্পাদনা'}
+                          </h2>
+                          <p style={{ margin: '0.25rem 0 0 0', color: '#475569', fontWeight: 600 }}>
+                            {language === 'en' ? 'Update your profile information' : 'আপনার প্রোফাইল তথ্য আপডেট করুন'}
+                          </p>
+                        </div>
+                        <button
+                          onClick={() => {
+                            setShowEditProfile(false)
+                            setProfileStatus('')
+                          }}
+                          style={{
+                            background: '#e2e8f0',
+                            border: 'none',
+                            padding: '0.4rem 0.65rem',
+                            borderRadius: '0.375rem',
+                            cursor: 'pointer',
+                            fontWeight: 700,
+                            color: '#475569'
+                          }}
+                        >
+                          ×
+                        </button>
+                      </div>
+
+                      <div style={{ position: 'relative', zIndex: 1 }}>
+                    <div className="admin-form-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: '1rem' }}>
                     <div className="admin-form-group">
                       <label>{language === 'en' ? 'Name' : 'নাম'}</label>
                       <input type="text" value={profileData.name} onChange={(e) => handleProfileFieldChange('name', e.target.value)} />
                     </div>
+                      <div className="admin-form-group">
+                        <label>{language === 'en' ? 'Designation' : 'পদবি'}</label>
+                        <input
+                          type="text"
+                          value={profileData.designation || ''}
+                          onChange={(e) => handleProfileFieldChange('designation', e.target.value)}
+                        />
+                      </div>
                     <div className="admin-form-group">
                       <label>{language === 'en' ? 'Email' : 'ইমেইল'}</label>
                       <input type="email" value={profileData.email} onChange={(e) => handleProfileFieldChange('email', e.target.value)} />
@@ -3547,77 +6108,189 @@ const [userRole, setUserRole] = useState('Admin')
                     </div>
                     <div className="admin-form-group">
                       <label>{adminContent.address}</label>
-                      <textarea value={profileData.address || ''} onChange={(e) => handleProfileFieldChange('address', e.target.value)} rows={3} />
+                        <textarea value={profileData.address || ''} onChange={(e) => handleProfileFieldChange('address', e.target.value)} rows={3} />
                     </div>
                     <div className="admin-form-group">
                       <label>{language === 'en' ? 'Role' : 'ভূমিকা'}</label>
-                      <input 
-                        type="text" 
-                        value={userRole || (language === 'en' ? 'Administrator' : 'অ্যাডমিনিস্ট্রেটর')} 
-                        readOnly 
-                        style={{ 
-                          backgroundColor: userRole === 'Admin' ? '#dcfce7' : '#fef3c7',
-                          color: userRole === 'Admin' ? '#166534' : '#92400e',
-                          fontWeight: 600
-                        }}
-                      />
+                        <input 
+                          type="text" 
+                          value={userRole || (language === 'en' ? 'Administrator' : 'অ্যাডমিনিস্ট্রেটর')} 
+                          readOnly 
+                          style={{ 
+                            backgroundColor: userRole === 'Admin' ? '#dcfce7' : '#fef3c7',
+                            color: userRole === 'Admin' ? '#166534' : '#92400e',
+                            fontWeight: 600
+                          }}
+                        />
+                      </div>
+                      {isEmployee && profileData.designation && (
+                        <div className="admin-form-group">
+                          <label>{language === 'en' ? 'Designation' : 'পদবি'}</label>
+                          <input type="text" value={profileData.designation} readOnly />
+                        </div>
+                      )}
+                      {isEmployee && profileData.department && (
+                        <div className="admin-form-group">
+                          <label>{language === 'en' ? 'Department' : 'বিভাগ'}</label>
+                          <input type="text" value={profileData.department} readOnly />
+                        </div>
+                      )}
                     </div>
-                    {isEmployee && profileData.designation && (
-                      <div className="admin-form-group">
-                        <label>{language === 'en' ? 'Designation' : 'পদবি'}</label>
-                        <input type="text" value={profileData.designation} readOnly />
-                      </div>
-                    )}
-                    {isEmployee && profileData.department && (
-                      <div className="admin-form-group">
-                        <label>{language === 'en' ? 'Department' : 'বিভাগ'}</label>
-                        <input type="text" value={profileData.department} readOnly />
-                      </div>
-                    )}
                     {profileStatus && (
-                      <div style={{ marginBottom: '0.5rem', color: profileStatus.includes('fail') || profileStatus.includes('ব্যর্থ') ? '#dc2626' : '#16a34a', fontWeight: 600 }}>
+                      <div style={{
+                        padding: '0.75rem',
+                        marginTop: '1rem',
+                        borderRadius: '0.5rem',
+                        border: profileStatus.includes('fail') || profileStatus.includes('ব্যর্থ') ? '1px solid #fecaca' : '1px solid #bbf7d0',
+                        backgroundColor: profileStatus.includes('fail') || profileStatus.includes('ব্যর্থ') ? '#fef2f2' : '#ecfdf3',
+                        color: profileStatus.includes('fail') || profileStatus.includes('ব্যর্থ') ? '#b91c1c' : '#065f46',
+                        fontWeight: 700
+                      }}>
                         {profileStatus}
                       </div>
                     )}
+                    <div style={{ display: 'flex', gap: '0.75rem', marginTop: '1rem' }}>
                     <button className="admin-save-btn" onClick={handleSaveProfile}>{adminContent.save}</button>
+                      <button
+                        className="admin-remove-btn"
+                        onClick={() => {
+                          setShowEditProfile(false)
+                          setProfileStatus('')
+                        }}
+                      >
+                        {language === 'en' ? 'Cancel' : 'বাতিল'}
+                      </button>
+                  </div>
+                    </div>
                   </div>
                 </div>
+                )}
 
+                {/* Change password */}
                 {showChangePassword && (
-                  <div className="admin-settings-card" style={{ marginTop: '1.5rem' }}>
-                    <h3 style={{ marginTop: 0 }}>{adminContent.changePassword}</h3>
-                    <div style={{ border: '1px solid #e5e7eb', borderRadius: '0.5rem', padding: '1rem', marginTop: '1rem', background: '#f9fafb' }}>
-                      <div className="admin-form-group">
-                        <label>{adminContent.currentPassword}</label>
-                        <input
-                          type="password"
-                          value={passwordForm.current}
-                          onChange={(e) => setPasswordForm({ ...passwordForm, current: e.target.value })}
-                        />
+                  <div style={{
+                    position: 'fixed',
+                    top: 0,
+                    left: 0,
+                    right: 0,
+                    bottom: 0,
+                    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    zIndex: 1000,
+                    padding: '1rem'
+                  }} onClick={() => {
+                    setShowChangePassword(false)
+                    setPasswordForm({ current: '', next: '', confirm: '', status: '' })
+                  }}>
+                    <div style={{
+                      position: 'relative',
+                      background: 'linear-gradient(135deg, #f8fafc 0%, #eef2ff 100%)',
+                      borderRadius: '0.75rem',
+                      padding: '2rem',
+                      maxWidth: '900px',
+                      width: '100%',
+                      maxHeight: '90vh',
+                      overflowY: 'auto',
+                      boxShadow: '0 25px 50px -12px rgba(0,0,0,0.25)'
+                    }} onClick={(e) => e.stopPropagation()}>
+                      <div style={{
+                        position: 'absolute',
+                        inset: 0,
+                        pointerEvents: 'none',
+                        overflow: 'hidden',
+                        borderRadius: '0.75rem'
+                      }}>
+                        <div style={{
+                          position: 'absolute',
+                          width: '260px',
+                          height: '260px',
+                          top: '-120px',
+                          left: '-80px',
+                          background: 'radial-gradient(circle at 30% 30%, rgba(59,130,246,0.25), transparent 60%)',
+                          filter: 'blur(20px)'
+                        }} />
+                        <div style={{
+                          position: 'absolute',
+                          width: '240px',
+                          height: '240px',
+                          bottom: '-140px',
+                          right: '-100px',
+                          background: 'radial-gradient(circle at 70% 70%, rgba(16,185,129,0.22), transparent 60%)',
+                          filter: 'blur(20px)'
+                        }} />
                       </div>
-                      <div className="admin-form-group">
-                        <label>{adminContent.newPassword}</label>
-                        <input
-                          type="password"
-                          value={passwordForm.next}
-                          onChange={(e) => setPasswordForm({ ...passwordForm, next: e.target.value })}
-                        />
-                      </div>
-                      <div className="admin-form-group">
-                        <label>{adminContent.confirmPassword}</label>
-                        <input
-                          type="password"
-                          value={passwordForm.confirm}
-                          onChange={(e) => setPasswordForm({ ...passwordForm, confirm: e.target.value })}
-                        />
-                      </div>
-                      {passwordForm.status && (
-                        <div style={{ marginBottom: '0.5rem', color: passwordForm.status.toLowerCase().includes('incorrect') ? '#dc2626' : '#16a34a', fontWeight: 600 }}>
-                          {passwordForm.status}
+
+                      <div style={{ position: 'relative', display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem', gap: '1rem' }}>
+                        <div>
+                          <h2 style={{ margin: 0, fontSize: '1.5rem', fontWeight: 800, color: '#0f172a' }}>
+                            {adminContent.changePassword}
+                          </h2>
+                          <p style={{ margin: '0.25rem 0 0 0', color: '#475569', fontWeight: 600 }}>
+                            {language === 'en' ? 'Update your password' : 'আপনার পাসওয়ার্ড আপডেট করুন'}
+                          </p>
                         </div>
-                      )}
-                      <div style={{ display: 'flex', gap: '0.5rem' }}>
-                        <button className="admin-save-btn" onClick={handleChangePassword}>{adminContent.updatePassword}</button>
+                        <button
+                          onClick={() => {
+                            setShowChangePassword(false)
+                            setPasswordForm({ current: '', next: '', confirm: '', status: '' })
+                          }}
+                          style={{
+                            background: '#e2e8f0',
+                            border: 'none',
+                            padding: '0.4rem 0.65rem',
+                            borderRadius: '0.375rem',
+                            cursor: 'pointer',
+                            fontWeight: 700,
+                            color: '#475569'
+                          }}
+                        >
+                          ×
+                        </button>
+                      </div>
+
+                      <div style={{ position: 'relative', zIndex: 1 }}>
+                    <div style={{ border: '1px solid #e5e7eb', borderRadius: '0.5rem', padding: '1rem', background: '#f9fafb' }}>
+                  <div className="admin-form-group">
+                    <label>{adminContent.currentPassword}</label>
+                    <input
+                      type="password"
+                      value={passwordForm.current}
+                      onChange={(e) => setPasswordForm({ ...passwordForm, current: e.target.value })}
+                    />
+                  </div>
+                  <div className="admin-form-group">
+                    <label>{adminContent.newPassword}</label>
+                    <input
+                      type="password"
+                      value={passwordForm.next}
+                      onChange={(e) => setPasswordForm({ ...passwordForm, next: e.target.value })}
+                    />
+                  </div>
+                  <div className="admin-form-group">
+                    <label>{adminContent.confirmPassword}</label>
+                    <input
+                      type="password"
+                      value={passwordForm.confirm}
+                      onChange={(e) => setPasswordForm({ ...passwordForm, confirm: e.target.value })}
+                    />
+                  </div>
+                  {passwordForm.status && (
+                        <div style={{
+                          padding: '0.75rem',
+                          marginTop: '1rem',
+                          borderRadius: '0.5rem',
+                          border: passwordForm.status.toLowerCase().includes('incorrect') || passwordForm.status.toLowerCase().includes('ব্যর্থ') ? '1px solid #fecaca' : '1px solid #bbf7d0',
+                          backgroundColor: passwordForm.status.toLowerCase().includes('incorrect') || passwordForm.status.toLowerCase().includes('ব্যর্থ') ? '#fef2f2' : '#ecfdf3',
+                          color: passwordForm.status.toLowerCase().includes('incorrect') || passwordForm.status.toLowerCase().includes('ব্যর্থ') ? '#b91c1c' : '#065f46',
+                          fontWeight: 700
+                        }}>
+                      {passwordForm.status}
+                    </div>
+                  )}
+                      <div style={{ display: 'flex', gap: '0.5rem', marginTop: '1rem' }}>
+                  <button className="admin-save-btn" onClick={handleChangePassword}>{adminContent.updatePassword}</button>
                         <button
                           className="admin-remove-btn"
                           onClick={() => {
@@ -3627,7 +6300,9 @@ const [userRole, setUserRole] = useState('Admin')
                         >
                           {language === 'en' ? 'Cancel' : 'বাতিল'}
                         </button>
-                      </div>
+                </div>
+                    </div>
+                </div>
                     </div>
                   </div>
                 )}
@@ -3635,47 +6310,1175 @@ const [userRole, setUserRole] = useState('Admin')
             </div>
           )}
 
-          {/* CRM Tab */}
+          {/* CRM / Dealer Tab */}
           {activeTab === 'crm' && (
             <div className="admin-tab-content">
-              <div className="admin-tab-header">
-                <h1 className="admin-page-title">{adminContent.crm}</h1>
-                <button className="admin-add-btn">
+              <div className="admin-tab-header" style={{ gap: '0.75rem', flexWrap: 'wrap' }}>
+                <h1 className="admin-page-title" style={{ flex: 1 }}>{language === 'en' ? 'Dealers' : 'ডিলার'}</h1>
+                <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
+                <button
+                  className="admin-add-btn"
+                  onClick={() => {
+                    setShowDealerForm(true)
+                    setDealerStatus('')
+                    setNewDealer((prev) => ({
+                      ...prev,
+                      dealerId: prev.dealerId || getNextDealerId()
+                    }))
+                  }}
+                >
                   <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
                     <line x1="12" y1="5" x2="12" y2="19" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
                     <line x1="5" y1="12" x2="19" y2="12" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
                   </svg>
                   {adminContent.addNew}
                 </button>
+                  <button
+                    type="button"
+                    onClick={() => loadDealers()}
+                    className="admin-add-btn"
+                    style={{ backgroundColor: '#e2e8f0', color: '#0f172a' }}
+                  >
+                    {language === 'en' ? 'Refresh' : 'রিফ্রেশ'}
+                  </button>
+                </div>
               </div>
+              {showDealerForm && (
+                <div style={{
+                  position: 'fixed',
+                  top: 0,
+                  left: 0,
+                  right: 0,
+                  bottom: 0,
+                  backgroundColor: 'rgba(0, 0, 0, 0.5)',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  zIndex: 1000,
+                  padding: '1rem'
+                }} onClick={() => {
+                  setShowDealerForm(false)
+                  setDealerStatus('')
+                  setNewDealer({
+                    dealerId: getNextDealerId(),
+                    name: '',
+                    phone: '',
+                    email: '',
+                    address: '',
+                    photo: '',
+                    nid: '',
+                    tradeLicense: '',
+                    pesticideLicense: '',
+                    area: '',
+                    agreement: '',
+                    assignedTo: '',
+                    assignedToName: '',
+                    assignedToId: ''
+                  })
+                }}>
+                  <div style={{
+                    position: 'relative',
+                    background: 'linear-gradient(135deg, #f8fafc 0%, #eef2ff 100%)',
+                    borderRadius: '0.75rem',
+                    padding: '2rem',
+                    maxWidth: '900px',
+                    width: '100%',
+                    maxHeight: '90vh',
+                    overflowY: 'auto',
+                    boxShadow: '0 25px 50px -12px rgba(0,0,0,0.25)'
+                  }} onClick={(e) => e.stopPropagation()}>
+                    <div style={{
+                      position: 'absolute',
+                      inset: 0,
+                      pointerEvents: 'none',
+                      overflow: 'hidden',
+                      borderRadius: '0.75rem'
+                    }}>
+                      <div style={{
+                        position: 'absolute',
+                        width: '260px',
+                        height: '260px',
+                        top: '-120px',
+                        left: '-80px',
+                        background: 'radial-gradient(circle at 30% 30%, rgba(59,130,246,0.25), transparent 60%)',
+                        filter: 'blur(20px)'
+                      }} />
+                      <div style={{
+                        position: 'absolute',
+                        width: '240px',
+                        height: '240px',
+                        bottom: '-140px',
+                        right: '-100px',
+                        background: 'radial-gradient(circle at 70% 70%, rgba(16,185,129,0.22), transparent 60%)',
+                        filter: 'blur(20px)'
+                      }} />
+                    </div>
+
+                    <div style={{ position: 'relative', display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem', gap: '1rem' }}>
+                      <div>
+                        <h2 style={{ margin: 0, fontSize: '1.5rem', fontWeight: 800, color: '#0f172a' }}>
+                          {language === 'en' ? 'Add Dealer' : 'ডিলার যোগ করুন'}
+                        </h2>
+                        <p style={{ margin: '0.25rem 0 0 0', color: '#475569', fontWeight: 600 }}>
+                          {language === 'en' ? 'Fill in dealer details and save' : 'ডিলারের বিবরণ পূরণ করুন এবং সংরক্ষণ করুন'}
+                        </p>
+                      </div>
+                      <button
+                        onClick={() => {
+                          setShowDealerForm(false)
+                          setDealerStatus('')
+                          setNewDealer({
+                            dealerId: getNextDealerId(),
+                            name: '',
+                            phone: '',
+                            email: '',
+                            address: '',
+                            photo: '',
+                            nid: '',
+                            tradeLicense: '',
+                            pesticideLicense: '',
+                            area: '',
+                            agreement: '',
+                            assignedTo: '',
+                            assignedToName: '',
+                            assignedToId: ''
+                          })
+                        }}
+                        style={{
+                          background: '#e2e8f0',
+                          border: 'none',
+                          padding: '0.4rem 0.65rem',
+                          borderRadius: '0.375rem',
+                          cursor: 'pointer',
+                          fontWeight: 700,
+                          color: '#475569'
+                        }}
+                      >
+                        ×
+                      </button>
+                    </div>
+
+                    <div style={{ position: 'relative', zIndex: 1 }}>
+                  {dealerStatus && (
+                      <div style={{
+                        padding: '0.75rem',
+                        marginBottom: '1rem',
+                        borderRadius: '0.5rem',
+                        border: dealerStatus.includes('required') ? '1px solid #fecaca' : '1px solid #bbf7d0',
+                        backgroundColor: dealerStatus.includes('required') ? '#fef2f2' : '#ecfdf3',
+                        color: dealerStatus.includes('required') ? '#b91c1c' : '#065f46',
+                        fontWeight: 700
+                      }}>
+                      {dealerStatus}
+                    </div>
+                  )}
+                  <form onSubmit={handleAddDealer} className="admin-form-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: '1rem' }}>
+                    <div className="admin-form-group">
+                      <label>{language === 'en' ? 'Dealer ID' : 'ডিলার আইডি'}</label>
+                      <input type="text" value={newDealer.dealerId} onChange={(e) => setNewDealer({ ...newDealer, dealerId: e.target.value })} />
+                    </div>
+                    <div className="admin-form-group">
+                      <label>{language === 'en' ? 'Dealer Name' : 'ডিলারের নাম'}</label>
+                      <input type="text" value={newDealer.name} onChange={(e) => setNewDealer({ ...newDealer, name: e.target.value })} />
+                    </div>
+                    <div className="admin-form-group">
+                      <label>{language === 'en' ? 'Phone' : 'ফোন'}</label>
+                      <input type="tel" value={newDealer.phone} onChange={(e) => setNewDealer({ ...newDealer, phone: e.target.value })} />
+                    </div>
+                    <div className="admin-form-group">
+                      <label>{language === 'en' ? 'Email' : 'ইমেইল'}</label>
+                      <input type="email" value={newDealer.email} onChange={(e) => setNewDealer({ ...newDealer, email: e.target.value })} />
+                    </div>
+                    <div className="admin-form-group">
+                      <label>{language === 'en' ? 'Address' : 'ঠিকানা'}</label>
+                      <textarea value={newDealer.address} onChange={(e) => setNewDealer({ ...newDealer, address: e.target.value })} rows={3} />
+                    </div>
+                    <div className="admin-form-group">
+                      <label>{language === 'en' ? 'NID' : 'এনআইডি'}</label>
+                      <input type="text" value={newDealer.nid} onChange={(e) => setNewDealer({ ...newDealer, nid: e.target.value })} />
+                    </div>
+                    <div className="admin-form-group">
+                      <label>{language === 'en' ? 'Trade License Number' : 'ট্রেড লাইসেন্স নম্বর'}</label>
+                      <input type="text" value={newDealer.tradeLicense} onChange={(e) => setNewDealer({ ...newDealer, tradeLicense: e.target.value })} />
+                    </div>
+                    <div className="admin-form-group">
+                      <label>{language === 'en' ? 'Pesticides License Number' : 'কীটনাশক লাইসেন্স নম্বর'}</label>
+                      <input type="text" value={newDealer.pesticideLicense} onChange={(e) => setNewDealer({ ...newDealer, pesticideLicense: e.target.value })} />
+                    </div>
+                    <div className="admin-form-group">
+                      <label>{language === 'en' ? 'Area' : 'এলাকা'}</label>
+                      <input type="text" value={newDealer.area} onChange={(e) => setNewDealer({ ...newDealer, area: e.target.value })} />
+                    </div>
+                    <div className="admin-form-group">
+                      <label>{language === 'en' ? 'Assign Salesman' : 'সেলসম্যান নির্ধারণ করুন'}</label>
+                      <select
+                        value={newDealer.assignedTo}
+                        onChange={(e) => setNewDealer({
+                          ...newDealer,
+                          assignedTo: e.target.value,
+                          assignedToName: '',
+                          assignedToId: ''
+                        })}
+                        style={{
+                          width: '100%',
+                          padding: '0.5rem',
+                          border: '1px solid #d1d5db',
+                          borderRadius: '0.375rem',
+                          fontSize: '0.95rem'
+                        }}
+                      >
+                        <option value="">{language === 'en' ? 'Select Salesman' : 'সেলসম্যান নির্বাচন করুন'}</option>
+                        {salesEmployees.map((emp) => (
+                          <option key={emp._id} value={emp._id}>
+                            {emp.name} {emp.employeeId ? `(${emp.employeeId})` : ''}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                    <div className="admin-form-group">
+                      <label>{language === 'en' ? 'Photo Upload' : 'ছবি আপলোড'}</label>
+                      <input
+                        type="file"
+                        accept="image/*"
+                        onChange={async (e) => {
+                          const file = e.target.files?.[0]
+                          if (!file) return
+                          try {
+                            const base64 = await fileToBase64(file)
+                            setNewDealer({ ...newDealer, photo: base64 })
+                          } catch (err) {
+                            console.error('Dealer photo upload failed', err)
+                          }
+                        }}
+                      />
+                      {newDealer.photo && (
+                        <p style={{ marginTop: '0.35rem', fontSize: '0.8rem', color: '#16a34a' }}>
+                          {language === 'en' ? 'Photo ready' : 'ছবি প্রস্তুত'}
+                        </p>
+                      )}
+                    </div>
+                    <div className="admin-form-group">
+                      <label>{language === 'en' ? 'Agreement Paper Upload' : 'চুক্তিপত্র আপলোড'}</label>
+                      <input
+                        type="file"
+                        accept="application/pdf,image/*"
+                        onChange={async (e) => {
+                          const file = e.target.files?.[0]
+                          if (!file) return
+                          try {
+                            const base64 = await fileToBase64(file)
+                            setNewDealer({ ...newDealer, agreement: base64 })
+                          } catch (err) {
+                            console.error('Agreement upload failed', err)
+                          }
+                        }}
+                      />
+                      {newDealer.agreement && (
+                        <p style={{ marginTop: '0.35rem', fontSize: '0.8rem', color: '#16a34a' }}>
+                          {language === 'en' ? 'Agreement ready' : 'চুক্তি প্রস্তুত'}
+                        </p>
+                      )}
+                    </div>
+                    <div style={{ gridColumn: '1 / -1', display: 'flex', gap: '0.5rem' }}>
+                      <button type="submit" className="admin-save-btn">{adminContent.save}</button>
+                      <button
+                        type="button"
+                        className="admin-remove-btn"
+                        onClick={() => { 
+                          setShowDealerForm(false); 
+                          setDealerStatus(''); 
+                          setNewDealer({
+                            dealerId: getNextDealerId(),
+                            name: '',
+                            phone: '',
+                            email: '',
+                            address: '',
+                            photo: '',
+                            nid: '',
+                            tradeLicense: '',
+                            pesticideLicense: '',
+                            area: '',
+                            agreement: '',
+                            assignedTo: '',
+                            assignedToName: '',
+                            assignedToId: ''
+                          }) 
+                        }}
+                      >
+                        {language === 'en' ? 'Close' : 'বন্ধ করুন'}
+                      </button>
+                    </div>
+                  </form>
+                  </div>
+                </div>
+                </div>
+              )}
               <div className="admin-table-container">
+                <div className="admin-search-bar">
+                  <input 
+                    type="text" 
+                    placeholder={language === 'en' ? 'Search dealers...' : 'ডিলার খুঁজুন...'} 
+                    value={dealerSearch || ''}
+                    onChange={(e) => setDealerSearch(e.target.value)}
+                  />
+                </div>
                 <table className="admin-table">
                   <thead>
                     <tr>
-                      <th>{language === 'en' ? 'Customer Name' : 'গ্রাহকের নাম'}</th>
-                      <th>{language === 'en' ? 'Email' : 'ইমেইল'}</th>
-                      <th>{language === 'en' ? 'Phone' : 'ফোন'}</th>
-                      <th>{language === 'en' ? 'Status' : 'স্ট্যাটাস'}</th>
+                      <th 
+                        onClick={() => handleSortDealers('dealerId')}
+                        style={{ cursor: 'pointer', userSelect: 'none' }}
+                      >
+                        {language === 'en' ? 'Dealer ID' : 'ডিলার আইডি'}
+                        {dealerSortField === 'dealerId' && (dealerSortDirection === 'asc' ? ' ↑' : ' ↓')}
+                      </th>
+                      <th 
+                        onClick={() => handleSortDealers('name')}
+                        style={{ cursor: 'pointer', userSelect: 'none' }}
+                      >
+                        {language === 'en' ? 'Dealer Name' : 'ডিলারের নাম'}
+                        {dealerSortField === 'name' && (dealerSortDirection === 'asc' ? ' ↑' : ' ↓')}
+                      </th>
+                      <th 
+                        onClick={() => handleSortDealers('phone')}
+                        style={{ cursor: 'pointer', userSelect: 'none' }}
+                      >
+                        {language === 'en' ? 'Phone' : 'ফোন'}
+                        {dealerSortField === 'phone' && (dealerSortDirection === 'asc' ? ' ↑' : ' ↓')}
+                      </th>
+                      <th 
+                        onClick={() => handleSortDealers('email')}
+                        style={{ cursor: 'pointer', userSelect: 'none' }}
+                      >
+                        {language === 'en' ? 'Email' : 'ইমেইল'}
+                        {dealerSortField === 'email' && (dealerSortDirection === 'asc' ? ' ↑' : ' ↓')}
+                      </th>
+                      <th 
+                        onClick={() => handleSortDealers('area')}
+                        style={{ cursor: 'pointer', userSelect: 'none' }}
+                      >
+                        {language === 'en' ? 'Area' : 'এলাকা'}
+                        {dealerSortField === 'area' && (dealerSortDirection === 'asc' ? ' ↑' : ' ↓')}
+                      </th>
+                      <th 
+                        onClick={() => handleSortDealers('salesman')}
+                        style={{ cursor: 'pointer', userSelect: 'none' }}
+                      >
+                        {language === 'en' ? 'Salesman' : 'সেলসম্যান'}
+                        {dealerSortField === 'salesman' && (dealerSortDirection === 'asc' ? ' ↑' : ' ↓')}
+                      </th>
+                      <th 
+                        onClick={() => handleSortDealers('dueAmount')}
+                        style={{ cursor: 'pointer', userSelect: 'none' }}
+                      >
+                        {language === 'en' ? 'Due Amount' : 'বকেয়া পরিমাণ'}
+                        {dealerSortField === 'dueAmount' && (dealerSortDirection === 'asc' ? ' ↑' : ' ↓')}
+                      </th>
                       <th>{language === 'en' ? 'Actions' : 'কার্যক্রম'}</th>
                     </tr>
                   </thead>
                   <tbody>
-                    <tr>
-                      <td colSpan="5" style={{ textAlign: 'center', padding: '2rem' }}>
-                        {adminContent.noData}
-                      </td>
-                    </tr>
+                    {sortedDealers.length === 0 ? (
+                      <tr>
+                        <td colSpan="8" style={{ textAlign: 'center', padding: '2rem' }}>
+                          {adminContent.noData}
+                        </td>
+                      </tr>
+                    ) : (
+                      sortedDealers.map((d) => {
+                        // Calculate due amount for this dealer (exclude cancelled orders)
+                        const dealerOrders = (orders || []).filter(order => 
+                          order.dealerId === d.dealerId && order.status !== 'Cancelled'
+                        )
+                        const dueAmount = dealerOrders.reduce((sum, order) => {
+                          const due = order.dueAmount !== undefined 
+                            ? parseFloat(order.dueAmount) 
+                            : Math.max(0, parseFloat(order.totalPrice || 0) - parseFloat(order.paidAmount || 0))
+                          return sum + due
+                        }, 0)
+                        
+                        return (
+                          <tr key={d.id}>
+                            <td>{d.dealerId}</td>
+                            <td>{d.name}</td>
+                            <td>{d.phone}</td>
+                            <td>{d.email}</td>
+                            <td>{d.area}</td>
+                            <td>{d.assignedToName || d.assignedToId || '-'}</td>
+                            <td style={{ 
+                              fontWeight: 700, 
+                              color: dueAmount > 0 ? '#c2410c' : '#15803d' 
+                            }}>
+                              ৳{Number(dueAmount || 0).toLocaleString()}
+                            </td>
+                            <td style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
+                              <button
+                                className="admin-add-btn"
+                                style={{ padding: '0.35rem 0.75rem', fontSize: '0.9rem' }}
+                                onClick={() => {
+                                  setViewingDealer(d)
+                                  setIsEditingDealer(false)
+                                  setEditingDealerData(null)
+                                  // Show dealer details by default, hide orders section
+                                  setShowDealerOrders(false)
+                                }}
+                              >
+                                {language === 'en' ? 'View' : 'দেখুন'}
+                              </button>
+                            </td>
+                          </tr>
+                        )
+                      })
+                    )}
                   </tbody>
                 </table>
               </div>
+
+              {viewingDealer && (
+                <div
+                  style={{
+                    position: 'fixed',
+                  top: 0,
+                  left: 0,
+                  right: 0,
+                  bottom: 0,
+                  backgroundColor: 'rgba(0, 0, 0, 0.5)',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                  zIndex: 1000,
+                    padding: '1rem'
+                  }}
+                onClick={() => setViewingDealer(null)}
+                >
+                  <div
+                    style={{
+                    position: 'relative',
+                    background: 'linear-gradient(135deg, #f8fafc 0%, #eef2ff 100%)',
+                    borderRadius: '0.75rem',
+                    padding: '1.5rem',
+                    maxWidth: '900px',
+                    width: '100%',
+                      maxHeight: '90vh',
+                      overflowY: 'auto',
+                    boxShadow: '0 25px 50px -12px rgba(0,0,0,0.25)'
+                    }}
+                  onClick={(e) => e.stopPropagation()}
+                  >
+                  <div
+                        style={{
+                      position: 'absolute',
+                      inset: 0,
+                      pointerEvents: 'none',
+                      overflow: 'hidden',
+                      borderRadius: '0.75rem'
+                    }}
+                  >
+                    <div
+                      style={{
+                        position: 'absolute',
+                        width: '260px',
+                        height: '260px',
+                        top: '-120px',
+                        left: '-80px',
+                        background: 'radial-gradient(circle at 30% 30%, rgba(59,130,246,0.25), transparent 60%)',
+                        filter: 'blur(20px)'
+                        }}
+                    />
+                    <div
+                      style={{
+                        position: 'absolute',
+                        width: '240px',
+                        height: '240px',
+                        bottom: '-140px',
+                        right: '-100px',
+                        background: 'radial-gradient(circle at 70% 70%, rgba(16,185,129,0.22), transparent 60%)',
+                        filter: 'blur(20px)'
+                      }}
+                    />
+                    </div>
+
+                    <div
+                      style={{
+                      position: 'relative',
+                        display: 'flex',
+                      justifyContent: 'space-between',
+                        alignItems: 'center',
+                      marginBottom: '1.5rem',
+                      gap: '1rem'
+                    }}
+                  >
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', flexWrap: 'wrap' }}>
+                      <div
+                        style={{
+                          width: 80,
+                          height: 80,
+                          borderRadius: '50%',
+                          overflow: 'hidden',
+                          border: '3px solid rgba(255,255,255,0.9)',
+                          boxShadow: '0 10px 30px rgba(0,0,0,0.12)',
+                          background: '#e5e7eb',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          fontWeight: 700,
+                          fontSize: '1.5rem',
+                          color: '#111827'
+                        }}
+                      >
+                        {(isEditingDealer ? editingDealerData?.photo : viewingDealer.photo) ? (
+                          <img
+                            src={isEditingDealer ? editingDealerData?.photo : viewingDealer.photo}
+                            alt={editingDealerData?.name || viewingDealer.name}
+                            style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                            onError={(e) => (e.target.style.display = 'none')}
+                          />
+                        ) : (
+                          (editingDealerData?.name || viewingDealer.name || 'D').charAt(0)
+                        )}
+                      </div>
+                        <div>
+                        <h2
+                          style={{
+                            margin: 0,
+                            fontSize: '1.5rem',
+                            fontWeight: 800,
+                            color: '#0f172a'
+                          }}
+                        >
+                          {viewingDealer.name || (language === 'en' ? 'Dealer' : 'ডিলার')}
+                        </h2>
+                        <p style={{ margin: '0.25rem 0 0 0', color: '#475569', fontWeight: 700 }}>
+                          {viewingDealer.dealerId || 'N/A'}
+                        </p>
+                        </div>
+                    </div>
+                    <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
+                      {!isEditingDealer && (
+                        <button
+                          onClick={() => {
+                            if (showDealerOrders) {
+                              setShowDealerOrders(false)
+                            } else {
+                              handleShowDealerOrders()
+                            }
+                          }}
+                          style={{
+                            padding: '0.45rem 0.85rem',
+                            backgroundColor: '#0ea5e9',
+                            color: 'white',
+                            border: 'none',
+                            borderRadius: '0.5rem',
+                            cursor: 'pointer',
+                            fontWeight: 700,
+                            boxShadow: '0 10px 20px rgba(14,165,233,0.35)'
+                          }}
+                        >
+                          {showDealerOrders 
+                            ? (language === 'en' ? 'Back' : 'পেছনে যান')
+                            : (language === 'en' ? 'Orders' : 'অর্ডার')}
+                        </button>
+                      )}
+                      {!isEditingDealer && (
+                        <button
+                          onClick={() => {
+                            setIsEditingDealer(true)
+                            setEditingDealerData(viewingDealer)
+                          }}
+                          style={{
+                            padding: '0.5rem 0.9rem',
+                            backgroundColor: '#3b82f6',
+                            color: 'white',
+                            border: 'none',
+                            borderRadius: '0.5rem',
+                            cursor: 'pointer',
+                            fontWeight: 700,
+                            boxShadow: '0 10px 20px rgba(59,130,246,0.35)'
+                          }}
+                        >
+                          {language === 'en' ? 'Edit' : 'সম্পাদনা'}
+                        </button>
+                      )}
+                      {isEditingDealer && (
+                        <>
+                          <button
+                            onClick={handleSaveDealerEdit}
+                            disabled={savingDealer}
+                            style={{
+                              padding: '0.5rem 0.9rem',
+                              backgroundColor: '#16a34a',
+                              color: 'white',
+                              border: 'none',
+                              borderRadius: '0.5rem',
+                              cursor: 'pointer',
+                              fontWeight: 700,
+                              opacity: savingDealer ? 0.7 : 1
+                            }}
+                          >
+                            {savingDealer
+                              ? language === 'en'
+                                ? 'Saving...'
+                                : 'সংরক্ষণ হচ্ছে...'
+                              : language === 'en'
+                                ? 'Save'
+                                : 'সংরক্ষণ'}
+                          </button>
+                          <button
+                            onClick={() => {
+                              setIsEditingDealer(false)
+                              setEditingDealerData(null)
+                            }}
+                            style={{
+                              padding: '0.5rem 0.9rem',
+                              backgroundColor: '#e2e8f0',
+                              color: '#0f172a',
+                              border: 'none',
+                              borderRadius: '0.5rem',
+                              cursor: 'pointer',
+                              fontWeight: 700
+                            }}
+                          >
+                            {language === 'en' ? 'Cancel' : 'বাতিল'}
+                          </button>
+                        </>
+                      )}
+                      {isEditingDealer && (
+                        <button
+                          onClick={handleDeleteDealer}
+                          style={{
+                            padding: '0.45rem 0.85rem',
+                            backgroundColor: '#ef4444',
+                            color: 'white',
+                            border: 'none',
+                            borderRadius: '0.5rem',
+                            cursor: 'pointer',
+                            fontWeight: 700,
+                            boxShadow: '0 10px 20px rgba(239,68,68,0.35)'
+                          }}
+                        >
+                          {language === 'en' ? 'Delete' : 'মুছুন'}
+                        </button>
+                      )}
+                      <button
+                        onClick={() => setViewingDealer(null)}
+                        style={{
+                          background: '#e2e8f0',
+                          border: 'none',
+                          padding: '0.4rem 0.65rem',
+                          borderRadius: '0.375rem',
+                          cursor: 'pointer',
+                          fontWeight: 700,
+                          color: '#475569'
+                        }}
+                      >
+                        ×
+                      </button>
+                      </div>
+                    </div>
+
+                  {showDealerOrders && (
+                    <div className="admin-card" style={{ marginTop: '0.5rem' }}>
+                      {(() => {
+                        const isAdmin = (userRole || '').toLowerCase() === 'admin'
+                        return (
+                          <>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.75rem' }}>
+                        <div>
+                          <h3 style={{ margin: 0 }}>{language === 'en' ? 'Dealer Orders' : 'ডিলারের অর্ডার'}</h3>
+                          
+                        </div>
+                       
+                      </div>
+
+                      {dealerOrdersLoading && (
+                        <div style={{ padding: '0.75rem', color: '#475569' }}>
+                          {language === 'en' ? 'Loading orders...' : 'অর্ডার লোড হচ্ছে...'}
+                        </div>
+                      )}
+                      {dealerOrdersStatus && !dealerOrdersLoading && (
+                        <div style={{
+                          padding: '0.75rem',
+                          marginBottom: '0.75rem',
+                          borderRadius: '0.375rem',
+                          backgroundColor: '#f1f5f9',
+                          color: '#475569'
+                        }}>
+                          {dealerOrdersStatus}
+                        </div>
+                      )}
+
+                      {!dealerOrdersLoading && dealerOrders.length > 0 && (
+                        <>
+                          {(() => {
+                            const totalAmount = dealerOrders.reduce((sum, order) => {
+                              const price = parseFloat(order.totalPrice) || 0
+                              return sum + price
+                            }, 0)
+                            
+                            const totalPaid = dealerOrders.reduce((sum, order) => {
+                              // Match the table display logic: order.paidAmount ? parseFloat(order.paidAmount) : 0
+                              const paid = order.paidAmount ? parseFloat(order.paidAmount) || 0 : 0
+                              return sum + paid
+                            }, 0)
+                            
+                            const totalDue = dealerOrders.reduce((sum, order) => {
+                              // Match the table display logic exactly
+                              const totalPrice = parseFloat(order.totalPrice) || 0
+                              const paidAmount = order.paidAmount ? parseFloat(order.paidAmount) || 0 : 0
+                              const due = order.dueAmount !== undefined && order.dueAmount !== null
+                                ? parseFloat(order.dueAmount) || 0
+                                : Math.max(0, totalPrice - paidAmount)
+                              return sum + due
+                            }, 0)
+                            
+                            return (
+                              <div style={{
+                                display: 'grid',
+                                gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))',
+                                gap: '1rem',
+                                marginBottom: '1.5rem'
+                              }}>
+                                <div style={{
+                                  padding: '1rem',
+                                  borderRadius: '0.5rem',
+                                  backgroundColor: '#ffffff',
+                                  border: '1px solid #e5e7eb'
+                                }}>
+                                  <div style={{ fontSize: '0.875rem', color: '#6b7280', fontWeight: 700, marginBottom: '0.5rem' }}>
+                                    {language === 'en' ? 'Total Amount' : 'মোট পরিমাণ'}
+                                  </div>
+                                  <div style={{ fontSize: '1.5rem', fontWeight: 800, color: '#0f172a' }}>
+                                    ৳{Number(totalAmount || 0).toLocaleString()}
+                                  </div>
+                                </div>
+                                <div style={{
+                                  padding: '1rem',
+                                  borderRadius: '0.5rem',
+                                  backgroundColor: '#f0fdf4',
+                                  border: '1px solid #dcfce7'
+                                }}>
+                                  <div style={{ fontSize: '0.875rem', color: '#15803d', fontWeight: 700, marginBottom: '0.5rem' }}>
+                                    {language === 'en' ? 'Total Paid' : 'মোট পরিশোধিত'}
+                                  </div>
+                                  <div style={{ fontSize: '1.5rem', fontWeight: 800, color: '#166534' }}>
+                                    ৳{Number(totalPaid || 0).toLocaleString()}
+                                  </div>
+                                </div>
+                                <div style={{
+                                  padding: '1rem',
+                                  borderRadius: '0.5rem',
+                                  backgroundColor: '#fff7ed',
+                                  border: '1px solid #fed7aa'
+                                }}>
+                                  <div style={{ fontSize: '0.875rem', color: '#c2410c', fontWeight: 700, marginBottom: '0.5rem' }}>
+                                    {language === 'en' ? 'Total Due' : 'মোট বকেয়া'}
+                                  </div>
+                                  <div style={{ fontSize: '1.5rem', fontWeight: 800, color: '#9a3412' }}>
+                                    ৳{Number(totalDue || 0).toLocaleString()}
+                                  </div>
+                                </div>
+                                {isAdmin && (
+                                  <div style={{
+                                    padding: '1rem',
+                                    borderRadius: '0.5rem',
+                                    backgroundColor: '#eff6ff',
+                                    border: '1px solid #bfdbfe'
+                                  }}>
+                                    <div style={{ fontSize: '0.875rem', color: '#1e40af', fontWeight: 700, marginBottom: '0.5rem' }}>
+                                      {language === 'en' ? 'Add Collection' : 'সংগ্রহ যোগ করুন'}
+                                    </div>
+                                    <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center', flexWrap: 'wrap' }}>
+                                      <input
+                                        type="number"
+                                        step="0.01"
+                                        min="0"
+                                        value={addCollectionAmount}
+                                        onChange={(e) => setAddCollectionAmount(e.target.value)}
+                                        onKeyDown={(e) => {
+                                          if (e.key === 'Enter') {
+                                            e.preventDefault()
+                                            handleAddCollection(addCollectionAmount)
+                                          }
+                                        }}
+                                        placeholder={language === 'en' ? 'Enter amount' : 'পরিমাণ লিখুন'}
+                                        style={{
+                                          flex: 1,
+                                          minWidth: '120px',
+                                          padding: '0.5rem',
+                                          border: '1px solid #3b82f6',
+                                          borderRadius: '0.375rem',
+                                          fontSize: '1rem',
+                                          fontWeight: 600,
+                                          color: '#1e40af'
+                                        }}
+                                      />
+                                      <button
+                                        onClick={() => handleAddCollection(addCollectionAmount)}
+                                        disabled={savingCollection || !addCollectionAmount || parseFloat(addCollectionAmount) <= 0}
+                                        style={{
+                                          padding: '0.5rem 1rem',
+                                          backgroundColor: savingCollection ? '#9ca3af' : '#3b82f6',
+                                          color: 'white',
+                                          border: 'none',
+                                          borderRadius: '0.375rem',
+                                          fontSize: '0.875rem',
+                                          fontWeight: 700,
+                                          cursor: savingCollection || !addCollectionAmount || parseFloat(addCollectionAmount) <= 0 ? 'not-allowed' : 'pointer',
+                                          whiteSpace: 'nowrap'
+                                        }}
+                                      >
+                                        {savingCollection 
+                                          ? (language === 'en' ? 'Adding...' : 'যোগ করা হচ্ছে...')
+                                          : (language === 'en' ? 'Add' : 'যোগ করুন')}
+                                      </button>
+                                    </div>
+                                  </div>
+                                )}
+                              </div>
+                            )
+                          })()}
+                          
+                          <div className="admin-table-container" style={{ width: '100%', overflowX: 'auto' }}>
+                          <table className="admin-table" style={{ width: '100%', fontSize: '0.875rem' }}>
+                            <thead>
+                              <tr>
+                                <th style={{ padding: '0.5rem', whiteSpace: 'nowrap' }}>{language === 'en' ? 'Date' : 'তারিখ'}</th>
+                                <th style={{ padding: '0.5rem', whiteSpace: 'nowrap' }}>{language === 'en' ? 'Order ID' : 'অর্ডার আইডি'}</th>
+                                <th style={{ padding: '0.5rem', whiteSpace: 'nowrap' }}>{language === 'en' ? 'Product' : 'পণ্য'}</th>
+                                <th style={{ padding: '0.5rem', whiteSpace: 'nowrap' }}>{language === 'en' ? 'Variant' : 'ভ্যারিয়েন্ট'}</th>
+                                <th style={{ padding: '0.5rem', whiteSpace: 'nowrap' }}>{language === 'en' ? 'Qty' : 'পরিমাণ'}</th>
+                                <th style={{ padding: '0.5rem', whiteSpace: 'nowrap' }}>{language === 'en' ? 'Status' : 'স্ট্যাটাস'}</th>
+                                <th style={{ padding: '0.5rem', whiteSpace: 'nowrap' }}>{language === 'en' ? 'Total' : 'মোট'}</th>
+                                <th style={{ padding: '0.5rem', whiteSpace: 'nowrap' }}>{language === 'en' ? 'Paid Amount' : 'পরিশোধিত পরিমাণ'}</th>
+                                <th style={{ padding: '0.5rem', whiteSpace: 'nowrap' }}>{language === 'en' ? 'Due Amount' : 'বাকি পরিমাণ'}</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {dealerOrders.map((order) => (
+                                <tr key={order._id}>
+                                  <td style={{ padding: '0.5rem', whiteSpace: 'nowrap' }}>{order.createdAt ? new Date(order.createdAt).toLocaleDateString() : '-'}</td>
+                                  <td style={{ padding: '0.5rem', whiteSpace: 'nowrap' }}>{order.orderId || '-'}</td>
+                                  <td style={{ padding: '0.5rem', whiteSpace: 'nowrap' }}>{order.productName || order.product?.name || '-'}</td>
+                                  <td style={{ padding: '0.5rem', whiteSpace: 'nowrap' }}>{order.variant?.value ? (order.variant.name || order.variant.value) : '-'}</td>
+                                  <td style={{ padding: '0.5rem', whiteSpace: 'nowrap' }}>{order.quantity || 0}</td>
+                                  <td style={{ padding: '0.5rem', whiteSpace: 'nowrap' }}>{order.status || 'Pending'}</td>
+                                  <td style={{ padding: '0.5rem', whiteSpace: 'nowrap' }}>৳{order.totalPrice ? order.totalPrice.toFixed(2) : '0.00'}</td>
+                                  <td style={{ padding: '0.5rem', whiteSpace: 'nowrap', fontWeight: 600, color: '#16a34a' }}>
+                                    ৳{order.paidAmount ? parseFloat(order.paidAmount).toFixed(2) : '0.00'}
+                                  </td>
+                                  <td style={{ padding: '0.5rem', whiteSpace: 'nowrap', fontWeight: 600, color: (() => {
+                                    const due = order.dueAmount !== undefined 
+                                      ? parseFloat(order.dueAmount) 
+                                      : Math.max(0, parseFloat(order.totalPrice || 0) - parseFloat(order.paidAmount || 0))
+                                    return due > 0 ? '#dc2626' : '#16a34a'
+                                  })() }}>
+                                    ৳{(() => {
+                                      const due = order.dueAmount !== undefined 
+                                        ? parseFloat(order.dueAmount) 
+                                        : Math.max(0, parseFloat(order.totalPrice || 0) - parseFloat(order.paidAmount || 0))
+                                      return due.toFixed(2)
+                                    })()}
+                                  </td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
+                        </>
+                      )}
+                          </>
+                        )
+                      })()}
+                    </div>
+                  )}
+
+                  <div
+                    style={{
+                      display: showDealerOrders ? 'none' : 'grid',
+                      gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))',
+                      gap: '1rem',
+                      position: 'relative',
+                      zIndex: 1
+                    }}
+                  >
+                      {[
+                      { key: 'dealerId', label: language === 'en' ? 'Dealer ID' : 'ডিলার আইডি' },
+                      { key: 'name', label: language === 'en' ? 'Dealer Name' : 'ডিলারের নাম' },
+                      { key: 'phone', label: language === 'en' ? 'Phone' : 'ফোন' },
+                      { key: 'email', label: language === 'en' ? 'Email' : 'ইমেইল' },
+                      { key: 'area', label: language === 'en' ? 'Area' : 'এলাকা' },
+                      { key: 'nid', label: language === 'en' ? 'NID' : 'এনআইডি' },
+                      { key: 'tradeLicense', label: language === 'en' ? 'Trade License' : 'ট্রেড লাইসেন্স' },
+                      { key: 'pesticideLicense', label: language === 'en' ? 'Pesticides License' : 'কীটনাশক লাইসেন্স' }
+                      ].map((item) => (
+                      <div
+                        key={item.label}
+                        style={{
+                          padding: '1rem',
+                          backgroundColor: '#f9fafb',
+                          borderRadius: '0.375rem'
+                        }}
+                      >
+                        <div style={{ fontSize: '0.875rem', color: '#6b7280', fontWeight: 600 }}>{item.label}</div>
+                        {isEditingDealer ? (
+                          <input
+                            type="text"
+                            value={editingDealerData?.[item.key] || ''}
+                            onChange={(e) =>
+                              setEditingDealerData({
+                                ...editingDealerData,
+                                [item.key]: e.target.value
+                              })
+                            }
+                            style={{
+                              marginTop: '0.5rem',
+                              width: '100%',
+                              padding: '0.5rem',
+                              borderRadius: '0.375rem',
+                              border: '1px solid #d1d5db',
+                              fontSize: '1rem',
+                              color: '#111827'
+                            }}
+                          />
+                        ) : (
+                          <p style={{ margin: '0.5rem 0 0 0', fontSize: '1rem', fontWeight: 600, color: '#111827' }}>
+                            {viewingDealer?.[item.key] || 'N/A'}
+                          </p>
+                        )}
+                        </div>
+                      ))}
+
+                    <div
+                      style={{
+                        gridColumn: '1 / -1',
+                        padding: '1rem',
+                        backgroundColor: '#f9fafb',
+                        borderRadius: '0.375rem'
+                      }}
+                    >
+                      <div style={{ fontSize: '0.875rem', color: '#6b7280', fontWeight: 600 }}>
+                          {language === 'en' ? 'Address' : 'ঠিকানা'}
+                        </div>
+                      {isEditingDealer ? (
+                        <textarea
+                          value={editingDealerData?.address || ''}
+                          onChange={(e) =>
+                            setEditingDealerData({
+                              ...editingDealerData,
+                              address: e.target.value
+                            })
+                          }
+                          rows={3}
+                          style={{
+                            marginTop: '0.5rem',
+                            width: '100%',
+                            padding: '0.5rem',
+                            borderRadius: '0.375rem',
+                            border: '1px solid #d1d5db',
+                            fontSize: '1rem',
+                            fontFamily: 'inherit',
+                            color: '#111827',
+                            resize: 'vertical'
+                          }}
+                        />
+                      ) : (
+                        <p
+                          style={{
+                            margin: '0.5rem 0 0 0',
+                            fontSize: '1rem',
+                            fontWeight: 600,
+                            color: '#111827',
+                            whiteSpace: 'pre-wrap'
+                          }}
+                        >
+                          {viewingDealer.address || 'N/A'}
+                        </p>
+                      )}
+                    </div>
+                    <div
+                      style={{
+                        padding: '1rem',
+                        backgroundColor: '#f9fafb',
+                        borderRadius: '0.375rem'
+                      }}
+                    >
+                      <div style={{ fontSize: '0.875rem', color: '#6b7280', fontWeight: 600 }}>
+                        {language === 'en' ? 'Assign Salesman' : 'সেলসম্যান নির্ধারণ'}
+                      </div>
+                      {isEditingDealer ? (
+                        <select
+                          value={editingDealerData?.assignedTo || ''}
+                          onChange={(e) => {
+                            setEditingDealerData({
+                              ...editingDealerData,
+                              assignedTo: e.target.value,
+                              assignedToName: '',
+                              assignedToId: ''
+                            })
+                          }}
+                          style={{
+                            marginTop: '0.5rem',
+                            width: '100%',
+                            padding: '0.5rem',
+                            borderRadius: '0.375rem',
+                            border: '1px solid #d1d5db',
+                            fontSize: '1rem',
+                            color: '#111827'
+                          }}
+                        >
+                          <option value="">{language === 'en' ? 'Select Salesman' : 'সেলসম্যান নির্বাচন করুন'}</option>
+                          {salesEmployees.map((emp) => (
+                            <option key={emp._id} value={emp._id}>
+                              {emp.name} {emp.employeeId ? `(${emp.employeeId})` : ''}
+                            </option>
+                          ))}
+                        </select>
+                      ) : (
+                        <p style={{ margin: '0.5rem 0 0 0', fontSize: '1rem', fontWeight: 600, color: '#111827' }}>
+                          {(viewingDealer.assignedToName || viewingDealer.assignedToId) || (language === 'en' ? 'Unassigned' : 'নির্ধারিত নয়')}
+                        </p>
+                      )}
+                    </div>
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: '1rem' }}>
+                      <div
+                        style={{
+                          padding: '1.25rem',
+                          background: 'linear-gradient(180deg, #f8fbff 0%, #f2f7ff 100%)',
+                          borderRadius: '0.75rem',
+                          border: '1px solid #e5e7eb',
+                          boxShadow: '0 15px 35px rgba(59,130,246,0.08)',
+                          display: 'flex',
+                          flexDirection: 'column',
+                          gap: '0.75rem'
+                        }}
+                      >
+                        <div style={{ fontSize: '0.95rem', color: '#475569', fontWeight: 700 }}>
+                          {language === 'en' ? 'Agreement' : 'চুক্তি'}
+                        </div>
+                        {(isEditingDealer ? editingDealerData?.agreement : viewingDealer.agreement) ? (
+                          <a
+                            href={isEditingDealer ? editingDealerData?.agreement : viewingDealer.agreement}
+                            download={`${viewingDealer.dealerId || 'agreement'}.pdf`}
+                            style={{
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              justifyContent: 'center',
+                              padding: '0.7rem 0.95rem',
+                              background: '#3b82f6',
+                              color: 'white',
+                              fontWeight: 800,
+                              borderRadius: '0.6rem',
+                              textDecoration: 'none',
+                              boxShadow: '0 10px 24px rgba(59,130,246,0.28)'
+                            }}
+                          >
+                            {language === 'en' ? 'Download Agreement' : 'চুক্তি ডাউনলোড করুন'}
+                          </a>
+                        ) : (
+                          <div style={{ color: '#94a3b8', fontWeight: 700 }}>
+                            {language === 'en' ? 'No agreement uploaded' : 'কোনো চুক্তি নেই'}
+                          </div>
+                        )}
+                        {isEditingDealer && (
+                          <input
+                            type="file"
+                            accept=".pdf,.doc,.docx,.jpg,.jpeg,.png"
+                            onChange={async (e) => {
+                              const file = e.target.files?.[0]
+                              if (!file) return
+                              try {
+                                const base64 = await fileToBase64(file)
+                                setEditingDealerData({
+                                  ...editingDealerData,
+                                  agreement: base64
+                                })
+                              } catch (err) {
+                                console.error('Agreement upload failed', err)
+                              }
+                            }}
+                            style={{
+                              width: '100%',
+                              padding: '0.55rem',
+                              borderRadius: '0.5rem',
+                              border: '1px solid #d1d5db',
+                              backgroundColor: 'white',
+                              cursor: 'pointer',
+                              fontWeight: 600,
+                              opacity: 0.65
+                            }}
+                          />
+                        )}
+                      </div>
+
+                      <div
+                        style={{
+                          padding: '1rem',
+                          backgroundColor: '#f9fafb',
+                          borderRadius: '0.375rem',
+                          border: '1px solid #e5e7eb',
+                          textAlign: 'center'
+                        }}
+                      >
+                        <div style={{ fontSize: '0.875rem', color: '#6b7280', fontWeight: 700, marginBottom: '0.5rem' }}>
+                          {language === 'en' ? 'Photo' : 'ছবি'}
+                        </div>
+                        {(isEditingDealer ? editingDealerData?.photo : viewingDealer.photo) ? (
+                          <img
+                            src={isEditingDealer ? editingDealerData?.photo : viewingDealer.photo}
+                            alt={editingDealerData?.name || viewingDealer.name}
+                            style={{ maxWidth: '240px', maxHeight: '240px', borderRadius: '0.75rem', border: '2px solid #e5e7eb', objectFit: 'cover' }}
+                            onError={(e) => (e.target.style.display = 'none')}
+                          />
+                        ) : (
+                          <div style={{ fontWeight: 700, color: '#94a3b8' }}>
+                            {language === 'en' ? 'No photo' : 'ছবি নেই'}
+                          </div>
+                        )}
+                        {isEditingDealer && (
+                          <div style={{ marginTop: '0.75rem' }}>
+                            <input
+                              type="file"
+                              accept="image/*"
+                              onChange={async (e) => {
+                                const file = e.target.files?.[0]
+                                if (!file) return
+                                try {
+                                  const base64 = await fileToBase64(file)
+                                  setEditingDealerData({
+                                    ...editingDealerData,
+                                    photo: base64
+                                  })
+                                } catch (err) {
+                                  console.error('Photo upload failed', err)
+                                }
+                              }}
+                              style={{
+                                width: '100%',
+                                padding: '0.5rem',
+                                borderRadius: '0.375rem',
+                                border: '1px solid #d1d5db',
+                                backgroundColor: 'white',
+                                cursor: 'pointer',
+                                opacity: 0.65
+                              }}
+                            />
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+                </div>
+              )}
             </div>
           )}
 
           {/* HR Tab */}
           {activeTab === 'hr' && (
             <div className="admin-tab-content">
-              <div className="admin-tab-header">
-                <h1 className="admin-page-title">{adminContent.hr}</h1>
+              <div className="admin-tab-header" style={{ gap: '0.75rem', flexWrap: 'wrap' }}>
+                <h1 className="admin-page-title" style={{ flex: 1 }}>{adminContent.hr}</h1>
+                <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
                 <button className="admin-add-btn" onClick={() => setShowEmployeeForm(true)}>
                   <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
                     <line x1="12" y1="5" x2="12" y2="19" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
@@ -3683,6 +7486,15 @@ const [userRole, setUserRole] = useState('Admin')
                   </svg>
                   {adminContent.addNew}
                 </button>
+                  <button
+                    type="button"
+                    onClick={() => loadEmployees()}
+                    className="admin-add-btn"
+                    style={{ backgroundColor: '#e2e8f0', color: '#0f172a' }}
+                  >
+                    {language === 'en' ? 'Refresh' : 'রিফ্রেশ'}
+                  </button>
+                </div>
               </div>
               <div className="admin-stats-grid">
                 <div className="admin-stat-card">
@@ -3723,11 +7535,101 @@ const [userRole, setUserRole] = useState('Admin')
               </div>
 
             {showEmployeeForm && (
-              <div className="admin-settings-section" style={{ marginTop: '1.5rem' }}>
-                <div className="admin-settings-card">
-                  <h3 style={{ marginTop: 0 }}>{language === 'en' ? 'Add Employee' : 'কর্মচারী যোগ করুন'}</h3>
+              <div style={{
+                position: 'fixed',
+                top: 0,
+                left: 0,
+                right: 0,
+                bottom: 0,
+                backgroundColor: 'rgba(0, 0, 0, 0.5)',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                zIndex: 1000,
+                padding: '1rem'
+              }} onClick={() => {
+                setShowEmployeeForm(false)
+                setEmployeeStatus('')
+                setGeneratedCredentials(null)
+              }}>
+                <div style={{
+                  position: 'relative',
+                  background: 'linear-gradient(135deg, #f8fafc 0%, #eef2ff 100%)',
+                  borderRadius: '0.75rem',
+                  padding: '2rem',
+                  maxWidth: '900px',
+                  width: '100%',
+                  maxHeight: '90vh',
+                  overflowY: 'auto',
+                  boxShadow: '0 25px 50px -12px rgba(0,0,0,0.25)'
+                }} onClick={(e) => e.stopPropagation()}>
+                  <div style={{
+                    position: 'absolute',
+                    inset: 0,
+                    pointerEvents: 'none',
+                    overflow: 'hidden',
+                    borderRadius: '0.75rem'
+                  }}>
+                    <div style={{
+                      position: 'absolute',
+                      width: '260px',
+                      height: '260px',
+                      top: '-120px',
+                      left: '-80px',
+                      background: 'radial-gradient(circle at 30% 30%, rgba(59,130,246,0.25), transparent 60%)',
+                      filter: 'blur(20px)'
+                    }} />
+                    <div style={{
+                      position: 'absolute',
+                      width: '240px',
+                      height: '240px',
+                      bottom: '-140px',
+                      right: '-100px',
+                      background: 'radial-gradient(circle at 70% 70%, rgba(16,185,129,0.22), transparent 60%)',
+                      filter: 'blur(20px)'
+                    }} />
+                  </div>
+
+                  <div style={{ position: 'relative', display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem', gap: '1rem' }}>
+                    <div>
+                      <h2 style={{ margin: 0, fontSize: '1.5rem', fontWeight: 800, color: '#0f172a' }}>
+                        {language === 'en' ? 'Add Employee' : 'কর্মচারী যোগ করুন'}
+                      </h2>
+                      <p style={{ margin: '0.25rem 0 0 0', color: '#475569', fontWeight: 600 }}>
+                        {language === 'en' ? 'Fill in employee details and save' : 'কর্মচারীর বিবরণ পূরণ করুন এবং সংরক্ষণ করুন'}
+                      </p>
+                    </div>
+                    <button
+                      onClick={() => {
+                        setShowEmployeeForm(false)
+                        setEmployeeStatus('')
+                        setGeneratedCredentials(null)
+                      }}
+                      style={{
+                        background: '#e2e8f0',
+                        border: 'none',
+                        padding: '0.4rem 0.65rem',
+                        borderRadius: '0.375rem',
+                        cursor: 'pointer',
+                        fontWeight: 700,
+                        color: '#475569'
+                      }}
+                    >
+                      ×
+                    </button>
+                  </div>
+
+                  <div style={{ position: 'relative', zIndex: 1 }}>
                   {employeeStatus && (
-                    <div style={{ marginBottom: '0.5rem', color: employeeStatus.includes('fail') || employeeStatus.includes('ব্যর্থ') ? '#dc2626' : '#16a34a', fontWeight: 600 }}>
+                    <div style={{
+                      padding: '0.75rem',
+                      marginBottom: '1rem',
+                      borderRadius: '0.5rem',
+                      border: employeeStatus.includes('fail') || employeeStatus.includes('ব্যর্থ') ? '1px solid #fecaca' : '1px solid #bbf7d0',
+                      backgroundColor: employeeStatus.includes('fail') || employeeStatus.includes('ব্যর্থ') ? '#fef2f2' : '#ecfdf3',
+                      color: employeeStatus.includes('fail') || employeeStatus.includes('ব্যর্থ') ? '#b91c1c' : '#065f46',
+                      fontWeight: 700
+                    }}>
                       {employeeStatus}
                     </div>
                   )}
@@ -3869,6 +7771,10 @@ const [userRole, setUserRole] = useState('Admin')
                       <input type="text" value={newEmployee.designation} onChange={(e) => setNewEmployee({ ...newEmployee, designation: e.target.value })} />
                     </div>
                     <div className="admin-form-group">
+                      <label>{language === 'en' ? 'Posting Area' : 'পোস্টিং এরিয়া'}</label>
+                      <input type="text" value={newEmployee.postingArea} onChange={(e) => setNewEmployee({ ...newEmployee, postingArea: e.target.value })} />
+                    </div>
+                    <div className="admin-form-group">
                       <label>{language === 'en' ? 'Upload Photo' : 'ছবি আপলোড করুন'}</label>
                       <input
                         type="file"
@@ -3914,6 +7820,7 @@ const [userRole, setUserRole] = useState('Admin')
                           bankBranch: newEmployee.bankBranch || '',
                           accountNumber: newEmployee.accountNumber || '',
                           department: newEmployee.department || '',
+                          postingArea: newEmployee.postingArea || '',
                           role: newEmployee.role || '',
                           designation: newEmployee.designation || '',
                           photo: newEmployee.photo || '',
@@ -3954,13 +7861,13 @@ const [userRole, setUserRole] = useState('Admin')
                           })
                           setEmployeeStatus(language === 'en' ? 'Employee created! Credentials generated below.' : 'কর্মচারী তৈরি হয়েছে! নিচে পরিচয়পত্র দেখুন।')
                         } else {
-                          setEmployeeStatus(language === 'en' ? 'Saved to database' : 'ডাটাবেজে সংরক্ষিত')
+                        setEmployeeStatus(language === 'en' ? 'Saved to database' : 'ডাটাবেজে সংরক্ষিত')
                         }
                         
-                        setNewEmployee({ name: '', email: '', phone: '', address: '', nid: '', document: '', emergencyContactName: '', emergencyContact: '', salary: '', salesTarget: '', bankName: '', bankBranch: '', accountNumber: '', department: '', role: '', designation: '', photo: '', status: 'Unpaid' })
+                        setNewEmployee({ name: '', email: '', phone: '', address: '', nid: '', document: '', emergencyContactName: '', emergencyContact: '', salary: '', salesTarget: '', bankName: '', bankBranch: '', accountNumber: '', department: '', postingArea: '', role: '', designation: '', photo: '', status: 'Unpaid' })
                         // Don't close form if credentials are shown
                         if (!data.data.generatedPassword) {
-                          setShowEmployeeForm(false)
+                        setShowEmployeeForm(false)
                         }
                       } catch (err) {
                         setEmployeeStatus(language === 'en' ? `Save failed: ${err.message}` : `সংরক্ষণ ব্যর্থ: ${err.message}`)
@@ -3976,56 +7883,97 @@ const [userRole, setUserRole] = useState('Admin')
                       {language === 'en' ? 'Cancel' : 'বাতিল'}
                     </button>
                   </div>
+                  </div>
                 </div>
               </div>
             )}
 
-            <div className="admin-stats-grid" style={{ marginTop: '1rem' }}>
-              <div className="admin-stat-card">
-                <div className="admin-stat-icon">
-                  <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                    <path d="M4 12l4 4 12-12" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-                  </svg>
-                </div>
-                <div className="admin-stat-info">
-                  <h3>{language === 'en' ? 'Sales Target' : 'বিক্রয় লক্ষ্য'}</h3>
-                  <p>
-                    {employees.length === 0
-                      ? '৳ 0'
-                      : `৳ ${employees.reduce((sum, e) => sum + (parseFloat(e.salesTarget) || 0), 0).toLocaleString()}`}
-                  </p>
-                </div>
-              </div>
-            </div>
-
             <div className="admin-table-container" style={{ marginTop: '1.5rem' }}>
+                <div className="admin-search-bar">
+                  <input 
+                    type="text" 
+                    placeholder={language === 'en' ? 'Search employees...' : 'কর্মচারী খুঁজুন...'} 
+                    value={employeeSearch || ''}
+                    onChange={(e) => setEmployeeSearch(e.target.value)}
+                  />
+                </div>
               <table className="admin-table">
                 <thead>
                   <tr>
-                    <th>{language === 'en' ? 'ID' : 'আইডি'}</th>
-                    <th>{language === 'en' ? 'Name' : 'নাম'}</th>
-                    <th>{language === 'en' ? 'Phone' : 'ফোন'}</th>
-                    <th>{language === 'en' ? 'Designation' : 'পদবি'}</th>
-                    <th>{language === 'en' ? 'Salary' : 'বেতন'}</th>
-                    <th>{language === 'en' ? 'Sales Target' : 'বিক্রয় লক্ষ্য'}</th>
-                    <th>{language === 'en' ? 'Salary Status' : 'বেতন স্থিতি'}</th>
+                    <th 
+                      onClick={() => handleSortEmployees('employeeId')}
+                      style={{ cursor: 'pointer', userSelect: 'none' }}
+                    >
+                      {language === 'en' ? 'ID' : 'আইডি'}
+                      {employeeSortField === 'employeeId' && (employeeSortDirection === 'asc' ? ' ↑' : ' ↓')}
+                    </th>
+                    <th 
+                      onClick={() => handleSortEmployees('name')}
+                      style={{ cursor: 'pointer', userSelect: 'none' }}
+                    >
+                      {language === 'en' ? 'Name' : 'নাম'}
+                      {employeeSortField === 'name' && (employeeSortDirection === 'asc' ? ' ↑' : ' ↓')}
+                    </th>
+                    <th 
+                      onClick={() => handleSortEmployees('phone')}
+                      style={{ cursor: 'pointer', userSelect: 'none' }}
+                    >
+                      {language === 'en' ? 'Phone' : 'ফোন'}
+                      {employeeSortField === 'phone' && (employeeSortDirection === 'asc' ? ' ↑' : ' ↓')}
+                    </th>
+                    <th 
+                      onClick={() => handleSortEmployees('designation')}
+                      style={{ cursor: 'pointer', userSelect: 'none' }}
+                    >
+                      {language === 'en' ? 'Designation' : 'পদবি'}
+                      {employeeSortField === 'designation' && (employeeSortDirection === 'asc' ? ' ↑' : ' ↓')}
+                    </th>
+                    <th 
+                      onClick={() => handleSortEmployees('postingArea')}
+                      style={{ cursor: 'pointer', userSelect: 'none' }}
+                    >
+                      {language === 'en' ? 'Posting Area' : 'পোস্টিং এলাকা'}
+                      {employeeSortField === 'postingArea' && (employeeSortDirection === 'asc' ? ' ↑' : ' ↓')}
+                    </th>
+                    <th 
+                      onClick={() => handleSortEmployees('salary')}
+                      style={{ cursor: 'pointer', userSelect: 'none' }}
+                    >
+                      {language === 'en' ? 'Salary' : 'বেতন'}
+                      {employeeSortField === 'salary' && (employeeSortDirection === 'asc' ? ' ↑' : ' ↓')}
+                    </th>
+                    <th 
+                      onClick={() => handleSortEmployees('salesTarget')}
+                      style={{ cursor: 'pointer', userSelect: 'none' }}
+                    >
+                      {language === 'en' ? 'Sales Target' : 'বিক্রয় লক্ষ্য'}
+                      {employeeSortField === 'salesTarget' && (employeeSortDirection === 'asc' ? ' ↑' : ' ↓')}
+                    </th>
+                    <th 
+                      onClick={() => handleSortEmployees('salaryStatus')}
+                      style={{ cursor: 'pointer', userSelect: 'none' }}
+                    >
+                      {language === 'en' ? 'Salary Status' : 'বেতন স্থিতি'}
+                      {employeeSortField === 'salaryStatus' && (employeeSortDirection === 'asc' ? ' ↑' : ' ↓')}
+                    </th>
                     <th>{language === 'en' ? 'Actions' : 'কার্যক্রম'}</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {employees.length === 0 ? (
+                  {sortedEmployees.length === 0 ? (
                     <tr>
-                      <td colSpan="7" style={{ textAlign: 'center', padding: '1.5rem' }}>
+                      <td colSpan="9" style={{ textAlign: 'center', padding: '1.5rem' }}>
                         {adminContent.noData}
                       </td>
                     </tr>
                   ) : (
-                    employees.map((emp, idx) => (
+                    sortedEmployees.map((emp, idx) => (
                       <tr key={emp._id || idx}>
                         <td>{emp.employeeId || 'N/A'}</td>
                         <td>{emp.name || 'N/A'}</td>
                         <td>{emp.phone || 'N/A'}</td>
                         <td>{emp.designation || 'N/A'}</td>
+                        <td>{emp.postingArea || emp.area || 'N/A'}</td>
                       <td>
                         {emp.salary ? `${language === 'en' ? '৳' : '৳'} ${parseFloat(emp.salary).toLocaleString()}` : 'N/A'}
                       </td>
@@ -4052,17 +8000,22 @@ const [userRole, setUserRole] = useState('Admin')
                                   })
                           setViewingEmployee({ ...data.data, status: normalizeSalaryStatus(data.data.status) })
                           setLastGeneratedPassword(data.data.generatedPassword || '')
+                          setShowSalesHistory(false) // Show employee details by default
+                          setShowAssignedDealers(false) // Show employee details by default
                                 } else {
                                   // Fallback to existing data if fetch fails
                                   console.log('[View Employee] Using cached employee data:', emp)
                           setViewingEmployee({ ...emp, status: normalizeSalaryStatus(emp.status) })
                           setLastGeneratedPassword(emp.generatedPassword || '')
+                          setShowSalesHistory(false) // Show employee details by default
+                          setShowAssignedDealers(false) // Show employee details by default
                                 }
                               } catch (err) {
                                 console.error('Failed to fetch employee details', err)
                                 // Fallback to existing data if fetch fails
                         setViewingEmployee({ ...emp, status: normalizeSalaryStatus(emp.status) })
                         setLastGeneratedPassword(emp.generatedPassword || '')
+                        setShowSalesHistory(false) // Show employee details by default
                               }
                             }}
                           >
@@ -4132,7 +8085,7 @@ const [userRole, setUserRole] = useState('Admin')
                       background: 'radial-gradient(circle at 70% 70%, rgba(16,185,129,0.22), transparent 60%)',
                       filter: 'blur(20px)'
                     }} />
-                  </div>
+            </div>
 
                   <div style={{ position: 'relative', display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem', gap: '1rem' }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
@@ -4159,33 +8112,56 @@ const [userRole, setUserRole] = useState('Admin')
                       </div>
                       <div>
                         <h2 style={{ margin: 0, fontSize: '1.5rem', fontWeight: 800, color: '#0f172a' }}>
-                          {language === 'en' ? (isEditingEmployee ? 'Edit Employee' : 'Employee Details') : (isEditingEmployee ? 'কর্মচারী সম্পাদনা' : 'কর্মচারীর বিবরণ')}
+                          {viewingEmployee.name || (language === 'en' ? 'Employee' : 'কর্মচারী')}
                         </h2>
                         <p style={{ margin: '0.25rem 0 0 0', color: '#475569', fontWeight: 600 }}>{viewingEmployee.designation || viewingEmployee.role || ''}</p>
                       </div>
                     </div>
                     <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
-                      {!isEditingEmployee ? (
-                        <button
-                          onClick={() => {
-                            setIsEditingEmployee(true)
-                            setEditingEmployeeData({ ...viewingEmployee, status: normalizeSalaryStatus(viewingEmployee.status) })
-                          }}
-                          style={{
-                            padding: '0.6rem 1.1rem',
-                            backgroundColor: '#3b82f6',
-                            color: 'white',
-                            border: 'none',
-                            borderRadius: '0.5rem',
-                            cursor: 'pointer',
-                            fontWeight: 700,
-                            fontSize: '0.9rem',
-                            boxShadow: '0 10px 20px rgba(59,130,246,0.35)'
-                          }}
-                        >
-                          {adminContent.edit}
-                        </button>
-                      ) : null}
+                    <button
+                      onClick={() => {
+                        setShowSalesHistory((prev) => !prev)
+                        setShowAssignedDealers(false)
+                      }}
+                      style={{
+                        padding: '0.6rem 1.1rem',
+                        backgroundColor: '#3b82f6',
+                        color: 'white',
+                        border: 'none',
+                        borderRadius: '0.5rem',
+                        cursor: 'pointer',
+                        fontWeight: 700,
+                        fontSize: '0.9rem',
+                        boxShadow: '0 10px 20px rgba(59,130,246,0.35)'
+                      }}
+                    >
+                      {showSalesHistory
+                        ? (language === 'en' ? 'Back' : 'পেছনে যান')
+                        : (language === 'en' ? 'Sales History' : 'বিক্রয় ইতিহাস')}
+                    </button>
+                    {!showSalesHistory && (
+                      <button
+                        onClick={() => {
+                          setShowAssignedDealers((prev) => !prev)
+                          setShowSalesHistory(false)
+                        }}
+                        style={{
+                          padding: '0.6rem 1.1rem',
+                          backgroundColor: '#10b981',
+                          color: 'white',
+                          border: 'none',
+                          borderRadius: '0.5rem',
+                          cursor: 'pointer',
+                          fontWeight: 700,
+                          fontSize: '0.9rem',
+                          boxShadow: '0 10px 20px rgba(16,185,129,0.35)'
+                        }}
+                      >
+                        {showAssignedDealers
+                          ? (language === 'en' ? 'Back' : 'পেছনে যান')
+                          : (language === 'en' ? 'Dealers' : 'ডিলার')}
+                      </button>
+                    )}
                       <button
                         onClick={() => {
                           setViewingEmployee(null)
@@ -4207,6 +8183,488 @@ const [userRole, setUserRole] = useState('Admin')
                     </div>
                   </div>
 
+                  {showSalesHistory ? (
+                    <div style={{ marginTop: '1rem', display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+                    {(() => {
+                      // Check if viewing employee is RSM
+                      const isRSM = (viewingEmployee?.role || '').toLowerCase() === 'rsm'
+                      
+                      // For RSM: calculate sales target as sum of all salesmen's targets
+                      // For others: use their own sales target
+                      const calculatedSalesTarget = isRSM
+                        ? (employees || []).reduce((sum, emp) => {
+                            if ((emp.role || '').toLowerCase() === 'salesman') {
+                              return sum + (parseFloat(emp.salesTarget) || 0)
+                            }
+                            return sum
+                          }, 0)
+                        : (parseFloat(viewingEmployee.salesTarget) || 0)
+                      
+                      // Calculate individual employee's total collection and total due
+                      // Include both employee-created orders AND admin-created orders for assigned dealers
+                      const employeeId = viewingEmployee?._id || ''
+                      
+                      // Get all dealers assigned to this employee
+                      const assignedDealerIds = (dealers || [])
+                        .filter(dealer => {
+                          const assignedToId = dealer.assignedTo?._id || dealer.assignedTo || ''
+                          return String(assignedToId) === String(employeeId)
+                        })
+                        .map(dealer => ({
+                          _id: String(dealer._id || ''),
+                          dealerId: String(dealer.dealerId || '')
+                        }))
+                        .filter(d => d._id || d.dealerId)
+                      
+                      // Filter orders: employee-created OR admin-created for assigned dealers
+                      const employeeOrders = (orders || []).filter(order => {
+                        const orderRequestedBy = order.requestedBy?._id || order.requestedBy || ''
+                        const isEmployeeOrder = String(orderRequestedBy) === String(employeeId)
+                        
+                        // Check if this is an admin-created order for an assigned dealer
+                        const isAdminOrder = (order.requestedByRole || '').toLowerCase() === 'admin'
+                        let isAdminOrderForAssignedDealer = false
+                        
+                        if (isAdminOrder) {
+                          const orderDealerId = order.dealer?._id || order.dealer || ''
+                          const orderDealerIdString = String(orderDealerId)
+                          const orderDealerIdFromDealer = order.dealerId || ''
+                          
+                          isAdminOrderForAssignedDealer = assignedDealerIds.some(assignedDealer => 
+                            assignedDealer._id === orderDealerIdString ||
+                            assignedDealer.dealerId === orderDealerIdFromDealer ||
+                            (order.dealer && String(order.dealer._id || order.dealer) === assignedDealer._id)
+                          )
+                        }
+                        
+                        return isEmployeeOrder || isAdminOrderForAssignedDealer
+                      })
+                      
+                      // For RSM: sum all employees' achievedTarget values
+                      // For others: calculate from own approved orders + admin-created orders for assigned dealers
+                      let employeeAchievedTarget = 0
+                      if (isRSM) {
+                        // Sum all employees' achievedTarget values
+                        employeeAchievedTarget = (employees || []).reduce((sum, emp) => {
+                          return sum + (parseFloat(emp.achievedTarget) || 0)
+                        }, 0)
+                      } else {
+                        // Calculate achieved target from:
+                        // 1. Employee-created approved orders (excluding cancelled)
+                        // 2. Admin-created approved orders for dealers assigned to this employee (excluding cancelled)
+                        employeeAchievedTarget = employeeOrders
+                          .filter(order => 
+                            order.approvalStatus === 'Approved' && 
+                            order.status !== 'Cancelled'
+                          )
+                          .reduce((sum, order) => {
+                            return sum + (parseFloat(order.totalPrice) || 0)
+                          }, 0)
+                      }
+                      
+                      // For RSM: calculate collection and due from all salesmen's orders
+                      // For others: calculate from own orders
+                      let employeeTotalCollection = 0
+                      let employeeTotalDue = 0
+                      
+                      if (isRSM) {
+                        const salesmenIds = (employees || [])
+                          .filter(emp => (emp.role || '').toLowerCase() === 'salesman')
+                          .map(emp => String(emp._id || ''))
+                        
+                        const allSalesmenOrders = (orders || []).filter(order => {
+                          const orderRequestedBy = String(order.requestedBy?._id || order.requestedBy || '')
+                          return salesmenIds.includes(orderRequestedBy)
+                        })
+                        
+                        employeeTotalCollection = allSalesmenOrders.reduce((sum, order) => {
+                          const paid = order?.paidAmount !== undefined && order?.paidAmount !== null
+                            ? Number(order.paidAmount)
+                            : 0
+                          return sum + Number(paid || 0)
+                        }, 0)
+                        
+                        employeeTotalDue = allSalesmenOrders.reduce((sum, order) => {
+                          const due = order?.dueAmount !== undefined && order?.dueAmount !== null
+                            ? Number(order.dueAmount)
+                            : Math.max(0, Number(order.totalPrice || 0) - Number(order.paidAmount || 0))
+                          return sum + Number(due || 0)
+                        }, 0)
+                      } else {
+                        employeeTotalCollection = employeeOrders.reduce((sum, order) => {
+                          const paid = order?.paidAmount !== undefined && order?.paidAmount !== null
+                            ? Number(order.paidAmount)
+                            : 0
+                          return sum + Number(paid || 0)
+                        }, 0)
+                        
+                        employeeTotalDue = employeeOrders.reduce((sum, order) => {
+                          const due = order?.dueAmount !== undefined && order?.dueAmount !== null
+                            ? Number(order.dueAmount)
+                            : Math.max(0, Number(order.totalPrice || 0) - Number(order.paidAmount || 0))
+                          return sum + Number(due || 0)
+                        }, 0)
+                      }
+                      
+                      return (
+                        <div style={{
+                          display: 'grid',
+                          gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))',
+                          gap: '0.75rem'
+                        }}>
+                          <div style={{ padding: '1rem', borderRadius: '0.5rem', backgroundColor: '#f8fafc', border: '1px solid #e5e7eb' }}>
+                            <div style={{ fontSize: '0.9rem', color: '#6b7280', fontWeight: 700 }}>
+                            {language === 'en' ? 'Total Target' : 'মোট টার্গেট'}
+                          </div>
+                            <div style={{ fontSize: '1.5rem', fontWeight: 800, color: '#0f172a', marginTop: '0.35rem' }}>
+                            ৳{Number(calculatedSalesTarget || 0).toLocaleString()}
+                          </div>
+                        </div>
+                        <div style={{ padding: '1rem', borderRadius: '0.5rem', backgroundColor: '#f0fdf4', border: '1px solid #dcfce7' }}>
+                            <div style={{ fontSize: '0.9rem', color: '#15803d', fontWeight: 700 }}>
+                            {language === 'en' ? 'Achieved Target' : 'অর্জিত টার্গেট'}
+                          </div>
+                            <div style={{ fontSize: '1.5rem', fontWeight: 800, color: '#166534', marginTop: '0.35rem' }}>
+                            ৳{Number(employeeAchievedTarget || 0).toLocaleString()}
+                          </div>
+                        </div>
+                          <div style={{ padding: '1rem', borderRadius: '0.5rem', backgroundColor: '#eef2ff', border: '1px solid #e0e7ff' }}>
+                            <div style={{ fontSize: '0.9rem', color: '#4338ca', fontWeight: 700 }}>
+                            {language === 'en' ? 'Progress' : 'অগ্রগতি'}
+                          </div>
+                          {(() => {
+                            const total = Number(calculatedSalesTarget || 0) || 0
+                            const achieved = Number(employeeAchievedTarget || 0) || 0
+                            const pct = total > 0 ? Math.min(100, Math.round((achieved / total) * 100)) : 0
+                            return (
+                                <div style={{ marginTop: '0.35rem' }}>
+                                  <div style={{ height: '10px', background: '#e0e7ff', borderRadius: '999px', overflow: 'hidden' }}>
+                                  <div style={{ width: `${pct}%`, height: '100%', background: 'linear-gradient(90deg, #4f46e5, #22c55e)' }} />
+                                </div>
+                                <div style={{ marginTop: '0.35rem', fontWeight: 700, color: '#312e81' }}>{pct}%</div>
+                              </div>
+                            )
+                          })()}
+                        </div>
+                          <div style={{ padding: '1rem', borderRadius: '0.5rem', backgroundColor: '#f8fafc', border: '1px solid #e5e7eb' }}>
+                            <div style={{ fontSize: '0.9rem', color: '#6b7280', fontWeight: 700 }}>
+                              {language === 'en' ? 'Total Collection' : 'মোট সংগ্রহ'}
+                            </div>
+                            <div style={{ fontSize: '1.4rem', fontWeight: 800, color: '#0f172a', marginTop: '0.35rem' }}>
+                              ৳{Number(employeeTotalCollection || 0).toLocaleString()}
+                            </div>
+                          </div>
+                          <div style={{ padding: '1rem', borderRadius: '0.5rem', backgroundColor: '#fff7ed', border: '1px solid #fed7aa' }}>
+                            <div style={{ fontSize: '0.9rem', color: '#c2410c', fontWeight: 700 }}>
+                              {language === 'en' ? 'Total Due' : 'মোট বকেয়া'}
+                            </div>
+                            <div style={{ fontSize: '1.4rem', fontWeight: 800, color: '#9a3412', marginTop: '0.35rem' }}>
+                              ৳{Number(employeeTotalDue || 0).toLocaleString()}
+                            </div>
+                          </div>
+                        </div>
+                      )
+                    })()}
+
+                      <h3 style={{ fontSize: '1.125rem', fontWeight: 700, color: '#0f172a', margin: '0.25rem 0' }}>
+                        {language === 'en' ? 'Sales History' : 'বিক্রয় ইতিহাস'}
+                      </h3>
+                      {viewingEmployee.salesHistory && Array.isArray(viewingEmployee.salesHistory) && viewingEmployee.salesHistory.length > 0 ? (
+                        <div style={{ 
+                          border: '1px solid #e5e7eb', 
+                          borderRadius: '0.5rem', 
+                          overflow: 'hidden',
+                          backgroundColor: '#fff'
+                        }}>
+                          <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                            <thead>
+                              <tr style={{ backgroundColor: '#f9fafb', borderBottom: '2px solid #e5e7eb' }}>
+                                <th style={{ padding: '0.75rem', textAlign: 'left', fontSize: '0.875rem', fontWeight: 600, color: '#6b7280' }}>
+                                  {language === 'en' ? 'Date' : 'তারিখ'}
+                                </th>
+                                <th style={{ padding: '0.75rem', textAlign: 'left', fontSize: '0.875rem', fontWeight: 600, color: '#6b7280' }}>
+                                  {language === 'en' ? 'Order ID' : 'অর্ডার আইডি'}
+                                </th>
+                                <th style={{ padding: '0.75rem', textAlign: 'left', fontSize: '0.875rem', fontWeight: 600, color: '#6b7280' }}>
+                                  {language === 'en' ? 'Dealer' : 'ডিলার'}
+                                </th>
+                                <th style={{ padding: '0.75rem', textAlign: 'right', fontSize: '0.875rem', fontWeight: 600, color: '#6b7280' }}>
+                                  {language === 'en' ? 'Amount' : 'পরিমাণ'}
+                                </th>
+                                <th style={{ padding: '0.75rem', textAlign: 'left', fontSize: '0.875rem', fontWeight: 600, color: '#6b7280' }}>
+                                  {language === 'en' ? 'Order Created By' : 'অর্ডার তৈরিকারী'}
+                                </th>
+                                <th style={{ padding: '0.75rem', textAlign: 'left', fontSize: '0.875rem', fontWeight: 600, color: '#6b7280' }}>
+                                  {language === 'en' ? 'Approved By' : 'অনুমোদনকারী'}
+                                </th>
+                                <th style={{ padding: '0.75rem', textAlign: 'left', fontSize: '0.875rem', fontWeight: 600, color: '#6b7280' }}>
+                                  {language === 'en' ? 'Status' : 'অবস্থা'}
+                                </th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {(() => {
+                                // Get all dealers assigned to this employee
+                                const employeeId = viewingEmployee?._id || ''
+                                const assignedDealerIds = (dealers || [])
+                                  .filter(dealer => {
+                                    const assignedToId = dealer.assignedTo?._id || dealer.assignedTo || ''
+                                    return String(assignedToId) === String(employeeId)
+                                  })
+                                  .map(dealer => ({
+                                    _id: String(dealer._id || ''),
+                                    dealerId: String(dealer.dealerId || '')
+                                  }))
+                                  .filter(d => d._id || d.dealerId)
+                                
+                                return (viewingEmployee.salesHistory || [])
+                                  .filter((sale) => {
+                                    // Filter out deleted orders - only show if order still exists
+                                    if (!sale || !sale.orderObjectId) return false
+                                    
+                                    const order = (orders || []).find(o => {
+                                      if (!o) return false
+                                      const orderIdMatch = o._id && sale.orderObjectId && (
+                                        String(o._id) === String(sale.orderObjectId) ||
+                                        String(o._id) === String(sale.orderObjectId._id || sale.orderObjectId)
+                                      )
+                                      const orderIdStringMatch = o.orderId && sale.orderId && (
+                                        String(o.orderId) === String(sale.orderId)
+                                      )
+                                      return orderIdMatch || orderIdStringMatch
+                                    })
+                                    
+                                    // Only show if order exists in the orders array
+                                    if (!order) return false
+                                    
+                                    // Verify this order actually belongs to this employee
+                                    const orderRequestedBy = order.requestedBy?._id || order.requestedBy || ''
+                                    const isEmployeeOrder = String(orderRequestedBy) === String(employeeId)
+                                    
+                                    // Check if this is an admin-created order for an assigned dealer
+                                    const isAdminOrder = (order.requestedByRole || '').toLowerCase() === 'admin'
+                                    let isAdminOrderForAssignedDealer = false
+                                    
+                                    if (isAdminOrder) {
+                                      const orderDealerId = order.dealer?._id || order.dealer || ''
+                                      const orderDealerIdString = String(orderDealerId)
+                                      const orderDealerIdFromDealer = order.dealerId || ''
+                                      
+                                      isAdminOrderForAssignedDealer = assignedDealerIds.some(assignedDealer => 
+                                        assignedDealer._id === orderDealerIdString ||
+                                        assignedDealer.dealerId === orderDealerIdFromDealer ||
+                                        (order.dealer && String(order.dealer._id || order.dealer) === assignedDealer._id)
+                                      )
+                                    }
+                                    
+                                    // Only show if order belongs to this employee
+                                    return isEmployeeOrder || isAdminOrderForAssignedDealer
+                                  })
+                                  // Remove duplicates - keep only the first occurrence of each order
+                                  .filter((sale, index, self) => {
+                                  // Get unique identifier for this sale entry
+                                  const saleOrderObjectId = sale.orderObjectId?._id 
+                                    ? String(sale.orderObjectId._id) 
+                                    : (sale.orderObjectId ? String(sale.orderObjectId) : '')
+                                  const saleOrderId = String(sale.orderId || '')
+                                  
+                                  // Find the first occurrence of this order (by orderObjectId or orderId)
+                                  const firstIndex = self.findIndex(s => {
+                                    const sOrderObjectId = s.orderObjectId?._id 
+                                      ? String(s.orderObjectId._id) 
+                                      : (s.orderObjectId ? String(s.orderObjectId) : '')
+                                    const sOrderId = String(s.orderId || '')
+                                    
+                                    // Match by orderObjectId (preferred) or orderId
+                                    return (saleOrderObjectId && sOrderObjectId && saleOrderObjectId === sOrderObjectId) ||
+                                           (saleOrderId && sOrderId && saleOrderId === sOrderId && saleOrderId !== '')
+                                  })
+                                  
+                                  // Only keep if this is the first occurrence
+                                  return index === firstIndex
+                                })
+                                .sort((a, b) => new Date(b.approvedAt) - new Date(a.approvedAt))
+                                .map((sale, idx) => {
+                                  // Find the order to get requestedByName
+                                  const order = (orders || []).find(o => 
+                                    String(o._id) === String(sale.orderObjectId) || 
+                                    o.orderId === sale.orderId
+                                  )
+                                  const createdByName = order?.requestedByName || viewingEmployee.name || '-'
+                                  
+                                  return (
+                                    <tr key={idx} style={{ borderBottom: '1px solid #f3f4f6' }}>
+                                      <td style={{ padding: '0.75rem', fontSize: '0.875rem', color: '#111827' }}>
+                                        {sale.approvedAt ? new Date(sale.approvedAt).toLocaleDateString() : '-'}
+                                      </td>
+                                      <td style={{ padding: '0.75rem', fontSize: '0.875rem', color: '#111827', fontFamily: 'monospace' }}>
+                                        {sale.orderId || '-'}
+                                      </td>
+                                      <td style={{ padding: '0.75rem', fontSize: '0.875rem', color: '#111827' }}>
+                                        {sale.dealerName || sale.dealerId || '-'}
+                                      </td>
+                                      <td style={{ padding: '0.75rem', fontSize: '0.875rem', color: '#111827', fontWeight: 600, textAlign: 'right' }}>
+                                        ৳{parseFloat(sale.totalAmount || 0).toLocaleString()}
+                                      </td>
+                                      <td style={{ padding: '0.75rem', fontSize: '0.875rem', color: '#111827' }}>
+                                        {createdByName}
+                                      </td>
+                                      <td style={{ padding: '0.75rem', fontSize: '0.875rem', color: '#111827' }}>
+                                        {sale.approvedByName || '-'}
+                                      </td>
+                                      <td style={{ padding: '0.75rem', fontSize: '0.875rem' }}>
+                                        {(() => {
+                                          const orderStatus = order?.status || 'Pending'
+                                          return (
+                                            <span style={{
+                                              display: 'inline-block',
+                                              padding: '0.25rem 0.5rem',
+                                              borderRadius: '0.25rem',
+                                              fontSize: '0.75rem',
+                                              fontWeight: 600,
+                                              backgroundColor: 
+                                                orderStatus === 'Complete' ? '#dcfce7' :
+                                                orderStatus === 'Delivered' ? '#d1fae5' :
+                                                orderStatus === 'Shipped' ? '#dbeafe' :
+                                                orderStatus === 'Processing' ? '#fef3c7' :
+                                                orderStatus === 'Cancelled' ? '#fee2e2' :
+                                                '#f3f4f6',
+                                              color:
+                                                orderStatus === 'Complete' ? '#166534' :
+                                                orderStatus === 'Delivered' ? '#065f46' :
+                                                orderStatus === 'Shipped' ? '#1e40af' :
+                                                orderStatus === 'Processing' ? '#92400e' :
+                                                orderStatus === 'Cancelled' ? '#b91c1c' :
+                                                '#374151'
+                                            }}>
+                                              {orderStatus}
+                                            </span>
+                                          )
+                                        })()}
+                                      </td>
+                                    </tr>
+                                  )
+                                })
+                              })()}
+                            </tbody>
+                          </table>
+                        </div>
+                      ) : (
+                        <div style={{
+                          padding: '1rem',
+                          borderRadius: '0.5rem',
+                          border: '1px solid #e5e7eb',
+                          backgroundColor: '#fff',
+                          color: '#475569',
+                          fontWeight: 600
+                        }}>
+                          {language === 'en' ? 'No sales history found.' : 'কোন বিক্রয় ইতিহাস পাওয়া যায়নি।'}
+                        </div>
+                      )}
+                    </div>
+                  ) : showAssignedDealers ? (
+                    <div style={{ marginTop: '1rem', display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+                      <h3 style={{ fontSize: '1.125rem', fontWeight: 700, color: '#0f172a', margin: '0.25rem 0' }}>
+                        {language === 'en' ? 'Assigned Dealers' : 'নির্ধারিত ডিলার'}
+                      </h3>
+                      {(() => {
+                        // Filter dealers assigned to this employee
+                        const assignedDealers = (dealers || []).filter(dealer => {
+                          const assignedToId = dealer.assignedTo?._id || dealer.assignedTo || ''
+                          const employeeId = viewingEmployee?._id || ''
+                          return String(assignedToId) === String(employeeId)
+                        })
+
+                        if (assignedDealers.length === 0) {
+                          return (
+                            <div style={{
+                              padding: '2rem',
+                              textAlign: 'center',
+                              backgroundColor: '#f9fafb',
+                              borderRadius: '0.5rem',
+                              border: '1px solid #e5e7eb',
+                              color: '#6b7280'
+                            }}>
+                              {language === 'en' ? 'No dealers assigned to this employee' : 'এই কর্মচারীর জন্য কোন ডিলার নির্ধারিত নেই'}
+                            </div>
+                          )
+                        }
+
+                        return (
+                          <div style={{
+                            border: '1px solid #e5e7eb',
+                            borderRadius: '0.5rem',
+                            overflow: 'hidden',
+                            backgroundColor: '#fff'
+                          }}>
+                            <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                              <thead>
+                                <tr style={{ backgroundColor: '#f9fafb', borderBottom: '2px solid #e5e7eb' }}>
+                                  <th style={{ padding: '0.75rem', textAlign: 'left', fontSize: '0.875rem', fontWeight: 600, color: '#6b7280' }}>
+                                    {language === 'en' ? 'Dealer ID' : 'ডিলার আইডি'}
+                                  </th>
+                                  <th style={{ padding: '0.75rem', textAlign: 'left', fontSize: '0.875rem', fontWeight: 600, color: '#6b7280' }}>
+                                    {language === 'en' ? 'Dealer Name' : 'ডিলারের নাম'}
+                                  </th>
+                                  <th style={{ padding: '0.75rem', textAlign: 'left', fontSize: '0.875rem', fontWeight: 600, color: '#6b7280' }}>
+                                    {language === 'en' ? 'Contact' : 'যোগাযোগ'}
+                                  </th>
+                                  <th style={{ padding: '0.75rem', textAlign: 'left', fontSize: '0.875rem', fontWeight: 600, color: '#6b7280' }}>
+                                    {language === 'en' ? 'Address' : 'ঠিকানা'}
+                                  </th>
+                                  <th style={{ padding: '0.75rem', textAlign: 'right', fontSize: '0.875rem', fontWeight: 600, color: '#6b7280' }}>
+                                    {language === 'en' ? 'Due Amount' : 'বকেয়া পরিমাণ'}
+                                  </th>
+                                </tr>
+                              </thead>
+                              <tbody>
+                                {assignedDealers.map((dealer, idx) => {
+                                  // Calculate due amount for this dealer (excluding cancelled orders)
+                                  const dealerOrders = (orders || []).filter(order => {
+                                    const orderDealerId = order.dealerId || order.dealer?._id || ''
+                                    const dealerId = dealer.dealerId || dealer._id || ''
+                                    return (
+                                      (String(orderDealerId) === String(dealerId) || 
+                                       String(order.dealer?._id) === String(dealer._id)) &&
+                                      order.status !== 'Cancelled' &&
+                                      order.approvalStatus !== 'Rejected'
+                                    )
+                                  })
+                                  
+                                  const dealerDueAmount = dealerOrders.reduce((sum, order) => {
+                                    const due = order?.dueAmount !== undefined && order?.dueAmount !== null
+                                      ? Number(order.dueAmount)
+                                      : Math.max(0, Number(order.totalPrice || 0) - Number(order.paidAmount || 0))
+                                    return sum + Number(due || 0)
+                                  }, 0)
+
+                                  return (
+                                    <tr key={idx} style={{ borderBottom: '1px solid #f3f4f6' }}>
+                                      <td style={{ padding: '0.75rem', fontSize: '0.875rem', color: '#111827', fontFamily: 'monospace' }}>
+                                        {dealer.dealerId || '-'}
+                                      </td>
+                                      <td style={{ padding: '0.75rem', fontSize: '0.875rem', color: '#111827', fontWeight: 600 }}>
+                                        {dealer.name || '-'}
+                                      </td>
+                                      <td style={{ padding: '0.75rem', fontSize: '0.875rem', color: '#111827' }}>
+                                        {dealer.phone || dealer.contact || '-'}
+                                      </td>
+                                      <td style={{ padding: '0.75rem', fontSize: '0.875rem', color: '#111827' }}>
+                                        {dealer.address || '-'}
+                                      </td>
+                                      <td style={{ padding: '0.75rem', fontSize: '0.875rem', color: dealerDueAmount > 0 ? '#dc2626' : '#16a34a', fontWeight: 600, textAlign: 'right' }}>
+                                        ৳{Number(dealerDueAmount || 0).toLocaleString()}
+                                      </td>
+                                    </tr>
+                                  )
+                                })}
+                              </tbody>
+                            </table>
+                          </div>
+                        )
+                      })()}
+                    </div>
+                  ) : (
                   <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))', gap: '1rem', position: 'relative', zIndex: 1 }}>
                     {/* Employee ID */}
                     <div style={{ padding: '1rem', backgroundColor: '#f9fafb', borderRadius: '0.375rem' }}>
@@ -4390,20 +8848,164 @@ const [userRole, setUserRole] = useState('Admin')
                           onChange={(e) => setEditingEmployeeData({ ...editingEmployeeData, salesTarget: e.target.value })}
                           step="0.01"
                           min="0"
+                          disabled={(viewingEmployee?.role || '').toLowerCase() === 'rsm'}
                           style={{
                             marginTop: '0.5rem',
                             width: '100%',
                             padding: '0.5rem',
                             border: '1px solid #d1d5db',
                             borderRadius: '0.375rem',
-                            fontSize: '1rem'
+                            fontSize: '1rem',
+                            backgroundColor: (viewingEmployee?.role || '').toLowerCase() === 'rsm' ? '#f3f4f6' : 'white'
                           }}
                         />
                       ) : (
                         <p style={{ margin: '0.5rem 0 0 0', fontSize: '1rem', color: '#111827', fontWeight: 600 }}>
-                          {viewingEmployee.salesTarget ? `${language === 'en' ? '৳' : '৳'} ${parseFloat(viewingEmployee.salesTarget).toLocaleString()}` : 'N/A'}
+                          {(() => {
+                            const isRSM = (viewingEmployee?.role || '').toLowerCase() === 'rsm'
+                            const calculatedTarget = isRSM
+                              ? (employees || []).reduce((sum, emp) => {
+                                  if ((emp.role || '').toLowerCase() === 'salesman') {
+                                    return sum + (parseFloat(emp.salesTarget) || 0)
+                                  }
+                                  return sum
+                                }, 0)
+                              : (parseFloat(viewingEmployee.salesTarget) || 0)
+                            return calculatedTarget > 0 ? `৳ ${Number(calculatedTarget).toLocaleString()}` : 'N/A'
+                          })()}
                         </p>
                       )}
+                    </div>
+
+                    {/* Achieved Target */}
+                    <div style={{ padding: '1rem', backgroundColor: '#f9fafb', borderRadius: '0.375rem' }}>
+                      <label style={{ fontSize: '0.875rem', color: '#6b7280', fontWeight: 600 }}>
+                        {language === 'en' ? 'Achieved Target' : 'অর্জিত লক্ষ্য'}
+                      </label>
+                      <p style={{ margin: '0.5rem 0 0 0', fontSize: '1rem', color: '#111827', fontWeight: 600 }}>
+                        {(() => {
+                          const isRSM = (viewingEmployee?.role || '').toLowerCase() === 'rsm'
+                          let achievedTarget = 0
+                          
+                          if (isRSM) {
+                            // Sum all employees' achievedTarget values
+                            achievedTarget = (employees || []).reduce((sum, emp) => {
+                              return sum + (parseFloat(emp.achievedTarget) || 0)
+                            }, 0)
+                          } else {
+                            // Calculate achieved target from own approved orders + admin-created orders for assigned dealers
+                            const employeeId = viewingEmployee?._id || ''
+                            
+                            // Get all dealers assigned to this employee
+                            const assignedDealerIds = (dealers || [])
+                              .filter(dealer => {
+                                const assignedToId = dealer.assignedTo?._id || dealer.assignedTo || ''
+                                return String(assignedToId) === String(employeeId)
+                              })
+                              .map(dealer => ({
+                                _id: String(dealer._id || ''),
+                                dealerId: String(dealer.dealerId || '')
+                              }))
+                              .filter(d => d._id || d.dealerId)
+                            
+                            // Filter orders: employee-created OR admin-created for assigned dealers
+                            const employeeOrders = (orders || []).filter(order => {
+                              const orderRequestedBy = order.requestedBy?._id || order.requestedBy || ''
+                              const isEmployeeOrder = String(orderRequestedBy) === String(employeeId)
+                              
+                              // Check if this is an admin-created order for an assigned dealer
+                              const isAdminOrder = (order.requestedByRole || '').toLowerCase() === 'admin'
+                              let isAdminOrderForAssignedDealer = false
+                              
+                              if (isAdminOrder) {
+                                const orderDealerId = order.dealer?._id || order.dealer || ''
+                                const orderDealerIdString = String(orderDealerId)
+                                const orderDealerIdFromDealer = order.dealerId || ''
+                                
+                                isAdminOrderForAssignedDealer = assignedDealerIds.some(assignedDealer => 
+                                  assignedDealer._id === orderDealerIdString ||
+                                  assignedDealer.dealerId === orderDealerIdFromDealer ||
+                                  (order.dealer && String(order.dealer._id || order.dealer) === assignedDealer._id)
+                                )
+                              }
+                              
+                              return isEmployeeOrder || isAdminOrderForAssignedDealer
+                            })
+                            
+                            achievedTarget = employeeOrders
+                              .filter(order => 
+                                order.approvalStatus === 'Approved' && 
+                                order.status !== 'Cancelled'
+                              )
+                              .reduce((sum, order) => {
+                                return sum + (parseFloat(order.totalPrice) || 0)
+                              }, 0)
+                          }
+                          
+                          return `৳ ${Number(achievedTarget || 0).toLocaleString()}`
+                        })()}
+                      </p>
+                      {(() => {
+                        const isRSM = (viewingEmployee?.role || '').toLowerCase() === 'rsm'
+                        const calculatedTarget = isRSM
+                          ? (employees || []).reduce((sum, emp) => {
+                              if ((emp.role || '').toLowerCase() === 'salesman') {
+                                return sum + (parseFloat(emp.salesTarget) || 0)
+                              }
+                              return sum
+                            }, 0)
+                          : (parseFloat(viewingEmployee.salesTarget) || 0)
+                        
+                        let achievedTarget = 0
+                        if (isRSM) {
+                          // Sum all employees' achievedTarget values
+                          achievedTarget = (employees || []).reduce((sum, emp) => {
+                            return sum + (parseFloat(emp.achievedTarget) || 0)
+                          }, 0)
+                        } else {
+                          // Calculate achieved target from own approved orders + admin-created orders for assigned dealers
+                          const employeeId = viewingEmployee?._id || ''
+                          
+                          // Get all dealers assigned to this employee
+                          const assignedDealerIds = (dealers || [])
+                            .filter(dealer => {
+                              const assignedToId = dealer.assignedTo?._id || dealer.assignedTo || ''
+                              return String(assignedToId) === String(employeeId)
+                            })
+                            .map(dealer => String(dealer._id || dealer.dealerId || ''))
+                            .filter(id => id)
+                          
+                          // Filter orders: employee-created OR admin-created for assigned dealers
+                          const employeeOrders = (orders || []).filter(order => {
+                            const orderRequestedBy = order.requestedBy?._id || order.requestedBy || ''
+                            const orderDealerId = order.dealer?._id || order.dealer || ''
+                            const orderDealerIdString = String(orderDealerId)
+                            const isEmployeeOrder = String(orderRequestedBy) === String(employeeId)
+                            const isAdminOrderForAssignedDealer = 
+                              (order.requestedByRole || '').toLowerCase() === 'admin' &&
+                              assignedDealerIds.includes(orderDealerIdString)
+                            return isEmployeeOrder || isAdminOrderForAssignedDealer
+                          })
+                          
+                          achievedTarget = employeeOrders
+                            .filter(order => 
+                              order.approvalStatus === 'Approved' && 
+                              order.status !== 'Cancelled'
+                            )
+                            .reduce((sum, order) => {
+                              return sum + (parseFloat(order.totalPrice) || 0)
+                            }, 0)
+                        }
+                        
+                        return calculatedTarget > 0 ? (
+                          <p style={{ margin: '0.25rem 0 0 0', fontSize: '0.875rem', color: '#6b7280' }}>
+                            {(() => {
+                              const progress = ((Number(achievedTarget || 0) / Number(calculatedTarget || 1)) * 100).toFixed(1)
+                              return `${language === 'en' ? 'Progress' : 'অগ্রগতি'}: ${progress}%`
+                            })()}
+                          </p>
+                        ) : null
+                      })()}
                     </div>
 
                     {/* Bank Name */}
@@ -4486,38 +9088,45 @@ const [userRole, setUserRole] = useState('Admin')
 
                     {/* Salary Status */}
                     <div style={{ padding: '1rem', backgroundColor: '#f9fafb', borderRadius: '0.375rem' }}>
-                      <label style={{ fontSize: '0.875rem', color: '#6b7280', fontWeight: 600 }}>
-                        {language === 'en' ? 'Salary Status' : 'বেতন স্থিতি'}
-                      </label>
                       {isEditingEmployee ? (
-                        <select
-                          value={normalizeSalaryStatus(editingEmployeeData?.status)}
-                          onChange={(e) => setEditingEmployeeData({ ...editingEmployeeData, status: normalizeSalaryStatus(e.target.value) })}
-                          style={{
-                            marginTop: '0.5rem',
-                            width: '100%',
-                            padding: '0.5rem',
-                            border: '1px solid #d1d5db',
-                            borderRadius: '0.375rem',
-                            fontSize: '1rem'
-                          }}
-                        >
-                          <option value="Paid">{language === 'en' ? 'Paid' : 'পরিশোধিত'}</option>
-                          <option value="Unpaid">{language === 'en' ? 'Unpaid' : 'অপরিশোধিত'}</option>
-                        </select>
+                        <>
+                          <label style={{ fontSize: '0.875rem', color: '#6b7280', fontWeight: 600 }}>
+                            {language === 'en' ? 'Salary Status' : 'বেতন স্থিতি'}
+                          </label>
+                          <select
+                            value={normalizeSalaryStatus(editingEmployeeData?.status)}
+                            onChange={(e) => setEditingEmployeeData({ ...editingEmployeeData, status: normalizeSalaryStatus(e.target.value) })}
+                            style={{
+                              marginTop: '0.5rem',
+                              width: '100%',
+                              padding: '0.5rem',
+                              border: '1px solid #d1d5db',
+                              borderRadius: '0.375rem',
+                              fontSize: '1rem'
+                            }}
+                          >
+                            <option value="Paid">{language === 'en' ? 'Paid' : 'পরিশোধিত'}</option>
+                            <option value="Unpaid">{language === 'en' ? 'Unpaid' : 'অপরিশোধিত'}</option>
+                          </select>
+                        </>
                       ) : (
-                        <p style={{ 
-                          margin: '0.5rem 0 0 0', 
-                          fontSize: '1rem', 
-                          display: 'inline-block',
-                          padding: '0.25rem 0.75rem',
-                          borderRadius: '0.375rem',
-                          backgroundColor: normalizeSalaryStatus(viewingEmployee.status) === 'Paid' ? '#dcfce7' : '#fee2e2',
-                          color: normalizeSalaryStatus(viewingEmployee.status) === 'Paid' ? '#166534' : '#991b1b',
-                          fontWeight: 600
-                        }}>
-                          {normalizeSalaryStatus(viewingEmployee.status)}
-                        </p>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', flexWrap: 'wrap' }}>
+                          <span style={{ fontSize: '0.95rem', color: '#6b7280', fontWeight: 600 }}>
+                            {language === 'en' ? 'Salary Status' : 'বেতন স্থিতি'}
+                          </span>
+                          <span style={{ 
+                            fontSize: '1rem', 
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            padding: '0.35rem 0.85rem',
+                            borderRadius: '0.5rem',
+                            backgroundColor: normalizeSalaryStatus(viewingEmployee.status) === 'Paid' ? '#dcfce7' : '#fee2e2',
+                            color: normalizeSalaryStatus(viewingEmployee.status) === 'Paid' ? '#166534' : '#991b1b',
+                            fontWeight: 700
+                          }}>
+                            {normalizeSalaryStatus(viewingEmployee.status)}
+                          </span>
+                        </div>
                       )}
                     </div>
 
@@ -4547,15 +9156,16 @@ const [userRole, setUserRole] = useState('Admin')
                       )}
                     </div>
 
-                    {/* Role */}
+                    {/* Posting Area */}
                     <div style={{ padding: '1rem', backgroundColor: '#f9fafb', borderRadius: '0.375rem' }}>
                       <label style={{ fontSize: '0.875rem', color: '#6b7280', fontWeight: 600 }}>
-                        {language === 'en' ? 'Role' : 'ভূমিকা'}
+                        {language === 'en' ? 'Posting Area' : 'পোস্টিং এরিয়া'}
                       </label>
                       {isEditingEmployee ? (
-                        <select
-                          value={editingEmployeeData?.role || ''}
-                          onChange={(e) => setEditingEmployeeData({ ...editingEmployeeData, role: e.target.value })}
+                        <input
+                          type="text"
+                          value={editingEmployeeData?.postingArea || ''}
+                          onChange={(e) => setEditingEmployeeData({ ...editingEmployeeData, postingArea: e.target.value })}
                           style={{
                             marginTop: '0.5rem',
                             width: '100%',
@@ -4564,26 +9174,58 @@ const [userRole, setUserRole] = useState('Admin')
                             borderRadius: '0.375rem',
                             fontSize: '1rem'
                           }}
-                        >
-                          <option value="">{language === 'en' ? 'Select Role' : 'ভূমিকা নির্বাচন করুন'}</option>
-                          <option value="Admin">Admin</option>
-                          <option value="RSM">RSM</option>
-                          <option value="Incharge">Incharge</option>
-                          <option value="SalesMan">SalesMan</option>
-                        </select>
+                        />
                       ) : (
-                        <p style={{ 
-                          margin: '0.5rem 0 0 0', 
-                          fontSize: '1rem', 
-                          display: 'inline-block',
-                          padding: '0.25rem 0.75rem',
-                          borderRadius: '0.375rem',
-                          backgroundColor: viewingEmployee.role === 'Admin' ? '#dcfce7' : '#fef3c7',
-                          color: viewingEmployee.role === 'Admin' ? '#166534' : '#92400e',
-                          fontWeight: 600
-                        }}>
-                          {viewingEmployee.role || 'N/A'}
+                        <p style={{ margin: '0.5rem 0 0 0', fontSize: '1rem', color: '#111827' }}>
+                          {viewingEmployee.postingArea || 'N/A'}
                         </p>
+                      )}
+                    </div>
+
+                    {/* Role */}
+                    <div style={{ padding: '1rem', backgroundColor: '#f9fafb', borderRadius: '0.375rem' }}>
+                      {isEditingEmployee ? (
+                        <>
+                          <label style={{ fontSize: '0.875rem', color: '#6b7280', fontWeight: 600 }}>
+                            {language === 'en' ? 'Role' : 'ভূমিকা'}
+                          </label>
+                          <select
+                            value={editingEmployeeData?.role || ''}
+                            onChange={(e) => setEditingEmployeeData({ ...editingEmployeeData, role: e.target.value })}
+                            style={{
+                              marginTop: '0.5rem',
+                              width: '100%',
+                              padding: '0.5rem',
+                              border: '1px solid #d1d5db',
+                              borderRadius: '0.375rem',
+                              fontSize: '1rem'
+                            }}
+                          >
+                            <option value="">{language === 'en' ? 'Select Role' : 'ভূমিকা নির্বাচন করুন'}</option>
+                            <option value="Admin">Admin</option>
+                            <option value="RSM">RSM</option>
+                            <option value="Incharge">Incharge</option>
+                            <option value="SalesMan">SalesMan</option>
+                          </select>
+                        </>
+                      ) : (
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', flexWrap: 'wrap' }}>
+                          <span style={{ fontSize: '0.95rem', color: '#6b7280', fontWeight: 600 }}>
+                            {language === 'en' ? 'Role' : 'ভূমিকা'}
+                          </span>
+                          <span style={{ 
+                            fontSize: '1rem', 
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            padding: '0.35rem 0.85rem',
+                            borderRadius: '0.5rem',
+                            backgroundColor: viewingEmployee.role === 'Admin' ? '#dcfce7' : '#fef3c7',
+                            color: viewingEmployee.role === 'Admin' ? '#166534' : '#92400e',
+                            fontWeight: 700
+                          }}>
+                            {viewingEmployee.role || 'N/A'}
+                          </span>
+                        </div>
                       )}
                     </div>
 
@@ -4820,10 +9462,12 @@ const [userRole, setUserRole] = useState('Admin')
                           onError={(e) => {
                             e.target.style.display = 'none'
                           }}
-                        />
+                    />
                       )}
                     </div>
                   </div>
+                  )}
+
 
                   <div style={{ marginTop: '1.5rem', display: 'flex', justifyContent: 'flex-end', gap: '0.5rem' }}>
                     {isEditingEmployee ? (
@@ -4866,6 +9510,23 @@ const [userRole, setUserRole] = useState('Admin')
                       </>
                     ) : (
                       <>
+                        <button
+                          onClick={() => {
+                            setIsEditingEmployee(true)
+                            setEditingEmployeeData({ ...viewingEmployee, status: normalizeSalaryStatus(viewingEmployee.status) })
+                          }}
+                          style={{
+                            padding: '0.5rem 1.5rem',
+                            backgroundColor: '#3b82f6',
+                            color: 'white',
+                            border: 'none',
+                            borderRadius: '0.375rem',
+                            cursor: 'pointer',
+                            fontWeight: 600
+                          }}
+                        >
+                          {adminContent.edit}
+                        </button>
                         <button
                           onClick={async () => {
                             if (!viewingEmployee?._id) return
@@ -4927,36 +9588,1525 @@ const [userRole, setUserRole] = useState('Admin')
           {/* Orders Tab */}
           {activeTab === 'orders' && (
             <div className="admin-tab-content">
-              <div className="admin-tab-header">
-                <h1 className="admin-page-title">{adminContent.orders}</h1>
-                <button className="admin-add-btn">
+              <div className="admin-tab-header" style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', flexWrap: 'wrap' }}>
+                <h1 className="admin-page-title" style={{ flex: 1 }}>{adminContent.orders}</h1>
+                <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
+                  <button 
+                    className="admin-add-btn"
+                    onClick={() => {
+                      resetOrderForm()
+                      setShowOrderForm(true)
+                    }}
+                  >
                   <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
                     <line x1="12" y1="5" x2="12" y2="19" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
                     <line x1="5" y1="12" x2="19" y2="12" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
                   </svg>
                   {adminContent.addNew}
                 </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setShowOrderRequests((prev) => !prev)
+                      if (!showOrderRequests) {
+                        loadOrderRequests()
+                      }
+                    }}
+                    style={{
+                      padding: '0.55rem 1rem',
+                      backgroundColor: showOrderRequests ? '#0ea5e9' : '#e2e8f0',
+                      color: showOrderRequests ? '#ffffff' : '#0f172a',
+                      border: showOrderRequests ? '1px solid #0ea5e9' : '1px solid #cbd5e1',
+                      borderRadius: '0.5rem',
+                      fontWeight: 700,
+                      minHeight: '44px',
+                      cursor: 'pointer',
+                      boxShadow: showOrderRequests ? '0 8px 16px rgba(14,165,233,0.25)' : 'none'
+                    }}
+                  >
+                    {language === 'en' ? 'Order Requests' : 'অর্ডার অনুরোধ'}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => loadOrders()}
+                    className="admin-add-btn"
+                    style={{ backgroundColor: '#e2e8f0', color: '#0f172a' }}
+                  >
+                    {language === 'en' ? 'Refresh' : 'রিফ্রেশ'}
+                  </button>
               </div>
+              </div>
+
+              {showOrderForm && (
+                <div style={{
+                  position: 'fixed',
+                  top: 0,
+                  left: 0,
+                  right: 0,
+                  bottom: 0,
+                  backgroundColor: 'rgba(0, 0, 0, 0.5)',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  zIndex: 1000,
+                  padding: '1rem'
+                }} onClick={() => {
+                  setShowOrderForm(false)
+                  resetOrderForm()
+                }}>
+                  <div style={{
+                    position: 'relative',
+                    background: 'linear-gradient(135deg, #f8fafc 0%, #eef2ff 100%)',
+                    borderRadius: '0.75rem',
+                    padding: '2rem',
+                    maxWidth: '900px',
+                    width: '100%',
+                    maxHeight: '90vh',
+                    overflowY: 'auto',
+                    boxShadow: '0 25px 50px -12px rgba(0,0,0,0.25)'
+                  }} onClick={(e) => e.stopPropagation()}>
+                    <div style={{
+                      position: 'absolute',
+                      inset: 0,
+                      pointerEvents: 'none',
+                      overflow: 'hidden',
+                      borderRadius: '0.75rem'
+                    }}>
+                      <div style={{
+                        position: 'absolute',
+                        width: '260px',
+                        height: '260px',
+                        top: '-120px',
+                        left: '-80px',
+                        background: 'radial-gradient(circle at 30% 30%, rgba(59,130,246,0.25), transparent 60%)',
+                        filter: 'blur(20px)'
+                      }} />
+                      <div style={{
+                        position: 'absolute',
+                        width: '240px',
+                        height: '240px',
+                        bottom: '-140px',
+                        right: '-100px',
+                        background: 'radial-gradient(circle at 70% 70%, rgba(16,185,129,0.22), transparent 60%)',
+                        filter: 'blur(20px)'
+                      }} />
+                    </div>
+
+                    <div style={{ position: 'relative', display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem', gap: '1rem' }}>
+                      <div>
+                        <h2 style={{ margin: 0, fontSize: '1.5rem', fontWeight: 800, color: '#0f172a' }}>
+                          {editingOrderId ? (language === 'en' ? 'Edit Order' : 'অর্ডার সম্পাদনা') : (language === 'en' ? 'Add New Order' : 'নতুন অর্ডার যোগ করুন')}
+                        </h2>
+                        <p style={{ margin: '0.25rem 0 0 0', color: '#475569', fontWeight: 600 }}>
+                          {language === 'en' ? 'Fill in order details and add to cart' : 'অর্ডারের তথ্য পূরণ করে কার্টে যোগ করুন'}
+                        </p>
+                      </div>
+                      <button
+                        onClick={() => {
+                          setShowOrderForm(false)
+                          resetOrderForm()
+                        }}
+                        style={{
+                          background: '#e2e8f0',
+                          border: 'none',
+                          padding: '0.4rem 0.65rem',
+                          borderRadius: '0.375rem',
+                          cursor: 'pointer',
+                          fontWeight: 700,
+                          color: '#475569'
+                        }}
+                      >
+                        ×
+                      </button>
+                      </div>
+
+                  <div style={{ position: 'relative', zIndex: 1 }}>
+                  {orderStatus && (
+                    <div style={{
+                      padding: '0.75rem',
+                      marginBottom: '1rem',
+                      borderRadius: '0.5rem',
+                      border: orderStatus.includes('error') || orderStatus.includes('Failed') ? '1px solid #fecaca' : '1px solid #bbf7d0',
+                      backgroundColor: orderStatus.includes('error') || orderStatus.includes('Failed') ? '#fef2f2' : '#ecfdf3',
+                      color: orderStatus.includes('error') || orderStatus.includes('Failed') ? '#b91c1c' : '#065f46',
+                      fontWeight: 700
+                    }}>
+                      {orderStatus}
+                    </div>
+                  )}
+                  <form onSubmit={(e) => { e.preventDefault(); handleAddOrderToCart() }} className="admin-form-grid">
+                    <div className="admin-form-group">
+                      <label>{language === 'en' ? 'Dealer *' : 'ডিলার *'}</label>
+                      <select
+                        value={orderForm.dealer}
+                        onChange={(e) => setOrderForm({ ...orderForm, dealer: e.target.value })}
+                        required
+                        style={{
+                          width: '100%',
+                          padding: '0.5rem',
+                          border: '1px solid #d1d5db',
+                          borderRadius: '0.375rem',
+                          fontSize: '0.875rem'
+                        }}
+                      >
+                        <option value="">{language === 'en' ? 'Select Dealer' : 'ডিলার নির্বাচন করুন'}</option>
+                        {filteredDealers.map((dealer) => {
+                          // Get assigned employee name - handle both populated and unpopulated cases
+                          let assignedEmployeeName = ''
+                          if (dealer.assignedTo) {
+                            if (typeof dealer.assignedTo === 'object' && dealer.assignedTo.name) {
+                              assignedEmployeeName = dealer.assignedTo.name
+                            } else if (typeof dealer.assignedTo === 'object' && dealer.assignedTo.employeeId) {
+                              assignedEmployeeName = dealer.assignedTo.employeeId
+                            } else {
+                              // If assignedTo is just an ID, find the employee
+                              const assignedEmployee = (employees || []).find(emp => 
+                                String(emp._id) === String(dealer.assignedTo?._id || dealer.assignedTo)
+                              )
+                              assignedEmployeeName = assignedEmployee?.name || assignedEmployee?.employeeId || ''
+                            }
+                          }
+                          const assignedEmployeeText = assignedEmployeeName ? ` - Assigned: ${assignedEmployeeName}` : ''
+                          return (
+                            <option key={dealer._id} value={dealer._id}>
+                              {dealer.name} {dealer.dealerId ? `(${dealer.dealerId})` : ''}{assignedEmployeeText}
+                            </option>
+                          )
+                        })}
+                      </select>
+                      {orderForm.dealer && (() => {
+                        const selectedDealer = filteredDealers.find(d => d._id === orderForm.dealer)
+                        let assignedEmployeeName = null
+                        if (selectedDealer?.assignedTo) {
+                          if (typeof selectedDealer.assignedTo === 'object' && selectedDealer.assignedTo.name) {
+                            assignedEmployeeName = selectedDealer.assignedTo.name
+                          } else if (typeof selectedDealer.assignedTo === 'object' && selectedDealer.assignedTo.employeeId) {
+                            assignedEmployeeName = selectedDealer.assignedTo.employeeId
+                          } else {
+                            // If assignedTo is just an ID, find the employee
+                            const assignedEmployee = (employees || []).find(emp => 
+                              String(emp._id) === String(selectedDealer.assignedTo?._id || selectedDealer.assignedTo)
+                            )
+                            assignedEmployeeName = assignedEmployee?.name || assignedEmployee?.employeeId || null
+                          }
+                        }
+                        if (assignedEmployeeName) {
+                          return (
+                            <div style={{
+                              marginTop: '0.5rem',
+                              padding: '0.5rem',
+                              backgroundColor: '#f0f9ff',
+                              border: '1px solid #bae6fd',
+                              borderRadius: '0.375rem',
+                              fontSize: '0.875rem',
+                              color: '#0369a1',
+                              fontWeight: 600
+                            }}>
+                              {language === 'en' ? 'Assigned Employee: ' : 'নির্ধারিত কর্মচারী: '}
+                              {assignedEmployeeName}
+                            </div>
+                          )
+                        }
+                        return null
+                      })()}
+                    </div>
+
+                    <div className="admin-form-group">
+                      <label>{language === 'en' ? 'Product *' : 'পণ্য *'}</label>
+                      <select
+                        value={orderForm.product}
+                        onChange={(e) => setOrderForm({ ...orderForm, product: e.target.value, variant: { name: '', value: '', price: 0 } })}
+                        required
+                        style={{
+                          width: '100%',
+                          padding: '0.5rem',
+                          border: '1px solid #d1d5db',
+                          borderRadius: '0.375rem',
+                          fontSize: '0.875rem'
+                        }}
+                      >
+                        <option value="">{language === 'en' ? 'Select Product' : 'পণ্য নির্বাচন করুন'}</option>
+                        {products.map((product) => (
+                          <option key={product._id} value={product._id}>
+                            {product.name} {product.productId ? `(${product.productId})` : ''}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+
+                    {selectedProductVariants.length > 0 && (
+                      <div className="admin-form-group">
+                        <label>{language === 'en' ? 'Product Variant *' : 'পণ্যের ভ্যারিয়েন্ট *'}</label>
+                        <select
+                          value={orderForm.variant.value}
+                          onChange={(e) => {
+                            const selectedVariant = selectedProductVariants.find(v => v.value === e.target.value)
+                            setOrderForm({
+                              ...orderForm,
+                              variant: selectedVariant ? {
+                                name: selectedVariant.name || '',
+                                value: selectedVariant.value || '',
+                                price: selectedVariant.price || 0
+                              } : { name: '', value: '', price: 0 }
+                            })
+                          }}
+                          required
+                          style={{
+                            width: '100%',
+                            padding: '0.5rem',
+                            border: '1px solid #d1d5db',
+                            borderRadius: '0.375rem',
+                            fontSize: '0.875rem'
+                          }}
+                        >
+                          <option value="">{language === 'en' ? 'Select Variant' : 'ভ্যারিয়েন্ট নির্বাচন করুন'}</option>
+                          {selectedProductVariants.map((variant, index) => (
+                            <option key={index} value={variant.value}>
+                              {variant.name || variant.value} - ৳{variant.price || 0}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                    )}
+
+                    <div className="admin-form-group">
+                      <label>{language === 'en' ? 'Quantity *' : 'পরিমাণ *'}</label>
+                      <input
+                        type="number"
+                        min="1"
+                        value={orderForm.quantity}
+                        onChange={(e) => setOrderForm({ ...orderForm, quantity: e.target.value })}
+                        required
+                        style={{
+                          width: '100%',
+                          padding: '0.5rem',
+                          border: '1px solid #d1d5db',
+                          borderRadius: '0.375rem',
+                          fontSize: '0.875rem'
+                        }}
+                      />
+                    </div>
+
+                    <div className="admin-form-group" style={{ gridColumn: '1 / -1' }}>
+                      <label>{language === 'en' ? 'Notes' : 'নোট'}</label>
+                      <textarea
+                        rows={3}
+                        value={orderForm.notes}
+                        onChange={(e) => setOrderForm({ ...orderForm, notes: e.target.value })}
+                        placeholder={language === 'en' ? 'Additional notes (optional)' : 'অতিরিক্ত নোট (ঐচ্ছিক)'}
+                        style={{
+                          width: '100%',
+                          padding: '0.5rem',
+                          border: '1px solid #d1d5db',
+                          borderRadius: '0.375rem',
+                          fontSize: '0.875rem',
+                          resize: 'vertical'
+                        }}
+                      />
+                    </div>
+
+                    {/* Paid Amount and Status - Only show when editing */}
+                    {editingOrderId && (
+                      <>
+                        <div className="admin-form-group">
+                          <label>{language === 'en' ? 'Paid Amount' : 'পরিশোধিত পরিমাণ'}</label>
+                          <input
+                            type="number"
+                            min="0"
+                            step="0.01"
+                            value={orderForm.paidAmount || 0}
+                            onChange={(e) => setOrderForm({ ...orderForm, paidAmount: parseFloat(e.target.value) || 0 })}
+                            style={{
+                              width: '100%',
+                              padding: '0.5rem',
+                              border: '1px solid #d1d5db',
+                              borderRadius: '0.375rem',
+                              fontSize: '0.875rem'
+                            }}
+                          />
+                        </div>
+
+                        <div className="admin-form-group">
+                          <label>{language === 'en' ? 'Status' : 'স্ট্যাটাস'}</label>
+                          <select
+                            value={orderForm.status}
+                            onChange={(e) => setOrderForm({ ...orderForm, status: e.target.value })}
+                            style={{
+                              width: '100%',
+                              padding: '0.5rem',
+                              border: '1px solid #d1d5db',
+                              borderRadius: '0.375rem',
+                              fontSize: '0.875rem'
+                            }}
+                          >
+                            <option value="Pending">{language === 'en' ? 'Pending' : 'অপেক্ষমাণ'}</option>
+                            <option value="Processing">{language === 'en' ? 'Processing' : 'প্রক্রিয়াকরণ'}</option>
+                            <option value="Shipped">{language === 'en' ? 'Shipped' : 'প্রেরিত'}</option>
+                            <option value="Delivered">{language === 'en' ? 'Delivered' : 'বিতরণকৃত'}</option>
+                            <option value="Complete">{language === 'en' ? 'Complete' : 'সম্পন্ন'}</option>
+                          </select>
+                        </div>
+                      </>
+                    )}
+
+                    <div style={{ gridColumn: '1 / -1', display: 'flex', gap: '0.75rem', marginTop: '1rem', flexWrap: 'wrap' }}>
+                      <button
+                        type="button"
+                        disabled={savingOrder}
+                        onClick={handleAddOrderToCart}
+                        style={{
+                          padding: '0.65rem 1.2rem',
+                          backgroundColor: '#0ea5e9',
+                          color: 'white',
+                          border: 'none',
+                          borderRadius: '0.375rem',
+                          fontWeight: 700,
+                          cursor: savingOrder ? 'not-allowed' : 'pointer'
+                        }}
+                      >
+                        {language === 'en' ? 'Add to Cart' : 'কার্টে যোগ করুন'}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setShowOrderForm(false)
+                          resetOrderForm()
+                        }}
+                        style={{
+                          padding: '0.65rem 1.2rem',
+                          backgroundColor: '#64748b',
+                          color: 'white',
+                          border: 'none',
+                          borderRadius: '0.375rem',
+                          fontWeight: 700,
+                          cursor: 'pointer'
+                        }}
+                      >
+                        {adminContent.cancel}
+                      </button>
+                    </div>
+                  </form>
+
+                  {/* Cart Details Section */}
+                  {orderCart.length > 0 && (
+                    <div style={{ position: 'relative', zIndex: 1, marginTop: '2rem', paddingTop: '2rem', borderTop: '2px solid #e5e7eb' }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
+                        <h3 style={{ margin: 0, fontSize: '1.25rem', fontWeight: 800, color: '#0f172a' }}>
+                          {language === 'en' ? 'Order Cart' : 'অর্ডার কার্ট'}
+                        </h3>
+                        <span style={{
+                          padding: '0.35rem 0.75rem',
+                          backgroundColor: '#e0f2fe',
+                          color: '#0ea5e9',
+                          borderRadius: '999px',
+                          fontSize: '0.875rem',
+                          fontWeight: 700
+                        }}>
+                          {orderCart.length} {language === 'en' ? 'item(s)' : 'আইটেম'}
+                        </span>
+                      </div>
+                      <div style={{ marginBottom: '0.75rem', color: '#475569', fontWeight: 600 }}>
+                        {language === 'en' ? 'Dealer:' : 'ডিলার:'} {filteredDealers.find(d => d._id === orderForm.dealer)?.name || '-'}
+                      </div>
+                      <div className="admin-table-container" style={{ marginBottom: '1rem', background: '#fff', borderRadius: '0.5rem', border: '1px solid #e2e8f0' }}>
+                        <table className="admin-table">
+                          <thead>
+                            <tr>
+                              <th>{language === 'en' ? 'Product' : 'পণ্য'}</th>
+                              <th>{language === 'en' ? 'Variant' : 'ভ্যারিয়েন্ট'}</th>
+                              <th>{language === 'en' ? 'Qty' : 'পরিমাণ'}</th>
+                              <th>{language === 'en' ? 'Total' : 'মোট'}</th>
+                              <th>{language === 'en' ? 'Status' : 'স্ট্যাটাস'}</th>
+                              <th>{language === 'en' ? 'Notes' : 'নোট'}</th>
+                              <th>{language === 'en' ? 'Actions' : 'কার্যক্রম'}</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {orderCart.map((item, idx) => (
+                              <tr key={`${item.product}-${idx}`}>
+                                <td>{item.productName || item.productId || '-'}</td>
+                                <td>{item.variant?.value ? (item.variant.name || item.variant.value) : '-'}</td>
+                                <td>{item.quantity}</td>
+                                <td>৳{getCartItemTotal(item).toFixed(2)}</td>
+                                <td>
+                                  <span style={{
+                                    padding: '0.25rem 0.5rem',
+                                    borderRadius: '0.25rem',
+                                    fontSize: '0.75rem',
+                                    fontWeight: 600,
+                                    backgroundColor: '#f3f4f6',
+                                    color: '#374151'
+                                  }}>
+                                    {item.status || 'Pending'}
+                                  </span>
+                                </td>
+                                <td>{item.notes || '-'}</td>
+                                <td>
+                                  <button
+                                    className="admin-action-btn delete"
+                                    onClick={() => handleRemoveCartItem(idx)}
+                                    style={{
+                                      padding: '0.35rem 0.75rem',
+                                      fontSize: '0.875rem'
+                                    }}
+                                  >
+                                    {adminContent.delete}
+                                  </button>
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                          <tfoot>
+                            <tr>
+                              <td colSpan="3" style={{ textAlign: 'right', fontWeight: 700, padding: '0.75rem' }}>
+                                {language === 'en' ? 'Cart Total:' : 'কার্ট মোট:'}
+                              </td>
+                              <td colSpan="4" style={{ fontWeight: 800, fontSize: '1.1rem', color: '#0f172a', padding: '0.75rem' }}>
+                                ৳{getOrderCartTotal().toFixed(2)}
+                              </td>
+                            </tr>
+                          </tfoot>
+                        </table>
+                      </div>
+                      <div style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap', marginTop: '1rem' }}>
+                        <button
+                          type="button"
+                          disabled={savingOrder}
+                          onClick={handleConfirmOrders}
+                          style={{
+                            padding: '0.65rem 1.5rem',
+                            backgroundColor: '#16a34a',
+                            color: 'white',
+                            border: 'none',
+                            borderRadius: '0.5rem',
+                            fontWeight: 700,
+                            cursor: savingOrder ? 'not-allowed' : 'pointer',
+                            boxShadow: '0 10px 20px rgba(22,163,74,0.35)'
+                          }}
+                        >
+                          {savingOrder
+                            ? (language === 'en' ? 'Saving...' : 'সংরক্ষণ হচ্ছে...')
+                            : (language === 'en' ? 'Confirm Order' : 'অর্ডার নিশ্চিত করুন')}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setOrderCart([])
+                            setShowOrderCart(false)
+                          }}
+                          style={{
+                            padding: '0.65rem 1.5rem',
+                            backgroundColor: '#ef4444',
+                            color: 'white',
+                            border: 'none',
+                            borderRadius: '0.5rem',
+                            fontWeight: 700,
+                            cursor: 'pointer',
+                            boxShadow: '0 10px 20px rgba(239,68,68,0.35)'
+                          }}
+                        >
+                          {language === 'en' ? 'Clear Cart' : 'কার্ট খালি করুন'}
+                        </button>
+                      </div>
+                    </div>
+                  )}
+                  </div>
+                  </div>
+                </div>
+              )}
+
               <div className="admin-table-container">
+                {showOrderRequests && (
+                  <div style={{
+                    position: 'fixed',
+                    top: 0,
+                    left: 0,
+                    right: 0,
+                    bottom: 0,
+                    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    zIndex: 1000,
+                    padding: '1rem'
+                  }} onClick={() => {
+                    setShowOrderRequests(false)
+                  }}>
+                    <div style={{
+                      position: 'relative',
+                      background: 'linear-gradient(135deg, #f8fafc 0%, #eef2ff 100%)',
+                      borderRadius: '0.75rem',
+                      padding: '2rem',
+                      maxWidth: '1200px',
+                      width: '100%',
+                      maxHeight: '90vh',
+                      overflowY: 'auto',
+                      boxShadow: '0 25px 50px -12px rgba(0,0,0,0.25)'
+                    }} onClick={(e) => e.stopPropagation()}>
+                      <div style={{
+                        position: 'absolute',
+                        inset: 0,
+                        pointerEvents: 'none',
+                        overflow: 'hidden',
+                        borderRadius: '0.75rem'
+                      }}>
+                        <div style={{
+                          position: 'absolute',
+                          width: '260px',
+                          height: '260px',
+                          top: '-120px',
+                          left: '-80px',
+                          background: 'radial-gradient(circle at 30% 30%, rgba(59,130,246,0.25), transparent 60%)',
+                          filter: 'blur(20px)'
+                        }} />
+                        <div style={{
+                          position: 'absolute',
+                          width: '240px',
+                          height: '240px',
+                          bottom: '-140px',
+                          right: '-100px',
+                          background: 'radial-gradient(circle at 70% 70%, rgba(16,185,129,0.22), transparent 60%)',
+                          filter: 'blur(20px)'
+                        }} />
+                      </div>
+
+                      <div style={{ position: 'relative', display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem', gap: '1rem' }}>
+                        <div>
+                          <h2 style={{ margin: 0, fontSize: '1.5rem', fontWeight: 800, color: '#0f172a' }}>
+                            {language === 'en' ? 'Pending Order Requests' : 'অপেক্ষমাণ অর্ডার অনুরোধ'}
+                          </h2>
+                          <p style={{ margin: '0.25rem 0 0 0', color: '#475569', fontWeight: 600 }}>
+                            {language === 'en' ? 'Approve or reject pending requests' : 'অপেক্ষমাণ অনুরোধ অনুমোদন বা বাতিল করুন'}
+                          </p>
+                        </div>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
+                          <span
+                            style={{
+                              fontWeight: 800,
+                              color: '#0ea5e9',
+                              background: '#e0f2fe',
+                              padding: '0.35rem 0.75rem',
+                              borderRadius: '999px',
+                              border: '1px solid #bae6fd',
+                              minWidth: '72px',
+                              textAlign: 'center'
+                            }}
+                          >
+                            {orderRequests.length} {language === 'en' ? 'pending' : 'অপেক্ষমাণ'}
+                          </span>
+                          <button
+                            onClick={() => {
+                              setShowOrderRequests(false)
+                            }}
+                            style={{
+                              background: '#e2e8f0',
+                              border: 'none',
+                              padding: '0.4rem 0.65rem',
+                              borderRadius: '0.375rem',
+                              cursor: 'pointer',
+                              fontWeight: 700,
+                              color: '#475569'
+                            }}
+                          >
+                            ×
+                          </button>
+                        </div>
+                      </div>
+
+                      <div style={{ position: 'relative', zIndex: 1 }}>
+
+                    {orderRequests.length === 0 ? (
+                      <div style={{ padding: '0.75rem', color: '#475569' }}>
+                        {language === 'en' ? 'No pending requests.' : 'কোনো অপেক্ষমাণ অনুরোধ নেই।'}
+                      </div>
+                    ) : (
+                      <div className="admin-table-container" style={{ background: '#fff', borderRadius: '0.65rem', border: '1px solid #e2e8f0' }}>
                 <table className="admin-table">
                   <thead>
                     <tr>
+                              <th>{language === 'en' ? 'Date' : 'তারিখ'}</th>
                       <th>{language === 'en' ? 'Order ID' : 'অর্ডার আইডি'}</th>
-                      <th>{language === 'en' ? 'Customer' : 'গ্রাহক'}</th>
+                              <th>{language === 'en' ? 'Dealer' : 'ডিলার'}</th>
+                              <th>{language === 'en' ? 'Dealer ID' : 'ডিলার আইডি'}</th>
                       <th>{language === 'en' ? 'Product' : 'পণ্য'}</th>
-                      <th>{language === 'en' ? 'Quantity' : 'পরিমাণ'}</th>
-                      <th>{language === 'en' ? 'Status' : 'স্ট্যাটাস'}</th>
+                              <th>{language === 'en' ? 'Variant' : 'ভ্যারিয়েন্ট'}</th>
+                              <th>{language === 'en' ? 'Qty' : 'পরিমাণ'}</th>
+                              <th>{language === 'en' ? 'Requested By' : 'অনুরোধকারী'}</th>
+                              <th>{language === 'en' ? 'Actions' : 'কার্যক্রম'}</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {orderRequests.map((order) => {
+                              const isAdmin = (userRole || '').toLowerCase() === 'admin'
+                              return (
+                                <tr key={order._id}>
+                                  <td>{order.createdAt ? new Date(order.createdAt).toLocaleDateString() : '-'}</td>
+                                  <td>{order.orderId || '-'}</td>
+                                  <td>{order.dealerName || order.dealer?.name || '-'}</td>
+                                  <td>{order.dealerId || order.dealer?.dealerId || '-'}</td>
+                                  <td>{order.productName || order.product?.name || '-'}</td>
+                                  <td>{order.variant?.value ? (order.variant.name || order.variant.value) : '-'}</td>
+                                  <td>{order.quantity || 0}</td>
+                                  <td>{order.requestedByName || order.requestedByRole || '-'}</td>
+                                  <td>
+                                    <div className="admin-action-buttons">
+                                      {isAdmin ? (
+                                        <>
+                                          <button
+                                            className="admin-action-btn edit"
+                                            onClick={async () => {
+                                              try {
+                                                const res = await fetch(`${API_BASE}/api/orders/${order._id}`, {
+                                                  method: 'PUT',
+                                                  headers: { 'Content-Type': 'application/json' },
+                                                  body: JSON.stringify({ 
+                                                    approvalStatus: 'Approved',
+                                                    approvedBy: loggedInUserId,
+                                                    approvedByName: loggedInUser || 'Admin'
+                                                  })
+                                                })
+                                                const data = await res.json()
+                                                if (!res.ok) throw new Error(data.message || 'Failed to approve')
+                                                await loadOrders()
+                                                await loadOrderRequests()
+                                                // Reload employees to update achieved target
+                                                const empRes = await fetch(`${API_BASE}/api/employees`)
+                                                if (empRes.ok) {
+                                                  const empData = await empRes.json()
+                                                  setEmployees(empData.data || [])
+                                                  
+                                                  // Update viewingEmployee if it's the same employee who created the order
+                                                  if (viewingEmployee && order.requestedBy && viewingEmployee._id === order.requestedBy) {
+                                                    const updatedEmp = empData.data.find(e => e._id === order.requestedBy)
+                                                    if (updatedEmp) {
+                                                      setViewingEmployee({ ...updatedEmp, status: normalizeSalaryStatus(updatedEmp.status) })
+                                                    }
+                                                  }
+                                                }
+                                              } catch (err) {
+                                                alert(language === 'en' ? 'Approval failed' : 'অনুমোদন ব্যর্থ')
+                                                console.error(err)
+                                              }
+                                            }}
+                                          >
+                                            {language === 'en' ? 'Approve' : 'অনুমোদন'}
+                                          </button>
+                                          <button
+                                            className="admin-action-btn delete"
+                                            onClick={async () => {
+                                              try {
+                                                const res = await fetch(`${API_BASE}/api/orders/${order._id}`, {
+                                                  method: 'PUT',
+                                                  headers: { 'Content-Type': 'application/json' },
+                                                  body: JSON.stringify({ approvalStatus: 'Rejected', status: 'Cancelled' })
+                                                })
+                                                const data = await res.json()
+                                                if (!res.ok) throw new Error(data.message || 'Failed to reject')
+                                                await loadOrders()
+                                                await loadOrderRequests()
+                                              } catch (err) {
+                                                alert(language === 'en' ? 'Rejection failed' : 'বাতিল ব্যর্থ')
+                                                console.error(err)
+                                              }
+                                            }}
+                                          >
+                                            {language === 'en' ? 'Reject' : 'বাতিল'}
+                                          </button>
+                                          <button
+                                            className="admin-action-btn edit"
+                                            style={{ backgroundColor: '#e0e7ff', color: '#1d4ed8' }}
+                                            onClick={() => {
+                                              setViewingOrder(order)
+                                              setIsEditingOrderDetails(false)
+                                              setEditingOrderDetails(null)
+                                            }}
+                                          >
+                                            {language === 'en' ? 'View' : 'দেখুন'}
+                                          </button>
+                                        </>
+                                      ) : (
+                                        <button
+                                          className="admin-action-btn edit"
+                                          onClick={() => {
+                                            setEditingOrderId(order._id)
+                                            const existingItems = Array.isArray(order.items) && order.items.length
+                                              ? order.items
+                                              : [{
+                                                  product: order.product?._id || order.product || '',
+                                                  productName: order.productName || '',
+                                                  productId: order.productId || '',
+                                                  variant: order.variant || { name: '', value: '', price: 0 },
+                                                  quantity: order.quantity || 1,
+                                                  notes: order.notes || '',
+                                                  status: order.status || 'Pending'
+                                                }]
+                                            setOrderCart(existingItems.map((it) => ({
+                                              product: it.product,
+                                              productName: it.productName,
+                                              productId: it.productId,
+                                              variant: it.variant,
+                                              quantity: it.quantity,
+                                              notes: it.notes,
+                                              status: it.status || 'Pending'
+                                            })))
+                                            setOrderForm({
+                                              dealer: order.dealer?._id || order.dealer || '',
+                                              product: existingItems[0]?.product || '',
+                                              variant: existingItems[0]?.variant || { name: '', value: '', price: 0 },
+                                              quantity: existingItems[0]?.quantity || 1,
+                                              notes: existingItems[0]?.notes || '',
+                                              status: existingItems[0]?.status || 'Pending'
+                                            })
+                                            setShowOrderForm(true)
+                                            setShowOrderCart(true)
+                                            setShowOrderRequests(false)
+                                          }}
+                                        >
+                                          {language === 'en' ? 'Edit' : 'সম্পাদনা'}
+                                        </button>
+                                      )}
+                                    </div>
+                                  </td>
+                                </tr>
+                              )
+                            })}
+                          </tbody>
+                        </table>
+                      </div>
+                    )}
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {!showOrderRequests && !showOrderForm && (
+                <div className="admin-table-container" style={{ marginTop: '1rem' }}>
+                  <div className="admin-search-bar" style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
+                    <input 
+                      type="text" 
+                      placeholder={language === 'en' ? 'Search orders...' : 'অর্ডার খুঁজুন...'} 
+                      value={orderSearch || ''}
+                      onChange={(e) => setOrderSearch(e.target.value)}
+                      style={{ flex: 1 }}
+                    />
+                    <button
+                      onClick={() => setOrderFilter('rejected')}
+                      style={{
+                        padding: '0.5rem 1rem',
+                        backgroundColor: orderFilter === 'rejected' ? '#ef4444' : '#e2e8f0',
+                        color: orderFilter === 'rejected' ? 'white' : '#0f172a',
+                        border: 'none',
+                        borderRadius: '0.375rem',
+                        cursor: 'pointer',
+                        fontWeight: 600,
+                        fontSize: '0.875rem',
+                        whiteSpace: 'nowrap'
+                      }}
+                    >
+                      {language === 'en' ? 'Rejected Orders' : 'প্রত্যাখ্যাত অর্ডার'}
+                    </button>
+                    <button
+                      onClick={() => setOrderFilter('cancelled')}
+                      style={{
+                        padding: '0.5rem 1rem',
+                        backgroundColor: orderFilter === 'cancelled' ? '#f59e0b' : '#e2e8f0',
+                        color: orderFilter === 'cancelled' ? 'white' : '#0f172a',
+                        border: 'none',
+                        borderRadius: '0.375rem',
+                        cursor: 'pointer',
+                        fontWeight: 600,
+                        fontSize: '0.875rem',
+                        whiteSpace: 'nowrap'
+                      }}
+                    >
+                      {language === 'en' ? 'Cancelled Orders' : 'বাতিল অর্ডার'}
+                    </button>
+                    {orderFilter !== 'all' && (
+                      <button
+                        onClick={() => setOrderFilter('all')}
+                        style={{
+                          padding: '0.5rem 1rem',
+                          backgroundColor: '#3b82f6',
+                          color: 'white',
+                          border: 'none',
+                          borderRadius: '0.375rem',
+                          cursor: 'pointer',
+                          fontWeight: 600,
+                          fontSize: '0.875rem',
+                          whiteSpace: 'nowrap'
+                        }}
+                      >
+                        {language === 'en' ? 'All Orders' : 'সব অর্ডার'}
+                      </button>
+                    )}
+                    <button
+                      onClick={handleExportOrders}
+                      style={{
+                        padding: '0.5rem 1rem',
+                        backgroundColor: '#10b981',
+                        color: 'white',
+                        border: 'none',
+                        borderRadius: '0.375rem',
+                        cursor: 'pointer',
+                        fontWeight: 600,
+                        fontSize: '0.875rem',
+                        whiteSpace: 'nowrap',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '0.5rem'
+                      }}
+                    >
+                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                        <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                        <polyline points="7 10 12 15 17 10"></polyline>
+                        <line x1="12" y1="15" x2="12" y2="3"></line>
+                      </svg>
+                      {language === 'en' ? 'Export Excel' : 'এক্সেল রপ্তানি'}
+                    </button>
+                  </div>
+                <table className="admin-table">
+                  <thead>
+                    <tr>
+                      <th 
+                        onClick={() => handleSortOrders('date')}
+                        style={{ cursor: 'pointer', userSelect: 'none' }}
+                      >
+                        {language === 'en' ? 'Date' : 'তারিখ'}
+                        {orderSortField === 'date' && (orderSortDirection === 'asc' ? ' ↑' : ' ↓')}
+                      </th>
+                      <th 
+                        onClick={() => handleSortOrders('orderId')}
+                        style={{ cursor: 'pointer', userSelect: 'none' }}
+                      >
+                        {language === 'en' ? 'Order ID' : 'অর্ডার আইডি'}
+                        {orderSortField === 'orderId' && (orderSortDirection === 'asc' ? ' ↑' : ' ↓')}
+                      </th>
+                      <th 
+                        onClick={() => handleSortOrders('dealer')}
+                        style={{ cursor: 'pointer', userSelect: 'none' }}
+                      >
+                        {language === 'en' ? 'Dealer' : 'ডিলার'}
+                        {orderSortField === 'dealer' && (orderSortDirection === 'asc' ? ' ↑' : ' ↓')}
+                      </th>
+                      <th 
+                        onClick={() => handleSortOrders('dealerId')}
+                        style={{ cursor: 'pointer', userSelect: 'none' }}
+                      >
+                        {language === 'en' ? 'Dealer ID' : 'ডিলার আইডি'}
+                        {orderSortField === 'dealerId' && (orderSortDirection === 'asc' ? ' ↑' : ' ↓')}
+                      </th>
+                      <th 
+                        onClick={() => handleSortOrders('product')}
+                        style={{ cursor: 'pointer', userSelect: 'none' }}
+                      >
+                        {language === 'en' ? 'Product' : 'পণ্য'}
+                        {orderSortField === 'product' && (orderSortDirection === 'asc' ? ' ↑' : ' ↓')}
+                      </th>
+                      <th>{language === 'en' ? 'Variant' : 'ভ্যারিয়েন্ট'}</th>
+                      <th 
+                        onClick={() => handleSortOrders('quantity')}
+                        style={{ cursor: 'pointer', userSelect: 'none' }}
+                      >
+                        {language === 'en' ? 'Quantity' : 'পরিমাণ'}
+                        {orderSortField === 'quantity' && (orderSortDirection === 'asc' ? ' ↑' : ' ↓')}
+                      </th>
+                      <th 
+                        onClick={() => handleSortOrders('createdBy')}
+                        style={{ cursor: 'pointer', userSelect: 'none' }}
+                      >
+                        {language === 'en' ? 'Created By' : 'তৈরিকারী'}
+                        {orderSortField === 'createdBy' && (orderSortDirection === 'asc' ? ' ↑' : ' ↓')}
+                      </th>
+                      <th 
+                        onClick={() => handleSortOrders('totalPrice')}
+                        style={{ cursor: 'pointer', userSelect: 'none' }}
+                      >
+                        {language === 'en' ? 'Total Price' : 'মোট মূল্য'}
+                        {orderSortField === 'totalPrice' && (orderSortDirection === 'asc' ? ' ↑' : ' ↓')}
+                      </th>
+                      <th 
+                        onClick={() => handleSortOrders('paidAmount')}
+                        style={{ cursor: 'pointer', userSelect: 'none' }}
+                      >
+                        {language === 'en' ? 'Paid Amount' : 'পরিশোধিত পরিমাণ'}
+                        {orderSortField === 'paidAmount' && (orderSortDirection === 'asc' ? ' ↑' : ' ↓')}
+                      </th>
+                      <th 
+                        onClick={() => handleSortOrders('dueAmount')}
+                        style={{ cursor: 'pointer', userSelect: 'none' }}
+                      >
+                        {language === 'en' ? 'Due Amount' : 'বাকি পরিমাণ'}
+                        {orderSortField === 'dueAmount' && (orderSortDirection === 'asc' ? ' ↑' : ' ↓')}
+                      </th>
+                      <th 
+                        onClick={() => handleSortOrders('status')}
+                        style={{ cursor: 'pointer', userSelect: 'none' }}
+                      >
+                        {language === 'en' ? 'Status' : 'স্ট্যাটাস'}
+                        {orderSortField === 'status' && (orderSortDirection === 'asc' ? ' ↑' : ' ↓')}
+                      </th>
                       <th>{language === 'en' ? 'Actions' : 'কার্যক্রম'}</th>
                     </tr>
                   </thead>
                   <tbody>
-                    <tr>
-                      <td colSpan="6" style={{ textAlign: 'center', padding: '2rem' }}>
-                        {adminContent.noData}
-                      </td>
-                    </tr>
+                    {sortedOrders.length ? sortedOrders.map((order) => (
+                      <tr key={order._id}>
+                        <td>{order.createdAt ? new Date(order.createdAt).toLocaleDateString() : '-'}</td>
+                        <td>{order.orderId || '-'}</td>
+                        <td>{order.dealerName || order.dealer?.name || '-'}</td>
+                        <td>{order.dealerId || order.dealer?.dealerId || '-'}</td>
+                        <td>{order.productName || order.product?.name || '-'}</td>
+                        <td>
+                          {order.variant && order.variant.value
+                            ? `${order.variant.name || order.variant.value}`
+                            : '-'}
+                        </td>
+                        <td>{order.quantity || 0}</td>
+                        <td>{order.requestedByName || order.requestedByRole || '-'}</td>
+                        <td>৳{order.totalPrice ? order.totalPrice.toFixed(2) : '0.00'}</td>
+                        <td style={{ fontWeight: 600, color: '#16a34a' }}>
+                          ৳{order.paidAmount ? parseFloat(order.paidAmount).toFixed(2) : '0.00'}
+                        </td>
+                        <td style={{ fontWeight: 600, color: (() => {
+                          const due = order.dueAmount !== undefined 
+                            ? parseFloat(order.dueAmount) 
+                            : Math.max(0, parseFloat(order.totalPrice || 0) - parseFloat(order.paidAmount || 0))
+                          return due > 0 ? '#dc2626' : '#16a34a'
+                        })() }}>
+                          ৳{(() => {
+                            const due = order.dueAmount !== undefined 
+                              ? parseFloat(order.dueAmount) 
+                              : Math.max(0, parseFloat(order.totalPrice || 0) - parseFloat(order.paidAmount || 0))
+                            return due.toFixed(2)
+                          })()}
+                        </td>
+                        <td>
+                          <span style={{
+                            padding: '0.25rem 0.5rem',
+                            borderRadius: '0.25rem',
+                            fontSize: '0.75rem',
+                            fontWeight: 600,
+                            backgroundColor: 
+                              order.status === 'Complete' ? '#dcfce7' :
+                              order.status === 'Delivered' ? '#d1fae5' :
+                              order.status === 'Shipped' ? '#dbeafe' :
+                              order.status === 'Processing' ? '#fef3c7' :
+                              order.status === 'Cancelled' ? '#fee2e2' :
+                              '#f3f4f6',
+                            color:
+                              order.status === 'Complete' ? '#166534' :
+                              order.status === 'Delivered' ? '#065f46' :
+                              order.status === 'Shipped' ? '#1e40af' :
+                              order.status === 'Processing' ? '#92400e' :
+                              order.status === 'Cancelled' ? '#b91c1c' :
+                              '#374151'
+                          }}>
+                            {order.status || 'Pending'}
+                          </span>
+                        </td>
+                        <td>
+                          <div className="admin-action-buttons">
+                            <button 
+                              className="admin-action-btn edit"
+                              style={{ backgroundColor: '#e0e7ff', color: '#1d4ed8' }}
+                              onClick={() => setViewingOrder(order)}
+                            >
+                              {language === 'en' ? 'View' : 'দেখুন'}
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    )) : (
+                      <tr>
+                        <td colSpan="13" style={{ textAlign: 'center', padding: '2rem' }}>
+                          {adminContent.noData}
+                        </td>
+                      </tr>
+                    )}
                   </tbody>
                 </table>
+              </div>
+                )}
+
+                {/* Order Details Card */}
+                {viewingOrder && !showOrderForm && (
+                  <div style={{
+                    position: 'fixed',
+                    top: 0,
+                    left: 0,
+                    right: 0,
+                    bottom: 0,
+                    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    zIndex: 1000,
+                    padding: '1rem'
+                  }} onClick={() => setViewingOrder(null)}>
+                    <div style={{
+                      position: 'relative',
+                      background: 'linear-gradient(135deg, #f8fafc 0%, #eef2ff 100%)',
+                      borderRadius: '0.75rem',
+                      padding: '2rem',
+                      maxWidth: '900px',
+                      width: '100%',
+                      maxHeight: '90vh',
+                      overflowY: 'auto',
+                      boxShadow: '0 25px 50px -12px rgba(0,0,0,0.25)'
+                    }} onClick={(e) => e.stopPropagation()}>
+                      <div style={{
+                        position: 'absolute',
+                        inset: 0,
+                        pointerEvents: 'none',
+                        overflow: 'hidden',
+                        borderRadius: '0.75rem'
+                      }}>
+                        <div style={{
+                          position: 'absolute',
+                          width: '260px',
+                          height: '260px',
+                          top: '-120px',
+                          left: '-80px',
+                          background: 'radial-gradient(circle at 30% 30%, rgba(59,130,246,0.25), transparent 60%)',
+                          filter: 'blur(20px)'
+                        }} />
+                        <div style={{
+                          position: 'absolute',
+                          width: '240px',
+                          height: '240px',
+                          bottom: '-140px',
+                          right: '-100px',
+                          background: 'radial-gradient(circle at 70% 70%, rgba(16,185,129,0.22), transparent 60%)',
+                          filter: 'blur(20px)'
+                        }} />
+            </div>
+
+                      <div style={{ position: 'relative', display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem', gap: '1rem' }}>
+                        <div>
+                          <h2 style={{ margin: 0, fontSize: '1.5rem', fontWeight: 800, color: '#0f172a' }}>
+                            {language === 'en' ? 'Order Details' : 'অর্ডার বিবরণ'}
+                          </h2>
+                          <p style={{ margin: '0.25rem 0 0 0', color: '#475569', fontWeight: 600 }}>
+                            {viewingOrder.orderId || 'N/A'}
+                          </p>
+                        </div>
+                        <button
+                          onClick={() => setViewingOrder(null)}
+                          style={{
+                            background: '#e2e8f0',
+                            border: 'none',
+                            padding: '0.4rem 0.65rem',
+                            borderRadius: '0.375rem',
+                            cursor: 'pointer',
+                            fontWeight: 700,
+                            color: '#475569'
+                          }}
+                        >
+                          ×
+                        </button>
+                      </div>
+
+                      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))', gap: '1rem', position: 'relative', zIndex: 1 }}>
+                        {/* Order ID */}
+                        <div style={{ padding: '1rem', backgroundColor: '#f9fafb', borderRadius: '0.375rem' }}>
+                          <label style={{ fontSize: '0.875rem', color: '#6b7280', fontWeight: 600 }}>
+                            {language === 'en' ? 'Order ID' : 'অর্ডার আইডি'}
+                          </label>
+                          <p style={{ margin: '0.5rem 0 0 0', fontSize: '1rem', fontWeight: 600, color: '#111827' }}>
+                            {viewingOrder.orderId || 'N/A'}
+                          </p>
+                        </div>
+
+                        {/* Date */}
+                        <div style={{ padding: '1rem', backgroundColor: '#f9fafb', borderRadius: '0.375rem' }}>
+                          <label style={{ fontSize: '0.875rem', color: '#6b7280', fontWeight: 600 }}>
+                            {language === 'en' ? 'Date' : 'তারিখ'}
+                          </label>
+                          <p style={{ margin: '0.5rem 0 0 0', fontSize: '1rem', color: '#111827' }}>
+                            {viewingOrder.createdAt ? new Date(viewingOrder.createdAt).toLocaleDateString() : 'N/A'}
+                          </p>
+                        </div>
+
+                        {/* Dealer Name */}
+                        <div style={{ padding: '1rem', backgroundColor: '#f9fafb', borderRadius: '0.375rem' }}>
+                          <label style={{ fontSize: '0.875rem', color: '#6b7280', fontWeight: 600 }}>
+                            {language === 'en' ? 'Dealer Name' : 'ডিলারের নাম'}
+                          </label>
+                          <p style={{ margin: '0.5rem 0 0 0', fontSize: '1rem', color: '#111827' }}>
+                            {viewingOrder.dealerName || viewingOrder.dealer?.name || 'N/A'}
+                          </p>
+                        </div>
+
+                        {/* Dealer ID */}
+                        <div style={{ padding: '1rem', backgroundColor: '#f9fafb', borderRadius: '0.375rem' }}>
+                          <label style={{ fontSize: '0.875rem', color: '#6b7280', fontWeight: 600 }}>
+                            {language === 'en' ? 'Dealer ID' : 'ডিলার আইডি'}
+                          </label>
+                          <p style={{ margin: '0.5rem 0 0 0', fontSize: '1rem', color: '#111827' }}>
+                            {viewingOrder.dealerId || viewingOrder.dealer?.dealerId || 'N/A'}
+                          </p>
+                        </div>
+
+                        {/* Total Price */}
+                        <div style={{ padding: '1rem', backgroundColor: '#f9fafb', borderRadius: '0.375rem' }}>
+                          <label style={{ fontSize: '0.875rem', color: '#6b7280', fontWeight: 600 }}>
+                            {language === 'en' ? 'Total Price' : 'মোট মূল্য'}
+                          </label>
+                          <p style={{ margin: '0.5rem 0 0 0', fontSize: '1rem', color: '#111827', fontWeight: 600 }}>
+                            ৳{viewingOrder.totalPrice ? viewingOrder.totalPrice.toFixed(2) : '0.00'}
+                          </p>
+                        </div>
+
+                        {/* Paid Amount */}
+                        <div style={{ padding: '1rem', backgroundColor: '#f9fafb', borderRadius: '0.375rem' }}>
+                          <label style={{ fontSize: '0.875rem', color: '#6b7280', fontWeight: 600 }}>
+                            {language === 'en' ? 'Paid Amount' : 'পরিশোধিত পরিমাণ'}
+                          </label>
+                          {isEditingOrderDetails ? (
+                            <input
+                              type="number"
+                              min="0"
+                              step="0.01"
+                              value={editingOrderDetails?.paidAmount || 0}
+                              onChange={(e) => {
+                                const paid = parseFloat(e.target.value) || 0
+                                const total = parseFloat(viewingOrder.totalPrice || 0)
+                                const due = Math.max(0, total - paid)
+                                setEditingOrderDetails({
+                                  ...editingOrderDetails,
+                                  paidAmount: paid,
+                                  dueAmount: due
+                                })
+                              }}
+                              style={{
+                                marginTop: '0.5rem',
+                                width: '100%',
+                                padding: '0.5rem',
+                                border: '1px solid #d1d5db',
+                                borderRadius: '0.375rem',
+                                fontSize: '1rem',
+                                fontWeight: 600
+                              }}
+                            />
+                          ) : (
+                            <p style={{ margin: '0.5rem 0 0 0', fontSize: '1rem', color: '#16a34a', fontWeight: 600 }}>
+                              ৳{viewingOrder.paidAmount ? parseFloat(viewingOrder.paidAmount).toFixed(2) : '0.00'}
+                            </p>
+                          )}
+                        </div>
+
+                        {/* Due Amount */}
+                        <div style={{ padding: '1rem', backgroundColor: '#f9fafb', borderRadius: '0.375rem' }}>
+                          <label style={{ fontSize: '0.875rem', color: '#6b7280', fontWeight: 600 }}>
+                            {language === 'en' ? 'Due Amount' : 'বাকি পরিমাণ'}
+                          </label>
+                          <p style={{ 
+                            margin: '0.5rem 0 0 0', 
+                            fontSize: '1rem', 
+                            color: (() => {
+                              const due = isEditingOrderDetails && editingOrderDetails
+                                ? parseFloat(editingOrderDetails.dueAmount || 0)
+                                : (viewingOrder.dueAmount !== undefined 
+                                  ? parseFloat(viewingOrder.dueAmount) 
+                                  : Math.max(0, parseFloat(viewingOrder.totalPrice || 0) - parseFloat(viewingOrder.paidAmount || 0)))
+                              return due > 0 ? '#dc2626' : '#16a34a'
+                            })(), 
+                            fontWeight: 600 
+                          }}>
+                            ৳{(() => {
+                              const due = isEditingOrderDetails && editingOrderDetails
+                                ? parseFloat(editingOrderDetails.dueAmount || 0)
+                                : (viewingOrder.dueAmount !== undefined 
+                                  ? parseFloat(viewingOrder.dueAmount) 
+                                  : Math.max(0, parseFloat(viewingOrder.totalPrice || 0) - parseFloat(viewingOrder.paidAmount || 0)))
+                              return due.toFixed(2)
+                            })()}
+                          </p>
+                        </div>
+
+                        {/* Status */}
+                        <div style={{ padding: '1rem', backgroundColor: '#f9fafb', borderRadius: '0.375rem' }}>
+                          <label style={{ fontSize: '0.875rem', color: '#6b7280', fontWeight: 600 }}>
+                            {language === 'en' ? 'Status' : 'স্ট্যাটাস'}
+                          </label>
+                          {isEditingOrderDetails ? (
+                            <select
+                              value={editingOrderDetails?.status || 'Pending'}
+                              onChange={(e) => setEditingOrderDetails({ ...editingOrderDetails, status: e.target.value })}
+                              style={{
+                                marginTop: '0.5rem',
+                                width: '100%',
+                                padding: '0.5rem',
+                                border: '1px solid #d1d5db',
+                                borderRadius: '0.375rem',
+                                fontSize: '1rem'
+                              }}
+                            >
+                              {(userRole || '').toLowerCase() === 'admin' ? (
+                                <>
+                                  <option value="Pending">{language === 'en' ? 'Pending' : 'অপেক্ষমাণ'}</option>
+                                  <option value="Processing">{language === 'en' ? 'Processing' : 'প্রক্রিয়াকরণ'}</option>
+                                  <option value="Shipped">{language === 'en' ? 'Shipped' : 'প্রেরিত'}</option>
+                                  <option value="Delivered">{language === 'en' ? 'Delivered' : 'বিতরণকৃত'}</option>
+                                  <option value="Complete">{language === 'en' ? 'Complete' : 'সম্পন্ন'}</option>
+                                  <option value="Cancelled">{language === 'en' ? 'Cancelled' : 'বাতিল'}</option>
+                                </>
+                              ) : (
+                                <>
+                                  <option value="Shipped">{language === 'en' ? 'Shipped' : 'প্রেরিত'}</option>
+                                  <option value="Delivered">{language === 'en' ? 'Delivered' : 'বিতরণকৃত'}</option>
+                                  <option value="Complete">{language === 'en' ? 'Complete' : 'সম্পন্ন'}</option>
+                                </>
+                              )}
+                            </select>
+                          ) : (
+                            <p style={{ margin: '0.5rem 0 0 0' }}>
+                              <span style={{
+                                padding: '0.35rem 0.75rem',
+                                borderRadius: '0.375rem',
+                                fontSize: '0.875rem',
+                                fontWeight: 600,
+                                backgroundColor: 
+                                  viewingOrder.status === 'Complete' ? '#dcfce7' :
+                                  viewingOrder.status === 'Delivered' ? '#d1fae5' :
+                                  viewingOrder.status === 'Shipped' ? '#dbeafe' :
+                                  viewingOrder.status === 'Processing' ? '#fef3c7' :
+                                  viewingOrder.status === 'Cancelled' ? '#fee2e2' :
+                                  '#f3f4f6',
+                                color:
+                                  viewingOrder.status === 'Complete' ? '#166534' :
+                                  viewingOrder.status === 'Delivered' ? '#065f46' :
+                                  viewingOrder.status === 'Shipped' ? '#1e40af' :
+                                  viewingOrder.status === 'Processing' ? '#92400e' :
+                                  viewingOrder.status === 'Cancelled' ? '#b91c1c' :
+                                  '#374151'
+                              }}>
+                                {viewingOrder.status || 'Pending'}
+                              </span>
+                            </p>
+                          )}
+                        </div>
+
+                        {/* Approval Status */}
+                        <div style={{ padding: '1rem', backgroundColor: '#f9fafb', borderRadius: '0.375rem' }}>
+                          <label style={{ fontSize: '0.875rem', color: '#6b7280', fontWeight: 600 }}>
+                            {language === 'en' ? 'Approval Status' : 'অনুমোদন স্ট্যাটাস'}
+                          </label>
+                          <p style={{ margin: '0.5rem 0 0 0' }}>
+                            <span style={{
+                              padding: '0.35rem 0.75rem',
+                              borderRadius: '0.375rem',
+                              fontSize: '0.875rem',
+                              fontWeight: 600,
+                              backgroundColor: 
+                                viewingOrder.approvalStatus === 'Approved' ? '#d1fae5' :
+                                viewingOrder.approvalStatus === 'Rejected' ? '#fee2e2' :
+                                '#fef3c7',
+                              color:
+                                viewingOrder.approvalStatus === 'Approved' ? '#065f46' :
+                                viewingOrder.approvalStatus === 'Rejected' ? '#b91c1c' :
+                                '#92400e'
+                            }}>
+                              {viewingOrder.approvalStatus || 'Pending'}
+                            </span>
+                          </p>
+                        </div>
+
+                        {/* Requested By */}
+                        <div style={{ padding: '1rem', backgroundColor: '#f9fafb', borderRadius: '0.375rem' }}>
+                          <label style={{ fontSize: '0.875rem', color: '#6b7280', fontWeight: 600 }}>
+                            {language === 'en' ? 'Requested By' : 'অনুরোধকারী'}
+                          </label>
+                          <p style={{ margin: '0.5rem 0 0 0', fontSize: '1rem', color: '#111827' }}>
+                            {viewingOrder.requestedByName || viewingOrder.requestedByRole || 'N/A'}
+                          </p>
+                        </div>
+
+                        {/* Notes */}
+                        <div style={{ gridColumn: '1 / -1', padding: '1rem', backgroundColor: '#f9fafb', borderRadius: '0.375rem' }}>
+                          <label style={{ fontSize: '0.875rem', color: '#6b7280', fontWeight: 600 }}>
+                            {language === 'en' ? 'Notes' : 'নোট'}
+                          </label>
+                          <p style={{ margin: '0.5rem 0 0 0', fontSize: '1rem', color: '#111827', whiteSpace: 'pre-wrap' }}>
+                            {viewingOrder.notes || 'N/A'}
+                          </p>
+                        </div>
+
+                        {/* Order Items Table (if multi-item order) */}
+                        {Array.isArray(viewingOrder.items) && viewingOrder.items.length > 0 && (
+                          <div style={{ gridColumn: '1 / -1', padding: '1rem', backgroundColor: '#f9fafb', borderRadius: '0.375rem' }}>
+                            <label style={{ fontSize: '0.875rem', color: '#6b7280', fontWeight: 600, marginBottom: '0.75rem', display: 'block' }}>
+                              {language === 'en' ? 'Order Items' : 'অর্ডার আইটেম'}
+                            </label>
+                            <div className="admin-table-container" style={{ background: '#fff', borderRadius: '0.5rem', border: '1px solid #e2e8f0' }}>
+                              <table className="admin-table">
+                                <thead>
+                                  <tr>
+                                    <th>{language === 'en' ? 'Product' : 'পণ্য'}</th>
+                                    <th>{language === 'en' ? 'Variant' : 'ভ্যারিয়েন্ট'}</th>
+                                    <th>{language === 'en' ? 'Qty' : 'পরিমাণ'}</th>
+                                    <th>{language === 'en' ? 'Unit Price' : 'একক মূল্য'}</th>
+                                    <th>{language === 'en' ? 'Total' : 'মোট'}</th>
+                                    <th>{language === 'en' ? 'Notes' : 'নোট'}</th>
+                                  </tr>
+                                </thead>
+                                <tbody>
+                                  {viewingOrder.items.map((item, idx) => (
+                                    <tr key={idx}>
+                                      <td>{item.productName || '-'}</td>
+                                      <td>{item.variant?.value ? (item.variant.name || item.variant.value) : '-'}</td>
+                                      <td>{item.quantity || 0}</td>
+                                      <td>৳{item.unitPrice !== undefined ? (item.unitPrice || 0).toFixed(2) : '-'}</td>
+                                      <td>৳{item.totalPrice !== undefined ? (item.totalPrice || 0).toFixed(2) : '-'}</td>
+                                      <td>{item.notes || '-'}</td>
+                                    </tr>
+                                  ))}
+                                </tbody>
+                              </table>
+                            </div>
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Action Buttons */}
+                      <div style={{ position: 'relative', display: 'flex', gap: '0.75rem', marginTop: '1.5rem', zIndex: 1 }}>
+                        {isEditingOrderDetails ? (
+                          <>
+                            <button
+                              onClick={async () => {
+                                try {
+                                  const res = await fetch(`${API_BASE}/api/orders/${viewingOrder._id}`, {
+                                    method: 'PUT',
+                                    headers: { 'Content-Type': 'application/json' },
+                                    body: JSON.stringify({
+                                      paidAmount: editingOrderDetails.paidAmount || 0,
+                                      status: editingOrderDetails.status || 'Pending'
+                                    })
+                                  })
+                                  const data = await res.json()
+                                  if (!res.ok) throw new Error(data.message || 'Failed to update order')
+                                  await loadOrders()
+                                  await loadOrderRequests()
+                                  setViewingOrder({ ...viewingOrder, ...editingOrderDetails })
+                                  setIsEditingOrderDetails(false)
+                                  setEditingOrderDetails(null)
+                                } catch (err) {
+                                  alert(language === 'en' ? 'Failed to update order' : 'অর্ডার আপডেট করতে ব্যর্থ')
+                                  console.error(err)
+                                }
+                              }}
+                              style={{
+                                padding: '0.5rem 1.5rem',
+                                backgroundColor: '#10b981',
+                                color: 'white',
+                                border: 'none',
+                                borderRadius: '0.5rem',
+                                cursor: 'pointer',
+                                fontWeight: 700,
+                                boxShadow: '0 10px 20px rgba(16,185,129,0.35)'
+                              }}
+                            >
+                              {language === 'en' ? 'Save' : 'সংরক্ষণ'}
+                            </button>
+                            <button
+                              onClick={() => {
+                                setIsEditingOrderDetails(false)
+                                setEditingOrderDetails(null)
+                              }}
+                              style={{
+                                padding: '0.5rem 1.5rem',
+                                backgroundColor: '#6b7280',
+                                color: 'white',
+                                border: 'none',
+                                borderRadius: '0.5rem',
+                                cursor: 'pointer',
+                                fontWeight: 700
+                              }}
+                            >
+                              {language === 'en' ? 'Cancel' : 'বাতিল'}
+                            </button>
+                          </>
+                        ) : (
+                          <>
+                            <button
+                              onClick={() => {
+                                setIsEditingOrderDetails(true)
+                                const total = parseFloat(viewingOrder.totalPrice || 0)
+                                const paid = parseFloat(viewingOrder.paidAmount || 0)
+                                const due = Math.max(0, total - paid)
+                                const currentStatus = viewingOrder.status || 'Pending'
+                                // For non-admin users, if status is not Shipped, Delivered, or Complete, default to Shipped
+                                let initialStatus = currentStatus
+                                if ((userRole || '').toLowerCase() !== 'admin') {
+                                  if (currentStatus !== 'Shipped' && currentStatus !== 'Delivered' && currentStatus !== 'Complete') {
+                                    initialStatus = 'Shipped'
+                                  }
+                                }
+                                setEditingOrderDetails({
+                                  paidAmount: paid,
+                                  dueAmount: due,
+                                  status: initialStatus
+                                })
+                              }}
+                              style={{
+                                padding: '0.5rem 1.5rem',
+                                backgroundColor: '#3b82f6',
+                                color: 'white',
+                                border: 'none',
+                                borderRadius: '0.5rem',
+                                cursor: 'pointer',
+                                fontWeight: 700,
+                                boxShadow: '0 10px 20px rgba(59,130,246,0.35)'
+                              }}
+                            >
+                              {adminContent.edit}
+                            </button>
+                            {(userRole || '').toLowerCase() === 'admin' && (
+                              <button
+                                onClick={async () => {
+                                  if (window.confirm(language === 'en' ? 'Are you sure you want to delete this order?' : 'আপনি কি এই অর্ডারটি মুছতে চান?')) {
+                                    await handleDeleteOrder(viewingOrder._id)
+                                    setViewingOrder(null)
+                                  }
+                                }}
+                                style={{
+                                  padding: '0.5rem 1.5rem',
+                                  backgroundColor: '#ef4444',
+                                  color: 'white',
+                                  border: 'none',
+                                  borderRadius: '0.5rem',
+                                  cursor: 'pointer',
+                                  fontWeight: 700,
+                                  boxShadow: '0 10px 20px rgba(239,68,68,0.35)'
+                                }}
+                              >
+                                {adminContent.delete}
+                              </button>
+                            )}
+                          </>
+                        )}
+                        <button
+                          onClick={() => {
+                            setViewingOrder(null)
+                            setIsEditingOrderDetails(false)
+                            setEditingOrderDetails(null)
+                          }}
+                          style={{
+                            padding: '0.5rem 1.5rem',
+                            backgroundColor: '#6b7280',
+                            color: 'white',
+                            border: 'none',
+                            borderRadius: '0.5rem',
+                            cursor: 'pointer',
+                            fontWeight: 700
+                          }}
+                        >
+                          {language === 'en' ? 'Close' : 'বন্ধ করুন'}
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                )}
               </div>
             </div>
           )}
@@ -5071,6 +11221,78 @@ const [userRole, setUserRole] = useState('Admin')
                   <div className="admin-stat-info">
                     <h3>{language === 'en' ? 'Growth Rate' : 'বৃদ্ধির হার'}</h3>
                     <p>0%</p>
+                  </div>
+                </div>
+                <div className="admin-stat-card">
+                  <div className="admin-stat-icon">
+                    <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                      <path d="M4 12l4 4 12-12" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                    </svg>
+                  </div>
+                  <div className="admin-stat-info">
+                    <h3>{language === 'en' ? 'Sales Target' : 'বিক্রয় লক্ষ্য'}</h3>
+                    <p>
+                      {employees.length === 0
+                        ? '৳ 0'
+                        : `৳ ${employees.reduce((sum, e) => sum + (parseFloat(e.salesTarget) || 0), 0).toLocaleString()}`}
+                    </p>
+                  </div>
+                </div>
+              </div>
+              <div className="admin-stats-grid" style={{ marginTop: '1.5rem' }}>
+                <div className="admin-stat-card">
+                  <div className="admin-stat-icon">
+                    <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                      <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                      <polyline points="22 4 12 14.01 9 11.01" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                    </svg>
+                  </div>
+                  <div className="admin-stat-info">
+                    <h3>{language === 'en' ? 'Achieve Amount' : 'অর্জিত পরিমাণ'}</h3>
+                    <p>
+                      ৳{(() => {
+                        const achieveAmount = (orders || []).reduce((sum, order) => {
+                          // Exclude cancelled and rejected orders from calculations
+                          if (order.status === 'Cancelled' || order.approvalStatus === 'Rejected') {
+                            return sum
+                          }
+                          
+                          // Count all approved orders (including admin-created orders)
+                          const isApproved = order.approvalStatus === 'Approved'
+                          
+                          if (isApproved) {
+                            return sum + (parseFloat(order.totalPrice) || 0)
+                          }
+                          return sum
+                        }, 0)
+                        return achieveAmount.toLocaleString()
+                      })()}
+                    </p>
+                  </div>
+                </div>
+                <div className="admin-stat-card">
+                  <div className="admin-stat-icon">
+                    <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                      <path d="M21 12c0 1.2-4.03 6-9 6s-9-4.8-9-6 4.03-6 9-6 9 4.8 9 6z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                      <path d="M12 17c-4.97 0-9-4.8-9-6 0-1.2 4.03-6 9-6s9 4.8 9 6c0 1.2-4.03 6-9 6z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                      <circle cx="12" cy="11" r="3" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                    </svg>
+                  </div>
+                  <div className="admin-stat-info">
+                    <h3>{language === 'en' ? 'Total Collection' : 'মোট সংগ্রহ'}</h3>
+                    <p>৳{Number(totalCollection || 0).toLocaleString()}</p>
+                  </div>
+                </div>
+                <div className="admin-stat-card">
+                  <div className="admin-stat-icon">
+                    <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                      <path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                      <circle cx="12" cy="12" r="3" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                    </svg>
+                  </div>
+                  <div className="admin-stat-info">
+                    <h3>{language === 'en' ? 'Total Due' : 'মোট বকেয়া'}</h3>
+                    <p>৳{Number(totalDue || 0).toLocaleString()}</p>
                   </div>
                 </div>
               </div>

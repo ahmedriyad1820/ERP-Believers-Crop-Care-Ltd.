@@ -11,7 +11,7 @@
     "server": "node server/index.js",
     "server:dev": "node --watch server/index.js",
     "start": "concurrently \"npm run dev\" \"npm run server\" --names \"frontend,backend\" --prefix-colors \"cyan,magenta\"",
-    "run:full": "concurrently \"HOST=0.0.0.0 PORT=5000 npm run server\" \"VITE_API_BASE=http://0.0.0.0:5000 npm run dev -- --host 0.0.0.0\" --names \"backend,frontend\" --prefix-colors \"magenta,cyan\"",
+    "run:full": "concurrently -k \"npm run server\" \"npm run dev -- --host 0.0.0.0\" --names \"backend,frontend\" --prefix-colors \"magenta,cyan\"",
     "dev:all": "npm run start",
     "seed": "node server/scripts/seedData.js",
     "verify": "node server/scripts/verifyData.js"
@@ -24,7 +24,8 @@
     "mongoose": "^8.20.2",
     "react": "^19.2.0",
     "react-dom": "^19.2.0",
-    "react-router-dom": "^7.9.6"
+    "react-router-dom": "^7.9.6",
+    "xlsx": "^0.18.5"
   },
   "devDependencies": {
     "@eslint/js": "^9.39.1",

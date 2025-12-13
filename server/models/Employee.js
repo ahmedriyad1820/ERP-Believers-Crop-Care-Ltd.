@@ -12,10 +12,22 @@ const EmployeeSchema = new mongoose.Schema({
   emergencyContact: { type: String, default: '' }, // Phone or email
   salary: { type: Number, default: 0 },
   salesTarget: { type: Number, default: 0 },
+  achievedTarget: { type: Number, default: 0 },
+  salesHistory: [{
+    orderId: { type: String, default: '' },
+    orderObjectId: { type: mongoose.Schema.Types.ObjectId, ref: 'Order' },
+    dealerName: { type: String, default: '' },
+    dealerId: { type: String, default: '' },
+    totalAmount: { type: Number, default: 0 },
+    approvedAt: { type: Date, default: Date.now },
+    approvedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'Employee', default: null },
+    approvedByName: { type: String, default: '' }
+  }],
   bankName: { type: String, default: '' },
   bankBranch: { type: String, default: '' },
   accountNumber: { type: String, default: '' },
   department: { type: String, default: '' },
+  postingArea: { type: String, default: '' },
   role: { type: String, enum: ['Admin', 'RSM', 'Incharge', 'SalesMan'], default: '' },
   designation: { type: String, default: '' },
   photo: { type: String, default: '' },

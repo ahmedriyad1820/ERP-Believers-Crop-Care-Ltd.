@@ -74,14 +74,15 @@ router.post('/', async (req, res) => {
       name, email, phone, address, nid, document, 
       emergencyContactName, emergencyContact, salary, salesTarget,
       bankName, bankBranch, accountNumber,
-      department, role, designation, photo, status 
+      department, postingArea, role, designation, photo, status 
     } = req.body
     
     console.log('[Employee Create] Received data:', {
       name, email, phone, address, nid, 
       hasDocument: !!document,
       emergencyContactName, emergencyContact, salary,
-      department, role, designation, salesTarget
+      department, role, designation, salesTarget,
+      postingArea
     })
     
     // Generate employee ID
@@ -112,6 +113,7 @@ router.post('/', async (req, res) => {
       bankBranch: bankBranch || '',
       accountNumber: accountNumber || '',
       department: department || '',
+      postingArea: postingArea || '',
       role: role || '',
       designation: designation || '',
       photo: photo || '',
@@ -146,6 +148,7 @@ router.post('/', async (req, res) => {
       emergencyContact: savedEmp.emergencyContact,
       salary: savedEmp.salary,
       department: savedEmp.department,
+      postingArea: savedEmp.postingArea,
       role: savedEmp.role,
       designation: savedEmp.designation
     })
@@ -370,7 +373,7 @@ router.get('/:id', async (req, res) => {
 // Update employee profile
 router.put('/:id', async (req, res) => {
   try {
-    const { name, email, phone, address, nid, document, emergencyContactName, emergencyContact, salary, salesTarget, bankName, bankBranch, accountNumber, photo, status } = req.body
+    const { name, email, phone, address, nid, document, emergencyContactName, emergencyContact, salary, salesTarget, bankName, bankBranch, accountNumber, photo, status, postingArea, department, role, designation } = req.body
     const employee = await Employee.findById(req.params.id)
     if (!employee) {
       return res.status(404).json({ message: 'Employee not found' })
@@ -389,6 +392,10 @@ router.put('/:id', async (req, res) => {
     if (bankName !== undefined) employee.bankName = bankName
     if (bankBranch !== undefined) employee.bankBranch = bankBranch
     if (accountNumber !== undefined) employee.accountNumber = accountNumber
+    if (postingArea !== undefined) employee.postingArea = postingArea
+    if (department !== undefined) employee.department = department
+    if (role !== undefined) employee.role = role
+    if (designation !== undefined) employee.designation = designation
     if (photo !== undefined) employee.photo = photo
     if (status !== undefined) employee.status = status
     
