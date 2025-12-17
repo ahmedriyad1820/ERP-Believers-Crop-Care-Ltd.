@@ -14,7 +14,7 @@ const generateOrderId = async () => {
     const lastOrder = await Order.findOne({ orderId: { $exists: true } })
       .sort({ orderId: -1 })
       .exec()
-    
+
     let nextNumber = 1
     if (lastOrder && lastOrder.orderId) {
       const match = lastOrder.orderId.match(/ORD(\d+)/i)
@@ -22,7 +22,7 @@ const generateOrderId = async () => {
         nextNumber = parseInt(match[1], 10) + 1
       }
     }
-    
+
     return `ORD${String(nextNumber).padStart(3, '0')}`
   } catch (err) {
     console.error('Error generating order ID:', err)
@@ -154,7 +154,7 @@ router.post('/', async (req, res) => {
       }
 
       const created = await Order.create(orderData)
-      
+
       // If order is created by admin and approved, update assigned employee's achieved target
       if (requesterRoleNormalized === 'admin' && approvalStatus === 'Approved') {
         try {
@@ -163,7 +163,7 @@ router.post('/', async (req, res) => {
           console.log(`[Admin Order Cart] assignedTo type:`, typeof dealerDoc?.assignedTo)
           console.log(`[Admin Order Cart] assignedTo is null?:`, dealerDoc?.assignedTo === null)
           console.log(`[Admin Order Cart] assignedTo is undefined?:`, dealerDoc?.assignedTo === undefined)
-          
+
           // Get the dealer to check assignment - handle both populated and unpopulated cases
           if (dealerDoc && dealerDoc.assignedTo !== null && dealerDoc.assignedTo !== undefined) {
             // Get assignedTo ID - handle both ObjectId and populated object
@@ -179,28 +179,28 @@ router.post('/', async (req, res) => {
             } else {
               assignedToId = String(dealerDoc.assignedTo)
             }
-            
+
             console.log(`[Admin Order Cart] Extracted assignedToId: ${assignedToId}`)
             console.log(`[Admin Order Cart] Looking up assigned employee with ID: ${assignedToId}`)
             const assignedEmployee = await Employee.findById(assignedToId)
-            
+
             if (assignedEmployee) {
               // Get order total from items
               const orderTotal = total
-              
+
               console.log(`[Admin Order Cart] Found assigned employee: ${assignedEmployee.employeeId} (${assignedEmployee.name}), order total: ${orderTotal}`)
-              
+
               if (orderTotal > 0) {
                 // Check if this order is already in sales history to avoid duplicates
                 const existingSale = assignedEmployee.salesHistory?.find(
                   sale => sale.orderObjectId?.toString() === created._id.toString()
                 )
-                
+
                 if (!existingSale) {
                   const previousAchieved = assignedEmployee.achievedTarget || 0
                   // Add order total to achieved target
                   assignedEmployee.achievedTarget = previousAchieved + orderTotal
-                  
+
                   // Add to sales history
                   assignedEmployee.salesHistory = assignedEmployee.salesHistory || []
                   assignedEmployee.salesHistory.push({
@@ -213,7 +213,7 @@ router.post('/', async (req, res) => {
                     approvedBy: requestedBy || null,
                     approvedByName: requestedByName || ''
                   })
-                  
+
                   await assignedEmployee.save()
                   console.log(`[Admin Order Cart] ✅ Updated assigned employee ${assignedEmployee.employeeId} (${assignedEmployee.name}) achieved target: ${previousAchieved} -> ${assignedEmployee.achievedTarget} (+${orderTotal})`)
                 } else {
@@ -236,7 +236,7 @@ router.post('/', async (req, res) => {
       } else {
         console.log(`[Admin Order Cart] Skipping employee update - requesterRole: ${requesterRoleNormalized}, approvalStatus: ${approvalStatus}`)
       }
-      
+
       const populated = await Order.findById(created._id)
         .populate('dealer', 'name phone email dealerId')
         .populate('product', 'name productId')
@@ -247,8 +247,8 @@ router.post('/', async (req, res) => {
 
     // Single-item order fallback
     if (!product || !quantity) {
-      return res.status(400).json({ 
-        message: 'Dealer, product, and quantity are required' 
+      return res.status(400).json({
+        message: 'Dealer, product, and quantity are required'
       })
     }
 
@@ -304,12 +304,12 @@ router.post('/', async (req, res) => {
     }
 
     const created = await Order.create(orderData)
-    
+
     // If order is created by admin and approved, update assigned employee's achieved target
     if (requesterRoleNormalized === 'admin' && approvalStatus === 'Approved') {
       try {
         console.log(`[Admin Order] Processing admin order for dealer ${dealer}`)
-        
+
         // Get the dealer to check assignment - handle both populated and unpopulated cases
         const dealerDoc = await Dealer.findById(dealer)
         console.log(`[Admin Order] Dealer found: ${dealerDoc?._id} (${dealerDoc?.name})`)
@@ -317,7 +317,7 @@ router.post('/', async (req, res) => {
         console.log(`[Admin Order] assignedTo type:`, typeof dealerDoc?.assignedTo)
         console.log(`[Admin Order] assignedTo is null?:`, dealerDoc?.assignedTo === null)
         console.log(`[Admin Order] assignedTo is undefined?:`, dealerDoc?.assignedTo === undefined)
-        
+
         if (dealerDoc && dealerDoc.assignedTo !== null && dealerDoc.assignedTo !== undefined) {
           // Get assignedTo ID - handle both ObjectId and populated object
           let assignedToId = null
@@ -332,28 +332,28 @@ router.post('/', async (req, res) => {
           } else {
             assignedToId = String(dealerDoc.assignedTo)
           }
-          
+
           console.log(`[Admin Order] Extracted assignedToId: ${assignedToId}`)
           console.log(`[Admin Order] Looking up assigned employee with ID: ${assignedToId}`)
           const assignedEmployee = await Employee.findById(assignedToId)
-          
+
           if (assignedEmployee) {
             // Get order total - for single-item orders, use totalPrice
             const orderTotal = parseFloat(created.totalPrice) || 0
-            
+
             console.log(`[Admin Order] Found assigned employee: ${assignedEmployee.employeeId} (${assignedEmployee.name}), order total: ${orderTotal}`)
-            
+
             if (orderTotal > 0) {
               // Check if this order is already in sales history to avoid duplicates
               const existingSale = assignedEmployee.salesHistory?.find(
                 sale => sale.orderObjectId?.toString() === created._id.toString()
               )
-              
+
               if (!existingSale) {
                 const previousAchieved = assignedEmployee.achievedTarget || 0
                 // Add order total to achieved target
                 assignedEmployee.achievedTarget = previousAchieved + orderTotal
-                
+
                 // Add to sales history
                 assignedEmployee.salesHistory = assignedEmployee.salesHistory || []
                 assignedEmployee.salesHistory.push({
@@ -366,7 +366,7 @@ router.post('/', async (req, res) => {
                   approvedBy: requestedBy || null,
                   approvedByName: requestedByName || ''
                 })
-                
+
                 await assignedEmployee.save()
                 console.log(`[Admin Order] ✅ Updated assigned employee ${assignedEmployee.employeeId} (${assignedEmployee.name}) achieved target: ${previousAchieved} -> ${assignedEmployee.achievedTarget} (+${orderTotal})`)
               } else {
@@ -389,7 +389,7 @@ router.post('/', async (req, res) => {
     } else {
       console.log(`[Admin Order] Skipping employee update - requesterRole: ${requesterRoleNormalized}, approvalStatus: ${approvalStatus}`)
     }
-    
+
     // Populate dealer and product for response
     const populated = await Order.findById(created._id)
       .populate('dealer', 'name phone email dealerId')
@@ -408,7 +408,7 @@ router.post('/', async (req, res) => {
       requestedByRole: req.body?.requestedByRole,
       items: req.body?.items
     })
-    res.status(500).json({ 
+    res.status(500).json({
       message: 'Failed to create order',
       error: err.message
     })
@@ -427,7 +427,7 @@ router.get('/', async (req, res) => {
       .populate('product', 'name productId')
       .sort({ createdAt: -1 })
       .lean()
-    
+
     res.json({ success: true, data: orders })
   } catch (err) {
     console.error('[Order] List error:', err)
@@ -442,11 +442,11 @@ router.get('/:id', async (req, res) => {
       .populate('dealer', 'name phone email dealerId')
       .populate('product', 'name productId variants priceCategory price')
       .lean()
-    
+
     if (!order) {
       return res.status(404).json({ message: 'Order not found' })
     }
-    
+
     res.json({ success: true, data: order })
   } catch (err) {
     console.error('[Order] Get error:', err)
@@ -468,8 +468,18 @@ router.put('/:id', async (req, res) => {
       requestedBy,
       requestedByName,
       requestedByRole,
-      paidAmount
+      paidAmount,
+      commission,
+      newPayment
     } = req.body
+
+    console.log('[Order Update] Received update request:', {
+      orderId: req.params.id,
+      paidAmount,
+      commission,
+      newPayment,
+      status
+    })
 
     const order = await Order.findById(req.params.id)
     if (!order) {
@@ -545,6 +555,22 @@ router.put('/:id', async (req, res) => {
     // Recalculate dueAmount based on current totalPrice and paidAmount
     order.dueAmount = Math.max(0, order.totalPrice - (order.paidAmount || 0))
 
+    if (commission !== undefined) {
+      order.commission = commission
+    }
+
+    if (newPayment) {
+      console.log('[Order Update] Processing new payment:', newPayment)
+      order.paymentHistory = order.paymentHistory || []
+      order.paymentHistory.push({
+        date: newPayment.date || new Date(),
+        amount: parseFloat(newPayment.amount) || 0,
+        commission: parseFloat(newPayment.commission) || 0,
+        due: order.dueAmount
+      })
+      console.log('[Order Update] Updated payment history length:', order.paymentHistory.length)
+    }
+
     if (notes !== undefined) {
       order.notes = clean(notes)
     }
@@ -554,7 +580,7 @@ router.put('/:id', async (req, res) => {
     const previousStatus = order.status
     const wasApproved = previousApprovalStatus === 'Approved'
     const wasCancelled = previousStatus === 'Cancelled'
-    
+
     if (approvalStatus) {
       order.approvalStatus = approvalStatus
       if (approvalStatus === 'Approved') {
@@ -585,7 +611,7 @@ router.put('/:id', async (req, res) => {
     if (requestedByRole !== undefined) order.requestedByRole = requestedByRole
 
     await order.save()
-    
+
     // Update employee's achieved target AFTER order is saved
     if (approvalStatus === 'Approved' && !wasApproved) {
       console.log('[Order Approval] Processing approval:', {
@@ -595,7 +621,7 @@ router.put('/:id', async (req, res) => {
         totalPrice: order.totalPrice,
         hasItems: !!(order.items && order.items.length)
       })
-      
+
       // Case 1: Order created by employee (non-admin)
       if (order.requestedBy && order.requestedByRole && order.requestedByRole.toLowerCase() !== 'admin') {
         try {
@@ -610,18 +636,18 @@ router.put('/:id', async (req, res) => {
               orderTotal = parseFloat(order.totalPrice) || 0
               console.log('[Order Approval] Using order totalPrice:', orderTotal)
             }
-            
+
             if (orderTotal > 0) {
               // Check if this order is already in sales history to avoid duplicates
               const existingSale = employee.salesHistory?.find(
                 sale => sale.orderObjectId?.toString() === order._id.toString()
               )
-              
+
               if (!existingSale) {
                 const previousAchieved = employee.achievedTarget || 0
                 // Add order total to achieved target
                 employee.achievedTarget = previousAchieved + orderTotal
-                
+
                 // Add to sales history
                 employee.salesHistory = employee.salesHistory || []
                 employee.salesHistory.push({
@@ -634,7 +660,7 @@ router.put('/:id', async (req, res) => {
                   approvedBy: req.body.approvedBy || null,
                   approvedByName: req.body.approvedByName || ''
                 })
-                
+
                 await employee.save()
                 console.log(`[Order Approval] Updated employee ${employee.employeeId} (${employee.name}) achieved target: ${previousAchieved} -> ${employee.achievedTarget} (+${orderTotal})`)
               } else {
@@ -651,7 +677,7 @@ router.put('/:id', async (req, res) => {
           console.error('[Order Approval] Error details:', empErr.message, empErr.stack)
           // Don't fail the order update if employee update fails
         }
-      } 
+      }
       // Case 2: Order created by admin - update assigned employee's achieved target
       else if (order.requestedByRole && order.requestedByRole.toLowerCase() === 'admin') {
         try {
@@ -669,18 +695,18 @@ router.put('/:id', async (req, res) => {
               } else {
                 orderTotal = parseFloat(order.totalPrice) || 0
               }
-              
+
               if (orderTotal > 0) {
                 // Check if this order is already in sales history to avoid duplicates
                 const existingSale = assignedEmployee.salesHistory?.find(
                   sale => sale.orderObjectId?.toString() === order._id.toString()
                 )
-                
+
                 if (!existingSale) {
                   const previousAchieved = assignedEmployee.achievedTarget || 0
                   // Add order total to achieved target
                   assignedEmployee.achievedTarget = previousAchieved + orderTotal
-                  
+
                   // Add to sales history
                   assignedEmployee.salesHistory = assignedEmployee.salesHistory || []
                   assignedEmployee.salesHistory.push({
@@ -693,7 +719,7 @@ router.put('/:id', async (req, res) => {
                     approvedBy: req.body.approvedBy || order.requestedBy || null,
                     approvedByName: req.body.approvedByName || order.requestedByName || ''
                   })
-                  
+
                   await assignedEmployee.save()
                   console.log(`[Admin Order Approval] Updated assigned employee ${assignedEmployee.employeeId} (${assignedEmployee.name}) achieved target: ${previousAchieved} -> ${assignedEmployee.achievedTarget} (+${orderTotal})`)
                 } else {
@@ -720,7 +746,7 @@ router.put('/:id', async (req, res) => {
       // Handle rejection - remove from employee's achieved target (both employee-created and admin-created orders)
       const isEmployeeOrder = order.requestedBy && order.requestedByRole && order.requestedByRole.toLowerCase() !== 'admin'
       const isAdminOrder = order.requestedByRole && order.requestedByRole.toLowerCase() === 'admin'
-      
+
       if (isEmployeeOrder && order.requestedBy) {
         // If order is being rejected and was previously approved, remove from employee's achieved target
         try {
@@ -733,17 +759,17 @@ router.put('/:id', async (req, res) => {
             } else {
               orderTotal = order.totalPrice || 0
             }
-            
+
             if (orderTotal > 0) {
               employee.achievedTarget = Math.max(0, (employee.achievedTarget || 0) - orderTotal)
-              
+
               // Remove from sales history
               if (employee.salesHistory && Array.isArray(employee.salesHistory)) {
                 employee.salesHistory = employee.salesHistory.filter(
                   sale => sale.orderObjectId?.toString() !== order._id.toString()
                 )
               }
-              
+
               await employee.save()
               console.log(`[Order Rejection] Removed ${orderTotal} from employee ${employee.employeeId} achieved target`)
             }
@@ -767,17 +793,17 @@ router.put('/:id', async (req, res) => {
               } else {
                 orderTotal = order.totalPrice || 0
               }
-              
+
               if (orderTotal > 0) {
                 assignedEmployee.achievedTarget = Math.max(0, (assignedEmployee.achievedTarget || 0) - orderTotal)
-                
+
                 // Remove from sales history
                 if (assignedEmployee.salesHistory && Array.isArray(assignedEmployee.salesHistory)) {
                   assignedEmployee.salesHistory = assignedEmployee.salesHistory.filter(
                     sale => sale.orderObjectId?.toString() !== order._id.toString()
                   )
                 }
-                
+
                 await assignedEmployee.save()
                 console.log(`[Admin Order Rejection] Removed ${orderTotal} from assigned employee ${assignedEmployee.employeeId} achieved target`)
               }
@@ -793,7 +819,7 @@ router.put('/:id', async (req, res) => {
         }
       }
     }
-    
+
     // Handle cancellation - if status is changed to 'Cancelled' and order was approved, reduce from employee's achieved target
     if (order.status === 'Cancelled' && !wasCancelled && wasApproved) {
       console.log('[Order Cancellation] Processing cancellation:', {
@@ -802,10 +828,10 @@ router.put('/:id', async (req, res) => {
         requestedByRole: order.requestedByRole,
         totalPrice: order.totalPrice
       })
-      
+
       const isEmployeeOrder = order.requestedBy && order.requestedByRole && order.requestedByRole.toLowerCase() !== 'admin'
       const isAdminOrder = order.requestedByRole && order.requestedByRole.toLowerCase() === 'admin'
-      
+
       if (isEmployeeOrder && order.requestedBy) {
         // Remove from employee's achieved target
         try {
@@ -818,10 +844,10 @@ router.put('/:id', async (req, res) => {
             } else {
               orderTotal = parseFloat(order.totalPrice) || 0
             }
-            
+
             if (orderTotal > 0) {
               employee.achievedTarget = Math.max(0, (employee.achievedTarget || 0) - orderTotal)
-              
+
               // Remove from sales history
               if (employee.salesHistory && Array.isArray(employee.salesHistory)) {
                 const orderIdStr = String(order._id)
@@ -832,7 +858,7 @@ router.put('/:id', async (req, res) => {
                 })
                 console.log(`[Order Cancellation] Removed order ${order.orderId} from employee ${employee.employeeId} sales history`)
               }
-              
+
               await employee.save()
               console.log(`[Order Cancellation] Removed ${orderTotal} from employee ${employee.employeeId} achieved target`)
             }
@@ -858,7 +884,7 @@ router.put('/:id', async (req, res) => {
             } else {
               assignedToId = String(dealerDoc.assignedTo)
             }
-            
+
             const assignedEmployee = await Employee.findById(assignedToId)
             if (assignedEmployee) {
               // Get order total
@@ -868,10 +894,10 @@ router.put('/:id', async (req, res) => {
               } else {
                 orderTotal = parseFloat(order.totalPrice) || 0
               }
-              
+
               if (orderTotal > 0) {
                 assignedEmployee.achievedTarget = Math.max(0, (assignedEmployee.achievedTarget || 0) - orderTotal)
-                
+
                 // Remove from sales history
                 if (assignedEmployee.salesHistory && Array.isArray(assignedEmployee.salesHistory)) {
                   const orderIdStr = String(order._id)
@@ -882,7 +908,7 @@ router.put('/:id', async (req, res) => {
                   })
                   console.log(`[Order Cancellation] Removed order ${order.orderId} from assigned employee ${assignedEmployee.employeeId} sales history`)
                 }
-                
+
                 await assignedEmployee.save()
                 console.log(`[Order Cancellation] Removed ${orderTotal} from assigned employee ${assignedEmployee.employeeId} achieved target`)
               }
@@ -907,7 +933,7 @@ router.put('/:id', async (req, res) => {
     res.json({ success: true, data: updated })
   } catch (err) {
     console.error('[Order] Update error:', err)
-    res.status(500).json({ 
+    res.status(500).json({
       message: 'Failed to update order',
       error: process.env.NODE_ENV === 'development' ? err.message : undefined
     })
@@ -921,11 +947,11 @@ router.delete('/:id', async (req, res) => {
     if (!order) {
       return res.status(404).json({ message: 'Order not found' })
     }
-    
+
     // Before deleting, remove from employee's sales history and adjust achieved target
     const isEmployeeOrder = order.requestedBy && order.requestedByRole && order.requestedByRole.toLowerCase() !== 'admin'
     const isAdminOrder = order.requestedByRole && order.requestedByRole.toLowerCase() === 'admin'
-    
+
     if (isEmployeeOrder && order.requestedBy) {
       // Remove from employee's achieved target
       try {
@@ -938,10 +964,10 @@ router.delete('/:id', async (req, res) => {
           } else {
             orderTotal = parseFloat(order.totalPrice) || 0
           }
-          
+
           if (orderTotal > 0) {
             employee.achievedTarget = Math.max(0, (employee.achievedTarget || 0) - orderTotal)
-            
+
             // Remove from sales history
             if (employee.salesHistory && Array.isArray(employee.salesHistory)) {
               const orderIdStr = String(order._id)
@@ -952,7 +978,7 @@ router.delete('/:id', async (req, res) => {
               })
               console.log(`[Order Delete] Removed order ${order.orderId} from employee ${employee.employeeId} sales history`)
             }
-            
+
             await employee.save()
             console.log(`[Order Delete] Removed ${orderTotal} from employee ${employee.employeeId} achieved target`)
           }
@@ -978,7 +1004,7 @@ router.delete('/:id', async (req, res) => {
           } else {
             assignedToId = String(dealerDoc.assignedTo)
           }
-          
+
           const assignedEmployee = await Employee.findById(assignedToId)
           if (assignedEmployee) {
             // Get order total
@@ -988,10 +1014,10 @@ router.delete('/:id', async (req, res) => {
             } else {
               orderTotal = parseFloat(order.totalPrice) || 0
             }
-            
+
             if (orderTotal > 0) {
               assignedEmployee.achievedTarget = Math.max(0, (assignedEmployee.achievedTarget || 0) - orderTotal)
-              
+
               // Remove from sales history
               if (assignedEmployee.salesHistory && Array.isArray(assignedEmployee.salesHistory)) {
                 const orderIdStr = String(order._id)
@@ -1002,7 +1028,7 @@ router.delete('/:id', async (req, res) => {
                 })
                 console.log(`[Order Delete] Removed order ${order.orderId} from assigned employee ${assignedEmployee.employeeId} sales history`)
               }
-              
+
               await assignedEmployee.save()
               console.log(`[Order Delete] Removed ${orderTotal} from assigned employee ${assignedEmployee.employeeId} achieved target`)
             }
@@ -1012,7 +1038,7 @@ router.delete('/:id', async (req, res) => {
         console.error('[Order Delete] Failed to update assigned employee achieved target:', empErr)
       }
     }
-    
+
     // Now delete the order
     await Order.findByIdAndDelete(req.params.id)
     res.json({ success: true, message: 'Order deleted' })

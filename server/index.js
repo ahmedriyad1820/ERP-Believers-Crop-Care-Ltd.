@@ -11,6 +11,7 @@ import employeeRoutes from './routes/employeeRoutes.js'
 import dealerRoutes from './routes/dealerRoutes.js'
 import productRoutes from './routes/productRoutes.js'
 import orderRoutes from './routes/orderRoutes.js'
+import settingsRoutes from './routes/settingsRoutes.js'
 
 // Load environment variables
 dotenv.config()
@@ -29,8 +30,8 @@ app.get('/', (req, res) => {
 
 // Health check endpoint
 app.get('/api/health', (req, res) => {
-  res.json({ 
-    status: 'OK', 
+  res.json({
+    status: 'OK',
     database: mongoose.connection.readyState === 1 ? 'Connected' : 'Disconnected',
     timestamp: new Date().toISOString()
   })
@@ -44,12 +45,13 @@ app.use('/api/employees', employeeRoutes)
 app.use('/api/dealers', dealerRoutes)
 app.use('/api/products', productRoutes)
 app.use('/api/orders', orderRoutes)
+app.use('/api/settings', settingsRoutes)
 
 // Error handling middleware
 app.use((err, req, res, next) => {
   console.error(err.stack)
-  res.status(500).json({ 
-    message: 'Something went wrong!', 
+  res.status(500).json({
+    message: 'Something went wrong!',
     error: process.env.NODE_ENV === 'development' ? err.message : {}
   })
 })
@@ -65,7 +67,7 @@ const startServer = async () => {
     console.log('Connecting to MongoDB...')
     await connectDB()
     console.log('MongoDB connected successfully!')
-    
+
     // Start server after MongoDB connection
     const HOST = process.env.HOST || '0.0.0.0'
     app.listen(PORT, HOST, () => {

@@ -147,6 +147,28 @@ const orderSchema = new mongoose.Schema({
       default: ''
     }
   }],
+  commission: {
+    type: String,
+    default: ''
+  },
+  paymentHistory: [{
+    date: {
+      type: Date,
+      default: Date.now
+    },
+    amount: {
+      type: Number,
+      default: 0
+    },
+    commission: {
+      type: Number,
+      default: 0
+    },
+    due: {
+      type: Number,
+      default: 0
+    }
+  }],
   status: {
     type: String,
     enum: ['Pending', 'Processing', 'Shipped', 'Delivered', 'Complete', 'Cancelled'],

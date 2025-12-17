@@ -106,6 +106,18 @@ const productSchema = new mongoose.Schema({
   isActive: {
     type: Boolean,
     default: true
+  },
+  hasOffer: {
+    type: Boolean,
+    default: false
+  },
+  buyQuantity: {
+    type: Number,
+    default: null
+  },
+  freeQuantity: {
+    type: Number,
+    default: null
   }
 }, {
   timestamps: true

@@ -81,7 +81,10 @@ router.post('/', async (req, res) => {
       safety,
       safetyBn,
       image,
-      isActive
+      isActive,
+      hasOffer,
+      buyQuantity,
+      freeQuantity
     } = req.body
 
     if (!name || !genericName || !description || !usage || !category) {
@@ -122,7 +125,10 @@ router.post('/', async (req, res) => {
       safety: safety ? clean(safety) : '',
       safetyBn: safetyBn ? clean(safetyBn) : '',
       image: image || '/product-bottle.png',
-      isActive: typeof isActive === 'boolean' ? isActive : true
+      isActive: typeof isActive === 'boolean' ? isActive : true,
+      hasOffer: typeof hasOffer === 'boolean' ? hasOffer : false,
+      buyQuantity: buyQuantity ? (typeof buyQuantity === 'number' ? buyQuantity : parseFloat(buyQuantity) || null) : null,
+      freeQuantity: freeQuantity ? (typeof freeQuantity === 'number' ? freeQuantity : parseFloat(freeQuantity) || null) : null
     }
 
     console.log('[Product Create] Payload being saved:', {
@@ -194,6 +200,17 @@ router.put('/:id', async (req, res) => {
         updates[field] = clean(req.body[field])
       }
     })
+
+    // Handle offer fields separately
+    if ('hasOffer' in req.body) {
+      updates.hasOffer = typeof req.body.hasOffer === 'boolean' ? req.body.hasOffer : false
+    }
+    if ('buyQuantity' in req.body) {
+      updates.buyQuantity = req.body.buyQuantity ? (typeof req.body.buyQuantity === 'number' ? req.body.buyQuantity : parseFloat(req.body.buyQuantity) || null) : null
+    }
+    if ('freeQuantity' in req.body) {
+      updates.freeQuantity = req.body.freeQuantity ? (typeof req.body.freeQuantity === 'number' ? req.body.freeQuantity : parseFloat(req.body.freeQuantity) || null) : null
+    }
 
     // Handle price separately
     if ('price' in req.body) {
