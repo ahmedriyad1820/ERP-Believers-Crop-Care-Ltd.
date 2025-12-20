@@ -9,7 +9,15 @@ const settingsSchema = new mongoose.Schema({
         year: Number,
         month: Number,
         amount: Number
-    }]
+    }],
+    discountAmount: {
+        type: Number,
+        default: 0
+    },
+    discountEnabled: {
+        type: Boolean,
+        default: false
+    }
 }, { timestamps: true });
 
 export default mongoose.model('Settings', settingsSchema);

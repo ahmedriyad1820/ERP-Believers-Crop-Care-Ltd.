@@ -73,6 +73,7 @@ router.post('/', async (req, res) => {
     const {
       dealerId,
       name,
+      shopName,
       phone,
       email,
       address,
@@ -96,6 +97,7 @@ router.post('/', async (req, res) => {
     const created = await Dealer.create({
       dealerId: finalDealerId,
       name,
+      shopName: shopName || '',
       phone: phone || '',
       email: email || '',
       address: address || '',
@@ -126,7 +128,7 @@ router.put('/:id', async (req, res) => {
     const dealer = await Dealer.findById(req.params.id)
     if (!dealer) return res.status(404).json({ message: 'Dealer not found' })
 
-    const fields = ['dealerId','name','phone','email','address','photo','nid','tradeLicense','pesticideLicense','area','agreement']
+    const fields = ['dealerId', 'name', 'shopName', 'phone', 'email', 'address', 'photo', 'nid', 'tradeLicense', 'pesticideLicense', 'area', 'agreement']
     fields.forEach((f) => {
       if (req.body[f] !== undefined) dealer[f] = req.body[f]
     })

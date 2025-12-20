@@ -8,25 +8,25 @@ const clean = (value) => (typeof value === 'string' ? value.trim() : value || ''
 // Generate product ID (BP001, BP002, etc.)
 const generateProductId = async () => {
   try {
-    // Find the last product to get the highest number
-    const lastProduct = await Product.findOne({ productId: { $exists: true } })
-      .sort({ productId: -1 })
-      .exec()
-    
-    let nextNumber = 1
-    if (lastProduct && lastProduct.productId) {
-      // Extract number from productId (e.g., "BP001" -> 1)
-      const match = lastProduct.productId.match(/BP(\d+)/i)
-      if (match) {
-        nextNumber = parseInt(match[1], 10) + 1
+    // Fetch all products with productIds to find the actual maximum
+    const allProducts = await Product.find({ productId: { $exists: true } }).select('productId').lean()
+
+    let maxNumber = 0
+    allProducts.forEach(p => {
+      if (p.productId) {
+        const match = p.productId.match(/BP(\d+)/i)
+        if (match) {
+          const num = parseInt(match[1], 10)
+          if (num > maxNumber) maxNumber = num
+        }
       }
-    }
-    
-    // Format as BP001, BP002, etc. (3 digits)
+    })
+
+    const nextNumber = maxNumber + 1
+    // Format as BP001, BP002, etc. (at least 3 digits)
     return `BP${String(nextNumber).padStart(3, '0')}`
   } catch (err) {
     console.error('Error generating product ID:', err)
-    // Fallback: use timestamp-based ID
     return `BP${String(Date.now()).slice(-3)}`
   }
 }
@@ -95,12 +95,15 @@ router.post('/', async (req, res) => {
     const finalProductId = productId || await generateProductId()
 
     // Process variants - ensure they're in correct format
-    const processedVariants = Array.isArray(variants) 
-      ? variants.filter(v => v && (v.name || v.value)).map(v => ({
-          name: clean(v.name || ''),
-          value: clean(v.value || ''),
-          price: typeof v.price === 'number' ? v.price : (parseFloat(v.price) || 0)
-        }))
+    const processedVariants = Array.isArray(variants)
+      ? variants.filter(v => v && (v.productCode || v.packSize || v.price || v.cartoonSize)).map(v => ({
+        productCode: clean(v.productCode || ''),
+        packSize: clean(v.packSize || ''),
+        packUnit: clean(v.packUnit || 'ml'),
+        cartoonSize: typeof v.cartoonSize === 'number' ? v.cartoonSize : (parseInt(v.cartoonSize, 10) || 1),
+        cartoonUnit: clean(v.cartoonUnit || 'Pcs'),
+        price: typeof v.price === 'number' ? v.price : (parseFloat(v.price) || 0)
+      }))
       : []
 
     const payload = {
@@ -165,7 +168,7 @@ router.post('/', async (req, res) => {
   } catch (err) {
     console.error('[Product] Create error:', err)
     const errorMessage = err.message || 'Failed to create product'
-    res.status(500).json({ 
+    res.status(500).json({
       message: errorMessage,
       error: process.env.NODE_ENV === 'development' ? err.stack : undefined
     })
@@ -176,30 +179,30 @@ router.post('/', async (req, res) => {
 router.put('/:id', async (req, res) => {
   try {
     const updates = {}
-    ;[
-      'productId',
-      'name',
-      'nameBn',
-      'genericName',
-      'genericNameBn',
-      'description',
-      'descriptionBn',
-      'category',
-      'categoryBn',
-      'usage',
-      'usageBn',
-      'benefits',
-      'benefitsBn',
-      'application',
-      'applicationBn',
-      'safety',
-      'safetyBn',
-      'image'
-    ].forEach((field) => {
-      if (field in req.body) {
-        updates[field] = clean(req.body[field])
-      }
-    })
+      ;[
+        'productId',
+        'name',
+        'nameBn',
+        'genericName',
+        'genericNameBn',
+        'description',
+        'descriptionBn',
+        'category',
+        'categoryBn',
+        'usage',
+        'usageBn',
+        'benefits',
+        'benefitsBn',
+        'application',
+        'applicationBn',
+        'safety',
+        'safetyBn',
+        'image'
+      ].forEach((field) => {
+        if (field in req.body) {
+          updates[field] = clean(req.body[field])
+        }
+      })
 
     // Handle offer fields separately
     if ('hasOffer' in req.body) {
@@ -225,11 +228,14 @@ router.put('/:id', async (req, res) => {
     // Handle variants separately
     if ('variants' in req.body) {
       const processedVariants = Array.isArray(req.body.variants)
-        ? req.body.variants.filter(v => v && (v.name || v.value)).map(v => ({
-            name: clean(v.name || ''),
-            value: clean(v.value || ''),
-            price: typeof v.price === 'number' ? v.price : (parseFloat(v.price) || 0)
-          }))
+        ? req.body.variants.filter(v => v && (v.productCode || v.packSize || v.price || v.cartoonSize)).map(v => ({
+          productCode: clean(v.productCode || ''),
+          packSize: clean(v.packSize || ''),
+          packUnit: clean(v.packUnit || 'ml'),
+          cartoonSize: typeof v.cartoonSize === 'number' ? v.cartoonSize : (parseInt(v.cartoonSize, 10) || 1),
+          cartoonUnit: clean(v.cartoonUnit || 'Pcs'),
+          price: typeof v.price === 'number' ? v.price : (parseFloat(v.price) || 0)
+        }))
         : []
       updates.variants = processedVariants
     }
@@ -246,7 +252,7 @@ router.put('/:id', async (req, res) => {
   } catch (err) {
     console.error('[Product] Update error:', err)
     const errorMessage = err.message || 'Failed to update product'
-    res.status(500).json({ 
+    res.status(500).json({
       message: errorMessage,
       error: process.env.NODE_ENV === 'development' ? err.stack : undefined
     })

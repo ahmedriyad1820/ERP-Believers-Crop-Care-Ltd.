@@ -3,6 +3,7 @@ import mongoose from 'mongoose'
 const DealerSchema = new mongoose.Schema({
   dealerId: { type: String, unique: true, sparse: true, default: '' },
   name: { type: String, required: true },
+  shopName: { type: String, default: '' },
   phone: { type: String, default: '' },
   email: { type: String, default: '' },
   address: { type: String, default: '' },

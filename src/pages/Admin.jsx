@@ -27,7 +27,7 @@ import logoImage from '../assets/logo.png'
 
 function AdminPage({ language, toggleLanguage, t }) {
   const [isAuthenticated, setIsAuthenticated] = useState(false)
-  const [activeTab, setActiveTab] = useState('dashboard')
+  const [activeTab, setActiveTab] = useState(() => localStorage.getItem('adminActiveTab') || 'dashboard')
   const [username, setUsername] = useState('')
   const [password, setPassword] = useState('')
   const [loginError, setLoginError] = useState('')
@@ -115,6 +115,7 @@ function AdminPage({ language, toggleLanguage, t }) {
   const [isEditingOrderDetails, setIsEditingOrderDetails] = useState(false)
   const [editingOrderDetails, setEditingOrderDetails] = useState(null)
   const [viewingProduct, setViewingProduct] = useState(null)
+  const [printingOrder, setPrintingOrder] = useState(null)
   const [dealerOrders, setDealerOrders] = useState([])
   const [dealerOrdersLoading, setDealerOrdersLoading] = useState(false)
   const [dealerOrdersStatus, setDealerOrdersStatus] = useState('')
@@ -128,20 +129,20 @@ function AdminPage({ language, toggleLanguage, t }) {
   const [commissionRates, setCommissionRates] = useState(['7%', '8%', '9%', '10%', '11%']) // Default fallback
   const [showManageCommissions, setShowManageCommissions] = useState(false)
   const [newCommissionRate, setNewCommissionRate] = useState('')
+  const [showManageDiscount, setShowManageDiscount] = useState(false)
+  const [discountAmount, setDiscountAmount] = useState(0)
+  const [discountEnabled, setDiscountEnabled] = useState(false)
+  const [savingDiscount, setSavingDiscount] = useState(false)
 
   // State for expandable mobile cards
-  const [expandedDealerIds, setExpandedDealerIds] = useState(new Set())
+  const [expandedDealerId, setExpandedDealerId] = useState(null)
+  const [expandedEmployeeId, setExpandedEmployeeId] = useState(null)
+  const [expandedProductId, setExpandedProductId] = useState(null)
+  const [expandedOrderId, setExpandedOrderId] = useState(null)
+  const [expandedRequestId, setExpandedRequestId] = useState(null)
 
   const toggleDealerExpansion = (id) => {
-    setExpandedDealerIds(prev => {
-      const next = new Set(prev)
-      if (next.has(id)) {
-        next.delete(id)
-      } else {
-        next.add(id)
-      }
-      return next
-    })
+    setExpandedDealerId(prev => (prev === id ? null : id))
   }
   const [savingCollection, setSavingCollection] = useState(false)
 
@@ -173,6 +174,8 @@ function AdminPage({ language, toggleLanguage, t }) {
       if (data.success && data.data) {
         setCommissionRates(data.data.commissionRates || ['7%', '8%', '9%', '10%', '11%'])
         setSalesTargets(data.data.salesTargets || [])
+        setDiscountAmount(data.data.discountAmount || 0)
+        setDiscountEnabled(data.data.discountEnabled || false)
       }
     } catch (err) {
       console.error('Error fetching settings:', err)
@@ -319,6 +322,39 @@ function AdminPage({ language, toggleLanguage, t }) {
       console.error('Error saving settings:', err)
     }
   }
+
+  const handleSaveDiscount = async () => {
+    setSavingDiscount(true)
+    try {
+      const payload = {
+        commissionRates,
+        salesTargets,
+        discountAmount: parseFloat(discountAmount) || 0,
+        discountEnabled
+      }
+      console.log('Saving discount settings:', payload)
+      const res = await fetch(`${API_BASE}/api/settings`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      })
+      console.log('Response status:', res.status)
+      const data = await res.json()
+      console.log('Response data:', data)
+      if (data.success) {
+        setDiscountAmount(data.data.discountAmount)
+        setDiscountEnabled(data.data.discountEnabled)
+        setShowManageDiscount(false)
+        alert(language === 'en' ? 'Discount settings saved!' : 'ডিসকাউন্ট সেটিংস সংরক্ষিত হয়েছে!')
+      }
+    } catch (err) {
+      console.error('Error saving discount settings:', err)
+      alert(language === 'en' ? 'Failed to save settings' : 'সেটিংস সংরক্ষণ করতে ব্যর্থ হয়েছে')
+    } finally {
+      setSavingDiscount(false)
+    }
+  }
+
   const [orderCart, setOrderCart] = useState([])
   const [showOrderCart, setShowOrderCart] = useState(false)
   const [showOrderForm, setShowOrderForm] = useState(false)
@@ -332,7 +368,7 @@ function AdminPage({ language, toggleLanguage, t }) {
   const [orderForm, setOrderForm] = useState({
     dealer: '',
     product: '',
-    variant: { name: '', value: '', price: 0 },
+    variant: { productCode: '', packSize: '', packUnit: 'ml', cartoonSize: 1, cartoonUnit: 'Pcs', price: 0 },
     quantity: 1,
     notes: '',
     status: 'Pending',
@@ -403,6 +439,7 @@ function AdminPage({ language, toggleLanguage, t }) {
   const [newDealer, setNewDealer] = useState({
     dealerId: '',
     name: '',
+    shopName: '',
     phone: '',
     email: '',
     address: '',
@@ -436,26 +473,56 @@ function AdminPage({ language, toggleLanguage, t }) {
     }
   }
 
+  // Persist navigation and view state
+  useEffect(() => {
+    if (!isAuthenticated) return
+
+    localStorage.setItem('adminActiveTab', activeTab)
+
+    if (viewingDealer) {
+      localStorage.setItem('adminViewingDealerId', viewingDealer._id)
+      localStorage.setItem('adminShowDealerOrders', showDealerOrders ? 'true' : 'false')
+    } else {
+      localStorage.removeItem('adminViewingDealerId')
+      localStorage.removeItem('adminShowDealerOrders')
+    }
+
+    if (viewingOrder) {
+      localStorage.setItem('adminViewingOrderId', viewingOrder._id)
+    } else {
+      localStorage.removeItem('adminViewingOrderId')
+    }
+  }, [activeTab, viewingDealer, showDealerOrders, viewingOrder, isAuthenticated])
+
   const getNextDealerId = () => {
     const nums = dealers
-      .map((d) => parseInt(String(d.dealerId || '').replace(/^D/i, ''), 10))
+      .map((d) => parseInt(String(d.dealerId || '').replace(/^C/i, ''), 10))
       .filter((n) => !isNaN(n))
     const next = (nums.length ? Math.max(...nums) + 1 : 1)
-    return `D${String(next).padStart(3, '0')}`
+    return `C${String(next).padStart(3, '0')}`
   }
   const [generatedCredentials, setGeneratedCredentials] = useState(null)
   const [viewingEmployee, setViewingEmployee] = useState(null)
   const [isEditingEmployee, setIsEditingEmployee] = useState(false)
   const [editingEmployeeData, setEditingEmployeeData] = useState(null)
   const [savingEmployee, setSavingEmployee] = useState(false)
-  const [expandedEmployeeIds, setExpandedEmployeeIds] = useState({})
-  const [expandedProductIds, setExpandedProductIds] = useState({})
-  const [expandedOrderIds, setExpandedOrderIds] = useState({})
-  const [expandedRequestIds, setExpandedRequestIds] = useState({})
 
+
+
+  const [lastGeneratedPassword, setLastGeneratedPassword] = useState('')
+  const [showChangePassword, setShowChangePassword] = useState(false)
+  const [showSalesHistory, setShowSalesHistory] = useState(false)
+  const [showAssignedDealers, setShowAssignedDealers] = useState(false)
+  const salesEmployees = useMemo(() => {
+    return (employees || []).filter((emp) => {
+      const role = (emp.role || '').toLowerCase()
+      return role.includes('sales')
+    })
+  }, [employees])
+  // Body Scroll Locking for Modals
   // Body Scroll Locking for Modals
   useEffect(() => {
-    const isAnyModalOpen = viewingEmployee || showEmployeeForm || viewingDealer || showDealerForm || showDealerOrders || viewingProduct || showProductForm || viewingOrder || showOrderForm || showOrderRequests || showOrderCart || showEditProfile
+    const isAnyModalOpen = viewingEmployee || showEmployeeForm || viewingDealer || showDealerForm || showDealerOrders || viewingProduct || showProductForm || viewingOrder || showOrderForm || showOrderRequests || showOrderCart || showEditProfile || showManageTarget || showManageCommissions || showChangePassword || showSalesHistory || showAssignedDealers || showPreview || sidebarOpen
 
     if (isAnyModalOpen) {
       document.body.style.overflow = 'hidden'
@@ -467,17 +534,8 @@ function AdminPage({ language, toggleLanguage, t }) {
     return () => {
       document.body.style.overflow = ''
     }
-  }, [viewingEmployee, showEmployeeForm, viewingDealer, showDealerForm, showDealerOrders, viewingProduct, showProductForm, viewingOrder, showOrderForm, showOrderRequests, showOrderCart, showEditProfile])
-  const [lastGeneratedPassword, setLastGeneratedPassword] = useState('')
-  const [showChangePassword, setShowChangePassword] = useState(false)
-  const [showSalesHistory, setShowSalesHistory] = useState(false)
-  const [showAssignedDealers, setShowAssignedDealers] = useState(false)
-  const salesEmployees = useMemo(() => {
-    return (employees || []).filter((emp) => {
-      const role = (emp.role || '').toLowerCase()
-      return role.includes('sales')
-    })
-  }, [employees])
+  }, [viewingEmployee, showEmployeeForm, viewingDealer, showDealerForm, showDealerOrders, viewingProduct, showProductForm, viewingOrder, showOrderForm, showOrderRequests, showOrderCart, showEditProfile, showManageTarget, showManageCommissions, showChangePassword, showSalesHistory, showAssignedDealers, showPreview, sidebarOpen])
+
 
   const filteredDealers = useMemo(() => {
     const isAdmin = (userRole || '').toLowerCase() === 'admin'
@@ -721,7 +779,8 @@ function AdminPage({ language, toggleLanguage, t }) {
         (o.dealerId || '').toLowerCase().includes(q) ||
         (o.requestedByName || '').toLowerCase().includes(q) ||
         (o.status || '').toLowerCase().includes(q) ||
-        (o.approvalStatus || '').toLowerCase().includes(q)
+        (o.approvalStatus || '').toLowerCase().includes(q) ||
+        (o.createdAt && new Date(o.createdAt).toLocaleDateString().toLowerCase().includes(q))
       )
     }
     return list
@@ -870,6 +929,10 @@ function AdminPage({ language, toggleLanguage, t }) {
     } catch (err) {
       console.error('Failed to restore auth state', err)
       localStorage.removeItem('adminAuth')
+      localStorage.removeItem('adminActiveTab')
+      localStorage.removeItem('adminViewingDealerId')
+      localStorage.removeItem('adminShowDealerOrders')
+      localStorage.removeItem('adminViewingOrderId')
     }
   }, [])
 
@@ -888,6 +951,36 @@ function AdminPage({ language, toggleLanguage, t }) {
   useEffect(() => {
     loadDealers()
   }, [userRole, loggedInUserId, loggedInUser])
+
+  // Restore sub-views once data is loaded
+  useEffect(() => {
+    if (!dealers.length || viewingDealer || !isAuthenticated) return
+
+    const savedDealerId = localStorage.getItem('adminViewingDealerId')
+    const shouldShowDealerOrders = localStorage.getItem('adminShowDealerOrders') === 'true'
+
+    if (savedDealerId) {
+      const dealer = dealers.find(d => d._id === savedDealerId)
+      if (dealer) {
+        setViewingDealer(dealer)
+        if (shouldShowDealerOrders) {
+          handleShowDealerOrders(dealer)
+        }
+      }
+    }
+  }, [dealers.length, isAuthenticated])
+
+  useEffect(() => {
+    if (!orders.length || viewingOrder || !isAuthenticated) return
+
+    const savedOrderId = localStorage.getItem('adminViewingOrderId')
+    if (savedOrderId) {
+      const order = orders.find(o => o._id === savedOrderId)
+      if (order) {
+        setViewingOrder(order)
+      }
+    }
+  }, [orders.length, isAuthenticated])
 
   const loadProducts = async () => {
     try {
@@ -1021,10 +1114,10 @@ function AdminPage({ language, toggleLanguage, t }) {
       if (selectedProduct && selectedProduct.variants && selectedProduct.variants.length > 0) {
         setSelectedProductVariants(selectedProduct.variants)
         // Reset variant if product changed
-        setOrderForm(prev => ({ ...prev, variant: { name: '', value: '', price: 0 } }))
+        setOrderForm(prev => ({ ...prev, variant: { productCode: '', packSize: '', packUnit: 'ml', cartoonSize: 1, cartoonUnit: 'Pcs', price: 0 } }))
       } else {
         setSelectedProductVariants([])
-        setOrderForm(prev => ({ ...prev, variant: { name: '', value: '', price: 0 } }))
+        setOrderForm(prev => ({ ...prev, variant: { productCode: '', packSize: '', packUnit: 'ml', cartoonSize: 1, cartoonUnit: 'Pcs', price: 0 } }))
       }
     } else {
       setSelectedProductVariants([])
@@ -1035,7 +1128,7 @@ function AdminPage({ language, toggleLanguage, t }) {
     setOrderForm({
       dealer: '',
       product: '',
-      variant: { name: '', value: '', price: 0 },
+      variant: { productCode: '', packSize: '', packUnit: 'ml', cartoonSize: 1, cartoonUnit: 'Pcs', price: 0 },
       quantity: 1,
       notes: '',
       status: 'Pending',
@@ -1088,15 +1181,21 @@ function AdminPage({ language, toggleLanguage, t }) {
       })
     }
 
-    const totalRev = filteredOrdersForRevenue.reduce((sum, o) => sum + Number(o.totalPrice || 0), 0)
+    const totalRev = filteredOrdersForRevenue.reduce((sum, o) => {
+      const total = Number(o.totalPrice || 0)
+      const discount = o.discountEnabled && o.discountAmount > 0 ? o.discountAmount : 1
+      return sum + (total * discount)
+    }, 0)
 
     // 2. Calculate Due (for the filtered Revenue orders)
-    // Due = Total Price - (Paid + Commission)
+    // Due = Grand Total - (Paid + Commission)
     const totalDueForPeriod = filteredOrdersForRevenue.reduce((sum, o) => {
       const paid = Number(o.paidAmount || 0)
       const commission = (o.paymentHistory || []).reduce((cSum, p) => cSum + (parseFloat(p.commission) || 0), 0)
-      const price = Number(o.totalPrice || 0)
-      return sum + Math.max(0, price - (paid + commission))
+      const total = Number(o.totalPrice || 0)
+      const discount = o.discountEnabled && o.discountAmount > 0 ? o.discountAmount : 1
+      const grandTotal = total * discount
+      return sum + Math.max(0, grandTotal - (paid + commission))
     }, 0)
 
     // 3. Calculate Collection & Commission (Payments Made in Range)
@@ -1168,11 +1267,13 @@ function AdminPage({ language, toggleLanguage, t }) {
         approvalStatus: userRole === 'Admin' ? 'Approved' : 'Pending',
         requestedBy: loggedInUserId || null,
         requestedByName: loggedInUser || '',
-        requestedByRole: userRole || ''
+        requestedByRole: userRole || '',
+        discountAmount: parseFloat(discountAmount) || 0,
+        discountEnabled: !!discountEnabled
       }
 
       // Add variant if product has variants and one is selected
-      if (selectedProduct && selectedProduct.priceCategory === 'per_variant' && orderForm.variant && orderForm.variant.value) {
+      if (selectedProduct && selectedProduct.priceCategory === 'per_variant' && orderForm.variant && orderForm.variant.productCode) {
         orderData.variant = orderForm.variant
       }
 
@@ -1216,7 +1317,7 @@ function AdminPage({ language, toggleLanguage, t }) {
         product: order.product?._id || order.product || '',
         productName: order.productName || '',
         productId: order.productId || '',
-        variant: order.variant || { name: '', value: '', price: 0 },
+        variant: order.variant || { productCode: '', packSize: '', packUnit: 'ml', cartoonSize: 1, cartoonUnit: 'Pcs', price: 0 },
         quantity: order.quantity || 1,
         notes: order.notes || '',
         status: order.status || 'Pending'
@@ -1234,7 +1335,7 @@ function AdminPage({ language, toggleLanguage, t }) {
     setOrderForm({
       dealer: order.dealer?._id || order.dealer || '',
       product: existingItems[0]?.product || '',
-      variant: existingItems[0]?.variant || { name: '', value: '', price: 0 },
+      variant: existingItems[0]?.variant || { productCode: '', packSize: '', packUnit: 'ml', cartoonSize: 1, cartoonUnit: 'Pcs', price: 0 },
       quantity: existingItems[0]?.quantity || 1,
       notes: order.notes || '',
       status: order.status || 'Pending',
@@ -1295,10 +1396,10 @@ function AdminPage({ language, toggleLanguage, t }) {
         return {
           'Date': order.createdAt ? new Date(order.createdAt).toLocaleDateString() : '-',
           'Order ID': order.orderId || '-',
-          'Dealer': order.dealerName || order.dealer?.name || '-',
-          'Dealer ID': order.dealerId || order.dealer?.dealerId || '-',
+          'Customer': order.dealerName || order.dealer?.name || '-',
+          'CID': order.dealerId || order.dealer?.dealerId || '-',
           'Product': order.productName || order.product?.name || '-',
-          'Variant': order.variant?.value ? (order.variant.name || order.variant.value) : '-',
+          'Variant': (order.variant?.productCode && order.variant?.packSize) ? `${order.variant.productCode} (${order.variant.packSize} ${order.variant.packUnit || 'ml'})` : '-',
           'Quantity': order.quantity || 0,
           'Created By': order.requestedByName || order.requestedByRole || '-',
           'Total Price': totalPrice.toFixed(2),
@@ -1324,6 +1425,16 @@ function AdminPage({ language, toggleLanguage, t }) {
       console.error('Export error:', err)
       alert(language === 'en' ? 'Failed to export orders' : 'অর্ডার রপ্তানি করতে ব্যর্থ')
     }
+  }
+
+  const handlePrintOrder = (order) => {
+    setPrintingOrder(order)
+    setTimeout(() => {
+      window.print()
+      setTimeout(() => {
+        setPrintingOrder(null)
+      }, 500)
+    }, 500)
   }
 
   const handleShowDealerOrders = async (dealer = null) => {
@@ -1412,8 +1523,11 @@ function AdminPage({ language, toggleLanguage, t }) {
       const order = dealerOrders.find(o => o._id === orderId)
       if (!order) return
 
-      const totalPrice = parseFloat(order.totalPrice) || 0
-      const dueAmount = Math.max(0, totalPrice - paidAmount)
+      const totalPrice = parseFloat(order.totalPrice || 0)
+      const discount = order.discountEnabled && order.discountAmount > 0 ? order.discountAmount : 1
+      const grandTotal = totalPrice * discount
+      const existingComm = (order.paymentHistory || []).reduce((sum, p) => sum + (parseFloat(p.commission) || 0), 0)
+      const dueAmount = Math.max(0, grandTotal - (paidAmount + existingComm))
 
       const res = await fetch(`${API_BASE}/api/orders/${orderId}`, {
         method: 'PUT',
@@ -1461,12 +1575,15 @@ function AdminPage({ language, toggleLanguage, t }) {
 
       // Sort orders by due amount (highest first) to reduce due amounts one by one
       const sortedOrders = [...dealerOrders].map(order => {
-        const totalPrice = parseFloat(order.totalPrice) || 0
-        const paidAmount = parseFloat(order.paidAmount) || 0
+        const totalPrice = parseFloat(order.totalPrice || 0)
+        const discount = order.discountEnabled && order.discountAmount > 0 ? order.discountAmount : 1
+        const grandTotal = totalPrice * discount
+        const paidAmount = parseFloat(order.paidAmount || 0)
+        const commission = (order.paymentHistory || []).reduce((sum, p) => sum + (parseFloat(p.commission) || 0), 0)
         const dueAmount = order.dueAmount !== undefined
           ? parseFloat(order.dueAmount)
-          : Math.max(0, totalPrice - paidAmount)
-        return { ...order, calculatedDue: dueAmount }
+          : Math.max(0, grandTotal - (paidAmount + commission))
+        return { ...order, calculatedDue: dueAmount, calculatedComm: commission }
       }).sort((a, b) => b.calculatedDue - a.calculatedDue)
 
       let remainingDifference = difference
@@ -1475,15 +1592,18 @@ function AdminPage({ language, toggleLanguage, t }) {
       for (const order of sortedOrders) {
         if (remainingDifference === 0) break
 
-        const totalPrice = parseFloat(order.totalPrice) || 0
-        const currentPaid = parseFloat(order.paidAmount) || 0
+        const totalPrice = parseFloat(order.totalPrice || 0)
+        const discount = order.discountEnabled && order.discountAmount > 0 ? order.discountAmount : 1
+        const grandTotal = totalPrice * discount
+        const currentPaid = parseFloat(order.paidAmount || 0)
+        const currentComm = order.calculatedComm
         const currentDue = order.calculatedDue
 
         if (remainingDifference > 0) {
           // Increase paid amount - reduce due amount
           const amountToAdd = Math.min(remainingDifference, currentDue)
           const newPaidAmount = currentPaid + amountToAdd
-          const newDueAmount = Math.max(0, totalPrice - newPaidAmount)
+          const newDueAmount = Math.max(0, grandTotal - (newPaidAmount + currentComm))
 
           const res = await fetch(`${API_BASE}/api/orders/${order._id}`, {
             method: 'PUT',
@@ -1503,7 +1623,7 @@ function AdminPage({ language, toggleLanguage, t }) {
           // Decrease paid amount - increase due amount
           const amountToReduce = Math.min(Math.abs(remainingDifference), currentPaid)
           const newPaidAmount = Math.max(0, currentPaid - amountToReduce)
-          const newDueAmount = Math.max(0, totalPrice - newPaidAmount)
+          const newDueAmount = Math.max(0, grandTotal - (newPaidAmount + currentComm))
 
           const res = await fetch(`${API_BASE}/api/orders/${order._id}`, {
             method: 'PUT',
@@ -1521,7 +1641,6 @@ function AdminPage({ language, toggleLanguage, t }) {
           remainingDifference += amountToReduce
         }
       }
-
       // Reload dealer orders to get updated data
       await handleShowDealerOrders()
       setEditingTotalPaid(false)
@@ -1550,11 +1669,14 @@ function AdminPage({ language, toggleLanguage, t }) {
 
       // Sort orders by due amount (highest first) to reduce due amounts one by one
       const sortedOrders = [...dealerOrders].map(order => {
-        const totalPrice = parseFloat(order.totalPrice) || 0
-        const paidAmount = parseFloat(order.paidAmount) || 0
+        const totalPrice = parseFloat(order.totalPrice || 0)
+        const discount = order.discountEnabled && order.discountAmount > 0 ? order.discountAmount : 1
+        const grandTotal = totalPrice * discount
+        const paidAmount = parseFloat(order.paidAmount || 0)
+        const commission = (order.paymentHistory || []).reduce((cSum, p) => cSum + (parseFloat(p.commission) || 0), 0)
         const dueAmount = order.dueAmount !== undefined
           ? parseFloat(order.dueAmount)
-          : Math.max(0, totalPrice - paidAmount)
+          : Math.max(0, grandTotal - (paidAmount + commission))
         return { ...order, calculatedDue: dueAmount }
       }).sort((a, b) => b.calculatedDue - a.calculatedDue)
 
@@ -1565,13 +1687,13 @@ function AdminPage({ language, toggleLanguage, t }) {
         if (remainingAmount <= 0) break
 
         const totalPrice = parseFloat(order.totalPrice) || 0
-        const currentPaid = parseFloat(order.paidAmount) || 0
+        const currentPaid = parseFloat(order.paidAmount || 0)
         const currentDue = order.calculatedDue
+        const discount = order.discountEnabled && order.discountAmount > 0 ? order.discountAmount : 1
+        const grandTotal = totalPrice * discount
 
-        // Add to paid amount - reduce due amount
         const amountToAdd = Math.min(remainingAmount, currentDue)
-        const newPaidAmount = currentPaid + amountToAdd
-        const newDueAmount = Math.max(0, totalPrice - newPaidAmount)
+        if (amountToAdd <= 0) continue
 
         // Calculate commission for this payment chunk
         let commissionAmount = 0
@@ -1579,6 +1701,11 @@ function AdminPage({ language, toggleLanguage, t }) {
           const rate = parseFloat(addCollectionCommission.replace('%', '')) || 0
           commissionAmount = (amountToAdd * rate) / 100
         }
+
+        const newPaidAmount = currentPaid + amountToAdd
+        const currentHistComm = (order.paymentHistory || []).reduce((sum, p) => sum + (parseFloat(p.commission) || 0), 0)
+        const totalComm = currentHistComm + commissionAmount
+        const newDueAmount = Math.max(0, grandTotal - (newPaidAmount + totalComm))
 
         const res = await fetch(`${API_BASE}/api/orders/${order._id}`, {
           method: 'PUT',
@@ -1628,7 +1755,7 @@ function AdminPage({ language, toggleLanguage, t }) {
     }
     const selectedProduct = products.find((p) => p._id === orderForm.product)
     if (selectedProduct && selectedProduct.priceCategory === 'per_variant' && selectedProduct.variants?.length) {
-      if (!orderForm.variant?.value) {
+      if (!orderForm.variant?.productCode) {
         setOrderStatus(language === 'en' ? 'Please select a variant' : 'দয়া করে ভ্যারিয়েন্ট নির্বাচন করুন')
         return
       }
@@ -1639,7 +1766,7 @@ function AdminPage({ language, toggleLanguage, t }) {
       product: orderForm.product,
       productName: selectedProduct?.name || '',
       productId: selectedProduct?.productId || '',
-      variant: orderForm.variant?.value ? { ...orderForm.variant } : null,
+      variant: orderForm.variant?.productCode ? { ...orderForm.variant } : null,
       quantity: qty,
       notes: orderForm.notes || '',
       status: orderForm.status || 'Pending',
@@ -1657,7 +1784,7 @@ function AdminPage({ language, toggleLanguage, t }) {
     setOrderForm((prev) => ({
       ...prev,
       product: '',
-      variant: { name: '', value: '', price: 0 },
+      variant: { productCode: '', packSize: '', packUnit: 'ml', cartoonSize: 1, cartoonUnit: 'Pcs', price: 0 },
       quantity: 1,
       notes: ''
     }))
@@ -1678,8 +1805,8 @@ function AdminPage({ language, toggleLanguage, t }) {
     }
 
     if (!unitPrice && product) {
-      if (product.priceCategory === 'per_variant' && item.variant?.value) {
-        const pv = product.variants?.find((v) => v.value === item.variant.value)
+      if (product.priceCategory === 'per_variant' && item.variant?.productCode) {
+        const pv = product.variants?.find((v) => v.productCode === item.variant.productCode)
         if (pv) {
           unitPrice = pv.price || 0
         }
@@ -1714,9 +1841,12 @@ function AdminPage({ language, toggleLanguage, t }) {
         dealer: orderForm.dealer,
         items: orderCart.map((item) => ({
           product: item.product,
-          variant: item.variant && item.variant.value ? {
-            name: item.variant.name || '',
-            value: item.variant.value,
+          variant: item.variant && item.variant.productCode ? {
+            productCode: item.variant.productCode,
+            packSize: item.variant.packSize || '',
+            packUnit: item.variant.packUnit || 'ml',
+            cartoonSize: item.variant.cartoonSize || 1,
+            cartoonUnit: item.variant.cartoonUnit || 'Pcs',
             price: item.variant.price || 0
           } : undefined,
           quantity: item.quantity,
@@ -1727,6 +1857,8 @@ function AdminPage({ language, toggleLanguage, t }) {
         requestedBy: loggedInUserId || null,
         requestedByName: loggedInUser || '',
         requestedByRole: userRole || '',
+        discountAmount: parseFloat(discountAmount) || 0,
+        discountEnabled: !!discountEnabled,
         ...(editingOrderId && {
           paidAmount: orderForm.paidAmount || 0
         })
@@ -1921,7 +2053,7 @@ function AdminPage({ language, toggleLanguage, t }) {
   const addVariant = () => {
     setProductForm({
       ...productForm,
-      variants: [...(productForm.variants || []), { name: '', value: '', price: 0 }]
+      variants: [...(productForm.variants || []), { productCode: '', packSize: '', packUnit: 'ml', cartoonSize: '', cartoonUnit: 'Pcs', price: 0 }]
     })
   }
 
@@ -2038,6 +2170,7 @@ function AdminPage({ language, toggleLanguage, t }) {
         body: JSON.stringify({
           dealerId: finalDealerId,
           name: newDealer.name,
+          shopName: newDealer.shopName,
           phone: newDealer.phone,
           email: newDealer.email,
           address: newDealer.address,
@@ -2091,6 +2224,7 @@ function AdminPage({ language, toggleLanguage, t }) {
         body: JSON.stringify({
           dealerId: editingDealerData.dealerId,
           name: editingDealerData.name,
+          shopName: editingDealerData.shopName,
           phone: editingDealerData.phone,
           email: editingDealerData.email,
           address: editingDealerData.address,
@@ -2228,19 +2362,26 @@ function AdminPage({ language, toggleLanguage, t }) {
   // Listen for messages from iframe
   useEffect(() => {
     const handleMessage = (event) => {
-      console.log('Received message from iframe:', event.data)
-      if (event.data.type === 'admin-save-content') {
-        const { section, data } = event.data
-        console.log('Saving content:', section, data)
-        saveContent(section, data)
-      } else if (event.data.type === 'admin-save-image') {
-        const { url } = event.data
-        console.log('Saving image:', url)
-        handleHeroImageUrlChange(url)
-      } else if (event.data.type === 'contentUpdated') {
-        console.log('Content updated event received')
-        // Trigger refresh
-        window.dispatchEvent(new Event('contentUpdated'))
+      // Ignore messages that don't look like our app's messages
+      if (!event.data || typeof event.data !== 'object' || !event.data.type) return
+
+      // Only process and log specific message types we expect
+      if (['admin-save-content', 'admin-save-image', 'contentUpdated'].includes(event.data.type)) {
+        console.log('Received message from iframe:', event.data)
+
+        if (event.data.type === 'admin-save-content') {
+          const { section, data } = event.data
+          console.log('Saving content:', section, data)
+          saveContent(section, data)
+        } else if (event.data.type === 'admin-save-image') {
+          const { url } = event.data
+          console.log('Saving image:', url)
+          handleHeroImageUrlChange(url)
+        } else if (event.data.type === 'contentUpdated') {
+          console.log('Content updated event received')
+          // Trigger refresh
+          window.dispatchEvent(new Event('contentUpdated'))
+        }
       }
     }
 
@@ -4048,6 +4189,10 @@ function AdminPage({ language, toggleLanguage, t }) {
     setUserRole('Admin')
     localStorage.removeItem('adminAuth')
     localStorage.removeItem('adminUsername')
+    localStorage.removeItem('adminActiveTab')
+    localStorage.removeItem('adminViewingDealerId')
+    localStorage.removeItem('adminShowDealerOrders')
+    localStorage.removeItem('adminViewingOrderId')
     setActiveTab('dashboard')
   }
 
@@ -4182,7 +4327,7 @@ function AdminPage({ language, toggleLanguage, t }) {
     blogs: 'Blogs',
     contacts: 'Contact Messages',
     profile: 'Profile',
-    crm: 'CRM',
+    crm: 'Customers',
     hr: 'HR',
     orders: 'Orders',
     inventory: 'Inventory',
@@ -4237,14 +4382,18 @@ function AdminPage({ language, toggleLanguage, t }) {
     message: 'Message',
     name: 'Name',
     email: 'Email',
-    phone: 'Phone'
+    phone: 'Phone',
+    shopName: 'Shop Name',
+    customer: 'Customer',
+    cid: 'CID',
+    customerName: 'Customer Name'
   } : {
     dashboard: 'ড্যাশবোর্ড',
     products: 'পণ্য',
     blogs: 'ব্লগ',
     contacts: 'যোগাযোগ বার্তা',
     profile: 'প্রোফাইল',
-    crm: 'সিআরএম',
+    crm: 'কাস্টমার',
     hr: 'এইচআর',
     orders: 'অর্ডার',
     inventory: 'ইনভেন্টরি',
@@ -4940,28 +5089,65 @@ function AdminPage({ language, toggleLanguage, t }) {
                                 <div key={index} className="admin-product-variant-item" style={{ display: 'flex', gap: '0.5rem', alignItems: 'center', flexWrap: 'wrap' }}>
                                   <input
                                     type="text"
-                                    value={variant.name || ''}
-                                    onChange={(e) => updateVariant(index, 'name', e.target.value)}
-                                    placeholder={language === 'en' ? 'Variant name (e.g., Size, Color)' : 'ভ্যারিয়েন্ট নাম (যেমন, আকার, রঙ)'}
-                                    style={{ flex: 1, minWidth: '150px', padding: '0.5rem', border: '1px solid #d1d5db', borderRadius: '0.375rem' }}
+                                    value={variant.productCode || ''}
+                                    onChange={(e) => updateVariant(index, 'productCode', e.target.value)}
+                                    placeholder={language === 'en' ? 'Product Code' : 'পণ্য কোড'}
+                                    style={{ width: '120px', padding: '0.5rem', border: '1px solid #d1d5db', borderRadius: '0.375rem' }}
                                   />
-                                  <input
-                                    type="text"
-                                    value={variant.value || ''}
-                                    onChange={(e) => updateVariant(index, 'value', e.target.value)}
-                                    placeholder={language === 'en' ? 'Variant value (e.g., Large, Red)' : 'ভ্যারিয়েন্ট মান (যেমন, বড়, লাল)'}
-                                    style={{ flex: 1, minWidth: '150px', padding: '0.5rem', border: '1px solid #d1d5db', borderRadius: '0.375rem' }}
-                                  />
-                                  {productForm.priceCategory === 'per_variant' && (
+                                  <div style={{ display: 'flex', gap: '0.25rem', alignItems: 'center' }}>
+                                    <input
+                                      type="text"
+                                      value={variant.packSize || ''}
+                                      onChange={(e) => updateVariant(index, 'packSize', e.target.value)}
+                                      placeholder={language === 'en' ? 'Pack Size' : 'প্যাক সাইজ'}
+                                      style={{ width: '90px', padding: '0.5rem', border: '1px solid #d1d5db', borderRadius: '0.375rem' }}
+                                    />
+                                    <select
+                                      value={variant.packUnit || 'ml'}
+                                      onChange={(e) => updateVariant(index, 'packUnit', e.target.value)}
+                                      style={{ width: '65px', padding: '0.5rem', border: '1px solid #d1d5db', borderRadius: '0.375rem' }}
+                                    >
+                                      <option value="gm">gm</option>
+                                      <option value="kg">kg</option>
+                                      <option value="ml">ml</option>
+                                      <option value="Ltr">Ltr</option>
+                                    </select>
+                                  </div>
+
+                                  <div style={{ display: 'flex', gap: '0.25rem', alignItems: 'center' }}>
                                     <input
                                       type="number"
-                                      step="0.01"
-                                      min="0"
-                                      value={variant.price || ''}
-                                      onChange={(e) => updateVariant(index, 'price', parseFloat(e.target.value) || 0)}
-                                      placeholder={language === 'en' ? 'Price' : 'মূল্য'}
-                                      style={{ width: '120px', padding: '0.5rem', border: '1px solid #d1d5db', borderRadius: '0.375rem' }}
+                                      min="1"
+                                      value={variant.cartoonSize || ''}
+                                      onChange={(e) => updateVariant(index, 'cartoonSize', e.target.value === '' ? '' : (parseInt(e.target.value, 10) || ''))}
+                                      placeholder={language === 'en' ? 'CTN Size' : 'কার্টুন সাইজ'}
+                                      style={{ width: '80px', padding: '0.5rem', border: '1px solid #d1d5db', borderRadius: '0.375rem' }}
                                     />
+                                    <select
+                                      value={variant.cartoonUnit || 'Pcs'}
+                                      onChange={(e) => updateVariant(index, 'cartoonUnit', e.target.value)}
+                                      style={{ width: '85px', padding: '0.5rem', border: '1px solid #d1d5db', borderRadius: '0.375rem', fontSize: '0.75rem' }}
+                                    >
+                                      <option value="Packets">{language === 'en' ? 'Packets' : 'প্যাকেট'}</option>
+                                      <option value="Bottles">{language === 'en' ? 'Bottles' : 'বোতল'}</option>
+                                      <option value="Pcs">{language === 'en' ? 'Pcs' : 'পিস'}</option>
+                                    </select>
+                                  </div>
+                                  {productForm.priceCategory === 'per_variant' && (
+                                    <>
+                                      <input
+                                        type="number"
+                                        step="0.01"
+                                        min="0"
+                                        value={variant.price || ''}
+                                        onChange={(e) => updateVariant(index, 'price', parseFloat(e.target.value) || 0)}
+                                        placeholder={language === 'en' ? 'CTN Price' : 'কার্টুন মূল্য'}
+                                        style={{ width: '110px', padding: '0.5rem', border: '1px solid #d1d5db', borderRadius: '0.375rem' }}
+                                      />
+                                      <div style={{ fontSize: '0.75rem', color: '#6b7280', minWidth: '80px' }}>
+                                        {language === 'en' ? 'Unit:' : 'ইউনিট:'} ৳{((variant.price || 0) / (variant.cartoonSize || 1)).toFixed(2)}
+                                      </div>
+                                    </>
                                   )}
                                   <button
                                     type="button"
@@ -5254,8 +5440,8 @@ function AdminPage({ language, toggleLanguage, t }) {
                               >
                                 <option value="">{language === 'en' ? 'Select variant' : 'ভ্যারিয়েন্ট নির্বাচন করুন'}</option>
                                 {product.variants.map((variant, vIndex) => (
-                                  <option key={vIndex} value={variant.value}>
-                                    {variant.name || variant.value}: ৳{variant.price || 0}
+                                  <option key={vIndex} value={variant.productCode}>
+                                    {variant.productCode} ({variant.packSize} {variant.packUnit || 'ml'}): ৳{variant.price || 0}
                                   </option>
                                 ))}
                               </select>
@@ -5304,7 +5490,7 @@ function AdminPage({ language, toggleLanguage, t }) {
                       <div className="mobile-card" key={product._id || product.name || index}>
                         <div
                           className="mobile-card-header"
-                          onClick={() => setExpandedProductIds(prev => ({ ...prev, [product._id]: !prev[product._id] }))}
+                          onClick={() => setExpandedProductId(prev => (prev === product._id ? null : product._id))}
                           style={{ cursor: 'pointer' }}
                         >
                           <div className="mobile-card-avatar" style={{ backgroundColor: '#e0f2fe', color: '#0369a1', overflow: 'hidden' }}>
@@ -5316,10 +5502,10 @@ function AdminPage({ language, toggleLanguage, t }) {
                           </div>
                           <div className="mobile-card-header-text">
                             <div className="mobile-card-title">{product.name}</div>
-                            <div className="mobile-card-subtitle">{product.productId || '-'}</div>
+                            <div className="mobile-card-subtitle">{product.productId || ''}</div>
                           </div>
 
-                          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', marginLeft: 'auto', alignSelf: 'stretch', justifyContent: 'flex-end', flexShrink: 0, paddingBottom: 0 }}>
+                          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', marginLeft: 'auto', alignSelf: 'center', justifyContent: 'center', flexShrink: 0 }}>
                             <div style={{ fontSize: '0.9rem', fontWeight: 700, color: '#475569', marginTop: 'auto' }}>
                               {hasVariants ? (
                                 <span>
@@ -5333,7 +5519,7 @@ function AdminPage({ language, toggleLanguage, t }) {
                           </div>
                         </div>
 
-                        {expandedProductIds[product._id] && (
+                        {expandedProductId === product._id && (
                           <>
                             <div className="mobile-card-body">
                               <div className="mobile-card-row">
@@ -5344,12 +5530,14 @@ function AdminPage({ language, toggleLanguage, t }) {
                                 <span className="mobile-card-label">{language === 'en' ? 'Price details' : 'মূল্যের বিবরণ'}</span>
                                 <span className="mobile-card-value">
                                   {hasVariants ? (
-                                    <div style={{ width: '100%' }}>
-                                      {product.variants.map((variant, vIndex) => (
-                                        <div key={vIndex} style={{ fontSize: '0.85rem', marginBottom: '0.25rem' }}>
-                                          <span style={{ fontWeight: 600 }}>{variant.name || variant.value}:</span> ৳{variant.price}
-                                        </div>
-                                      ))}
+                                    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', width: '100%' }}>
+                                      <div style={{ textAlign: 'left' }}>
+                                        {product.variants.map((variant, vIndex) => (
+                                          <div key={vIndex} style={{ fontSize: '0.85rem', marginBottom: '0.25rem' }}>
+                                            <span style={{ fontWeight: 600 }}>({variant.packSize} {variant.packUnit || 'ml'} x {variant.cartoonSize} {variant.cartoonUnit || 'Pcs'}): ৳{variant.price}</span>
+                                          </div>
+                                        ))}
+                                      </div>
                                     </div>
                                   ) : (
                                     <span style={{ fontWeight: 600, color: '#16a34a' }}>
@@ -5585,18 +5773,24 @@ function AdminPage({ language, toggleLanguage, t }) {
                           <label style={{ fontSize: '0.875rem', color: '#6b7280', fontWeight: 600, marginBottom: '0.75rem', display: 'block' }}>
                             {language === 'en' ? 'Variants' : 'ভ্যারিয়েন্ট'}
                           </label>
-                          <div className="admin-product-variants-table-wrapper" style={{ border: '1px solid #e5e7eb', borderRadius: '0.5rem', overflow: 'hidden', backgroundColor: '#fff' }}>
-                            <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                          <div className="admin-table-container" style={{ border: '1px solid #e5e7eb', borderRadius: '0.5rem', overflow: 'hidden', backgroundColor: '#fff' }}>
+                            <table className="admin-table" style={{ width: '100%', borderCollapse: 'collapse' }}>
                               <thead>
                                 <tr style={{ backgroundColor: '#f9fafb', borderBottom: '2px solid #e5e7eb' }}>
                                   <th style={{ padding: '0.75rem', textAlign: 'left', fontSize: '0.875rem', fontWeight: 600, color: '#6b7280' }}>
-                                    {language === 'en' ? 'Name' : 'নাম'}
+                                    {language === 'en' ? 'Code' : 'কোড'}
                                   </th>
                                   <th style={{ padding: '0.75rem', textAlign: 'left', fontSize: '0.875rem', fontWeight: 600, color: '#6b7280' }}>
-                                    {language === 'en' ? 'Value' : 'মান'}
+                                    {language === 'en' ? 'Pack Size' : 'প্যাক সাইজ'}
+                                  </th>
+                                  <th style={{ padding: '0.75rem', textAlign: 'center', fontSize: '0.875rem', fontWeight: 600, color: '#6b7280' }}>
+                                    {language === 'en' ? 'CTN Size' : 'কার্টুন সাইজ'}
                                   </th>
                                   <th style={{ padding: '0.75rem', textAlign: 'right', fontSize: '0.875rem', fontWeight: 600, color: '#6b7280' }}>
-                                    {language === 'en' ? 'Price' : 'মূল্য'}
+                                    {language === 'en' ? 'CTN Price' : 'কার্টুন মূল্য'}
+                                  </th>
+                                  <th style={{ padding: '0.75rem', textAlign: 'right', fontSize: '0.875rem', fontWeight: 600, color: '#6b7280' }}>
+                                    {language === 'en' ? 'Unit Price' : 'ইউনিট মূল্য'}
                                   </th>
                                 </tr>
                               </thead>
@@ -5604,18 +5798,52 @@ function AdminPage({ language, toggleLanguage, t }) {
                                 {viewingProduct.variants.map((variant, idx) => (
                                   <tr key={idx} style={{ borderBottom: '1px solid #f3f4f6' }}>
                                     <td style={{ padding: '0.75rem', fontSize: '0.875rem', color: '#111827' }}>
-                                      {variant.name || '-'}
+                                      {variant.productCode || '-'}
                                     </td>
                                     <td style={{ padding: '0.75rem', fontSize: '0.875rem', color: '#111827' }}>
-                                      {variant.value || '-'}
+                                      {variant.packSize || '-'} {variant.packUnit || 'ml'}
+                                    </td>
+                                    <td style={{ padding: '0.75rem', fontSize: '0.875rem', color: '#111827', textAlign: 'center' }}>
+                                      {variant.cartoonSize || 1} {variant.cartoonUnit || 'Pcs'}
                                     </td>
                                     <td style={{ padding: '0.75rem', fontSize: '0.875rem', color: '#111827', fontWeight: 600, textAlign: 'right' }}>
                                       ৳{parseFloat(variant.price || 0).toFixed(2)}
+                                    </td>
+                                    <td style={{ padding: '0.75rem', fontSize: '0.875rem', color: '#16a34a', fontWeight: 600, textAlign: 'right' }}>
+                                      ৳{((variant.price || 0) / (variant.cartoonSize || 1)).toFixed(2)}
                                     </td>
                                   </tr>
                                 ))}
                               </tbody>
                             </table>
+                          </div>
+
+                          {/* Mobile View for Variants */}
+                          <div className="mobile-card-container">
+                            {viewingProduct.variants.map((variant, idx) => (
+                              <div key={idx} className="mobile-card" style={{ padding: '1rem', border: '1px solid #e2e8f0' }}>
+                                <div className="mobile-card-row">
+                                  <span className="mobile-card-label" style={{ fontWeight: 600 }}>{language === 'en' ? 'Code' : 'কোড'}</span>
+                                  <span className="mobile-card-value">{variant.productCode || '-'}</span>
+                                </div>
+                                <div className="mobile-card-row">
+                                  <span className="mobile-card-label">{language === 'en' ? 'Pack Size' : 'প্যাক সাইজ'}</span>
+                                  <span className="mobile-card-value">{variant.packSize || '-'} {variant.packUnit || 'ml'}</span>
+                                </div>
+                                <div className="mobile-card-row">
+                                  <span className="mobile-card-label">{language === 'en' ? 'CTN Size' : 'কার্টুন সাইজ'}</span>
+                                  <span className="mobile-card-value">{variant.cartoonSize || 1} {variant.cartoonUnit || 'Pcs'}</span>
+                                </div>
+                                <div className="mobile-card-row">
+                                  <span className="mobile-card-label">{language === 'en' ? 'CTN Price' : 'কার্টুন মূল্য'}</span>
+                                  <span className="mobile-card-value" style={{ fontWeight: 700, color: '#111827' }}>৳{parseFloat(variant.price || 0).toFixed(2)}</span>
+                                </div>
+                                <div className="mobile-card-row">
+                                  <span className="mobile-card-label">{language === 'en' ? 'Unit Price' : 'ইউনিট মূল্য'}</span>
+                                  <span className="mobile-card-value" style={{ fontWeight: 700, color: '#16a34a' }}>৳{((variant.price || 0) / (variant.cartoonSize || 1)).toFixed(2)}</span>
+                                </div>
+                              </div>
+                            ))}
                           </div>
                         </div>
                       )}
@@ -6827,7 +7055,7 @@ function AdminPage({ language, toggleLanguage, t }) {
           {activeTab === 'crm' && (
             <div className="admin-tab-content">
               <div className="admin-tab-header" style={{ gap: '0.75rem', flexWrap: 'wrap' }}>
-                <h1 className="admin-page-title" style={{ flex: 1 }}>{language === 'en' ? 'Dealers' : 'ডিলার'}</h1>
+                <h1 className="admin-page-title" style={{ flex: 1 }}>{language === 'en' ? 'Customers' : 'কাস্টমার'}</h1>
                 <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
                   <button
                     className="admin-add-btn"
@@ -6977,11 +7205,15 @@ function AdminPage({ language, toggleLanguage, t }) {
                       )}
                       <form onSubmit={handleAddDealer} className="admin-form-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: '1rem' }}>
                         <div className="admin-form-group">
-                          <label>{language === 'en' ? 'Dealer ID' : 'ডিলার আইডি'}</label>
+                          <label>{language === 'en' ? 'CID' : 'সিআইডি'}</label>
                           <input type="text" value={newDealer.dealerId} onChange={(e) => setNewDealer({ ...newDealer, dealerId: e.target.value })} />
                         </div>
                         <div className="admin-form-group">
-                          <label>{language === 'en' ? 'Dealer Name' : 'ডিলারের নাম'}</label>
+                          <label>{language === 'en' ? 'Shop Name' : 'দোকানের নাম'}</label>
+                          <input type="text" value={newDealer.shopName || ''} onChange={(e) => setNewDealer({ ...newDealer, shopName: e.target.value })} />
+                        </div>
+                        <div className="admin-form-group">
+                          <label>{language === 'en' ? 'Customer Name' : 'কাস্টমারের নাম'}</label>
                           <input type="text" value={newDealer.name} onChange={(e) => setNewDealer({ ...newDealer, name: e.target.value })} />
                         </div>
                         <div className="admin-form-group">
@@ -7119,7 +7351,7 @@ function AdminPage({ language, toggleLanguage, t }) {
               <div className="admin-search-bar" style={{ marginBottom: '1rem' }}>
                 <input
                   type="text"
-                  placeholder={language === 'en' ? 'Search dealers...' : 'ডিলার খুঁজুন...'}
+                  placeholder={language === 'en' ? 'Search customers...' : 'কাস্টমার খুঁজুন...'}
                   value={dealerSearch || ''}
                   onChange={(e) => setDealerSearch(e.target.value)}
                 />
@@ -7132,14 +7364,15 @@ function AdminPage({ language, toggleLanguage, t }) {
                         onClick={() => handleSortDealers('dealerId')}
                         style={{ cursor: 'pointer', userSelect: 'none' }}
                       >
-                        {language === 'en' ? 'Dealer ID' : 'ডিলার আইডি'}
+                        {language === 'en' ? 'CID' : 'সিআইডি'}
                         {dealerSortField === 'dealerId' && (dealerSortDirection === 'asc' ? ' ↑' : ' ↓')}
                       </th>
+                      <th>{language === 'en' ? 'Shop Name' : 'দোকানের নাম'}</th>
                       <th
                         onClick={() => handleSortDealers('name')}
                         style={{ cursor: 'pointer', userSelect: 'none' }}
                       >
-                        {language === 'en' ? 'Dealer Name' : 'ডিলারের নাম'}
+                        {language === 'en' ? 'Customer Name' : 'কাস্টমারের নাম'}
                         {dealerSortField === 'name' && (dealerSortDirection === 'asc' ? ' ↑' : ' ↓')}
                       </th>
                       <th>{language === 'en' ? 'Phone' : 'ফোন'}</th>
@@ -7173,15 +7406,18 @@ function AdminPage({ language, toggleLanguage, t }) {
                         )
                         const dueAmount = dealerOrders.reduce((sum, order) => {
                           const totalPrice = parseFloat(order.totalPrice || 0)
+                          const discount = order.discountEnabled && order.discountAmount > 0 ? order.discountAmount : 1
+                          const grandTotal = totalPrice * discount
                           const paid = parseFloat(order.paidAmount || 0)
                           const commission = (order.paymentHistory || []).reduce((cSum, p) => cSum + (parseFloat(p.commission) || 0), 0)
-                          const due = Math.max(0, totalPrice - (paid + commission))
+                          const due = Math.max(0, grandTotal - (paid + commission))
                           return sum + due
                         }, 0)
 
                         return (
                           <tr key={d.id}>
                             <td>{d.dealerId}</td>
+                            <td>{d.shopName || '-'}</td>
                             <td>{d.name}</td>
                             <td>{d.phone}</td>
                             <td>{d.email}</td>
@@ -7231,13 +7467,15 @@ function AdminPage({ language, toggleLanguage, t }) {
                     )
                     const dueAmount = dealerOrders.reduce((sum, order) => {
                       const totalPrice = parseFloat(order.totalPrice || 0)
+                      const discount = order.discountEnabled && order.discountAmount > 0 ? order.discountAmount : 1
+                      const grandTotal = totalPrice * discount
                       const paid = parseFloat(order.paidAmount || 0)
                       const commission = (order.paymentHistory || []).reduce((cSum, p) => cSum + (parseFloat(p.commission) || 0), 0)
-                      const due = Math.max(0, totalPrice - (paid + commission))
+                      const due = Math.max(0, grandTotal - (paid + commission))
                       return sum + due
                     }, 0)
 
-                    const isExpanded = expandedDealerIds.has(d.id || d.dealerId)
+                    const isExpanded = expandedDealerId === (d.id || d.dealerId)
 
                     return (
                       <div
@@ -7255,7 +7493,8 @@ function AdminPage({ language, toggleLanguage, t }) {
                             )}
                           </div>
                           <div className="mobile-card-header-text">
-                            <div className="mobile-card-title">{d.name}</div>
+                            <div className="mobile-card-title">{d.shopName || '-'}</div>
+                            <div className="mobile-card-subtitle">{d.name}</div>
                             <div className="mobile-card-subtitle">{d.dealerId}</div>
                           </div>
                           <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', marginLeft: 'auto' }}>
@@ -7454,9 +7693,12 @@ function AdminPage({ language, toggleLanguage, t }) {
                               color: '#0f172a'
                             }}
                           >
-                            {viewingDealer.name || (language === 'en' ? 'Dealer' : 'ডিলার')}
+                            {viewingDealer.name || (language === 'en' ? 'Customer' : 'কাস্টমার')}
                           </h2>
                           <p style={{ margin: '0.25rem 0 0 0', color: '#475569', fontWeight: 700 }}>
+                            {viewingDealer.shopName || '-'}
+                          </p>
+                          <p style={{ margin: '0.1rem 0 0 0', color: '#64748b', fontSize: '0.9rem', fontWeight: 600 }}>
                             {viewingDealer.dealerId || 'N/A'}
                           </p>
                         </div>
@@ -7619,8 +7861,9 @@ function AdminPage({ language, toggleLanguage, t }) {
                                 <>
                                   {(() => {
                                     const totalAmount = dealerOrders.reduce((sum, order) => {
-                                      const price = parseFloat(order.totalPrice) || 0
-                                      return sum + price
+                                      const price = parseFloat(order.totalPrice || 0)
+                                      const discount = order.discountEnabled && order.discountAmount > 0 ? order.discountAmount : 1
+                                      return sum + (price * discount)
                                     }, 0)
 
                                     const totalPaid = dealerOrders.reduce((sum, order) => {
@@ -7630,10 +7873,12 @@ function AdminPage({ language, toggleLanguage, t }) {
                                     }, 0)
 
                                     const totalDue = dealerOrders.reduce((sum, order) => {
-                                      const totalPrice = parseFloat(order.totalPrice) || 0
+                                      const price = parseFloat(order.totalPrice || 0)
+                                      const discount = order.discountEnabled && order.discountAmount > 0 ? order.discountAmount : 1
+                                      const grandTotal = price * discount
                                       const paid = order.paidAmount ? parseFloat(order.paidAmount) || 0 : 0
                                       const commission = (order.paymentHistory || []).reduce((cSum, p) => cSum + (parseFloat(p.commission) || 0), 0)
-                                      const due = Math.max(0, totalPrice - (paid + commission))
+                                      const due = Math.max(0, grandTotal - (paid + commission))
                                       return sum + due
                                     }, 0)
 
@@ -7784,7 +8029,9 @@ function AdminPage({ language, toggleLanguage, t }) {
                                     // Flatten all payments from all orders
                                     const allPayments = []
                                     dealerOrders.forEach(order => {
-                                      const orderTotal = parseFloat(order.totalPrice) || 0
+                                      const price = parseFloat(order.totalPrice || 0)
+                                      const discount = order.discountEnabled && order.discountAmount > 0 ? order.discountAmount : 1
+                                      const orderGrandTotal = price * discount
                                       let runningPaid = 0
                                       let runningCommission = 0
 
@@ -7800,13 +8047,13 @@ function AdminPage({ language, toggleLanguage, t }) {
                                         runningPaid += payAmount
                                         runningCommission += commAmount
                                         const totalPaidSoFar = runningPaid + runningCommission
-                                        const runningDue = Math.max(0, orderTotal - totalPaidSoFar)
+                                        const runningDue = Math.max(0, orderGrandTotal - totalPaidSoFar)
 
                                         allPayments.push({
                                           _id: payment._id || Math.random().toString(),
                                           date: payment.date,
                                           orderId: order.orderId,
-                                          totalAmount: orderTotal,
+                                          totalAmount: orderGrandTotal,
                                           runningPaid: totalPaidSoFar, // Total Paid (Cash + Comm) so far
                                           paidAmount: payAmount, // This transaction amount
                                           commissionPercent: commPercent,
@@ -7951,8 +8198,11 @@ function AdminPage({ language, toggleLanguage, t }) {
                                           <th style={{ padding: '0.5rem', whiteSpace: 'nowrap' }}>{language === 'en' ? 'Product' : 'পণ্য'}</th>
                                           <th style={{ padding: '0.5rem', whiteSpace: 'nowrap' }}>{language === 'en' ? 'Variant' : 'ভ্যারিয়েন্ট'}</th>
                                           <th style={{ padding: '0.5rem', whiteSpace: 'nowrap' }}>{language === 'en' ? 'Qty' : 'পরিমাণ'}</th>
+                                          <th style={{ padding: '0.5rem', whiteSpace: 'nowrap' }}>{language === 'en' ? 'free Qty' : 'ফ্রি পরিমাণ'}</th>
+                                          <th style={{ padding: '0.5rem', whiteSpace: 'nowrap' }}>{language === 'en' ? 'total Qty' : 'মোট পরিমাণ'}</th>
                                           <th style={{ padding: '0.5rem', whiteSpace: 'nowrap' }}>{language === 'en' ? 'Status' : 'স্ট্যাটাস'}</th>
                                           <th style={{ padding: '0.5rem', whiteSpace: 'nowrap' }}>{language === 'en' ? 'Total' : 'মোট'}</th>
+                                          <th style={{ padding: '0.5rem', whiteSpace: 'nowrap' }}>{language === 'en' ? 'Grand total' : 'সর্বমোট'}</th>
                                           <th style={{ padding: '0.5rem', whiteSpace: 'nowrap' }}>{language === 'en' ? 'Paid Amount' : 'পরিশোধিত পরিমাণ'}</th>
                                           <th style={{ padding: '0.5rem', whiteSpace: 'nowrap' }}>{language === 'en' ? 'Due Amount' : 'বাকি পরিমাণ'}</th>
                                         </tr>
@@ -7962,11 +8212,132 @@ function AdminPage({ language, toggleLanguage, t }) {
                                           <tr key={order._id}>
                                             <td style={{ padding: '0.5rem', whiteSpace: 'nowrap' }}>{order.createdAt ? new Date(order.createdAt).toLocaleDateString() : '-'}</td>
                                             <td style={{ padding: '0.5rem', whiteSpace: 'nowrap' }}>{order.orderId || '-'}</td>
-                                            <td style={{ padding: '0.5rem', whiteSpace: 'nowrap' }}>{order.productName || order.product?.name || '-'}</td>
-                                            <td style={{ padding: '0.5rem', whiteSpace: 'nowrap' }}>{order.variant?.value ? (order.variant.name || order.variant.value) : '-'}</td>
-                                            <td style={{ padding: '0.5rem', whiteSpace: 'nowrap' }}>{order.quantity || 0}</td>
+                                            <td style={{ padding: '0.5rem', whiteSpace: 'nowrap' }}>
+                                              {order.items && order.items.length > 0 ? (
+                                                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.25rem' }}>
+                                                  {order.items.map((item, idx) => (
+                                                    <div key={idx} style={{ borderBottom: idx < order.items.length - 1 ? '1px solid #f1f5f9' : 'none', paddingBottom: '2px', minHeight: '1.2em' }}>
+                                                      {item.productName || item.product?.name || '-'}
+                                                    </div>
+                                                  ))}
+                                                </div>
+                                              ) : (
+                                                order.productName || order.product?.name || '-'
+                                              )}
+                                            </td>
+                                            <td style={{ padding: '0.5rem', whiteSpace: 'nowrap' }}>
+                                              {order.items && order.items.length > 0 ? (
+                                                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.25rem' }}>
+                                                  {order.items.map((item, idx) => (
+                                                    <div key={idx} style={{ borderBottom: idx < order.items.length - 1 ? '1px solid #f1f5f9' : 'none', paddingBottom: '2px', minHeight: '1.2em' }}>
+                                                      {item.variant?.productCode ? `${item.variant.productCode} (${item.variant.packSize} ${item.variant.packUnit || 'ml'})` : '-'}
+                                                    </div>
+                                                  ))}
+                                                </div>
+                                              ) : (
+                                                order.variant?.productCode ? `${order.variant.productCode} (${order.variant.packSize} ${order.variant.packUnit || 'ml'})` : '-'
+                                              )}
+                                            </td>
+                                            <td style={{ padding: '0.5rem', whiteSpace: 'nowrap', textAlign: 'center' }}>
+                                              {order.items && order.items.length > 0 ? (
+                                                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.25rem' }}>
+                                                  {order.items.map((item, idx) => (
+                                                    <div key={idx} style={{ borderBottom: idx < order.items.length - 1 ? '1px solid #f1f5f9' : 'none', paddingBottom: '2px', minHeight: '1.2em' }}>
+                                                      {parseFloat(item.quantity) || 0}
+                                                    </div>
+                                                  ))}
+                                                </div>
+                                              ) : (
+                                                parseFloat(order.quantity) || 0
+                                              )}
+                                            </td>
+                                            <td style={{ padding: '0.5rem', whiteSpace: 'nowrap', textAlign: 'center', color: '#16a34a' }}>
+                                              {order.items && order.items.length > 0 ? (
+                                                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.25rem' }}>
+                                                  {order.items.map((item, idx) => {
+                                                    const itemQty = parseFloat(item.quantity) || 0
+                                                    let freeQty = 0
+                                                    const itemProduct = (products || []).find(p => p._id === (item.product?._id || item.product))
+                                                    if (itemProduct && itemProduct.hasOffer && itemProduct.buyQuantity && itemProduct.freeQuantity) {
+                                                      const buyQty = parseFloat(itemProduct.buyQuantity) || 0
+                                                      const offerFreeQty = parseFloat(itemProduct.freeQuantity) || 0
+                                                      if (buyQty > 0) {
+                                                        const eligibleOffers = Math.floor(itemQty / buyQty)
+                                                        freeQty = eligibleOffers * offerFreeQty
+                                                      }
+                                                    }
+                                                    return (
+                                                      <div key={idx} style={{ borderBottom: idx < order.items.length - 1 ? '1px solid #f1f5f9' : 'none', paddingBottom: '2px', minHeight: '1.2em' }}>
+                                                        {freeQty}
+                                                      </div>
+                                                    )
+                                                  })}
+                                                </div>
+                                              ) : (
+                                                (() => {
+                                                  const totalPurchasedQty = parseFloat(order.quantity) || 0
+                                                  let totalFreeQty = 0
+                                                  const orderProduct = (products || []).find(p => p._id === (order.product?._id || order.product))
+                                                  if (orderProduct && orderProduct.hasOffer && orderProduct.buyQuantity && orderProduct.freeQuantity) {
+                                                    const buyQty = parseFloat(orderProduct.buyQuantity) || 0
+                                                    const freeQty = parseFloat(orderProduct.freeQuantity) || 0
+                                                    if (buyQty > 0) {
+                                                      const eligibleOffers = Math.floor(totalPurchasedQty / buyQty)
+                                                      totalFreeQty = eligibleOffers * freeQty
+                                                    }
+                                                  }
+                                                  return totalFreeQty
+                                                })()
+                                              )}
+                                            </td>
+                                            <td style={{ padding: '0.5rem', whiteSpace: 'nowrap', textAlign: 'center', fontWeight: 600 }}>
+                                              {order.items && order.items.length > 0 ? (
+                                                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.25rem' }}>
+                                                  {order.items.map((item, idx) => {
+                                                    const itemQty = parseFloat(item.quantity) || 0
+                                                    let freeQty = 0
+                                                    const itemProduct = (products || []).find(p => p._id === (item.product?._id || item.product))
+                                                    if (itemProduct && itemProduct.hasOffer && itemProduct.buyQuantity && itemProduct.freeQuantity) {
+                                                      const buyQty = parseFloat(itemProduct.buyQuantity) || 0
+                                                      const offerFreeQty = parseFloat(itemProduct.freeQuantity) || 0
+                                                      if (buyQty > 0) {
+                                                        const eligibleOffers = Math.floor(itemQty / buyQty)
+                                                        freeQty = eligibleOffers * offerFreeQty
+                                                      }
+                                                    }
+                                                    return (
+                                                      <div key={idx} style={{ borderBottom: idx < order.items.length - 1 ? '1px solid #f1f5f9' : 'none', paddingBottom: '2px', minHeight: '1.2em' }}>
+                                                        {itemQty + freeQty}
+                                                      </div>
+                                                    )
+                                                  })}
+                                                </div>
+                                              ) : (
+                                                (() => {
+                                                  const totalPurchasedQty = parseFloat(order.quantity) || 0
+                                                  let totalFreeQty = 0
+                                                  const orderProduct = (products || []).find(p => p._id === (order.product?._id || order.product))
+                                                  if (orderProduct && orderProduct.hasOffer && orderProduct.buyQuantity && orderProduct.freeQuantity) {
+                                                    const buyQty = parseFloat(orderProduct.buyQuantity) || 0
+                                                    const freeQty = parseFloat(orderProduct.freeQuantity) || 0
+                                                    if (buyQty > 0) {
+                                                      const eligibleOffers = Math.floor(totalPurchasedQty / buyQty)
+                                                      totalFreeQty = eligibleOffers * freeQty
+                                                    }
+                                                  }
+                                                  return totalPurchasedQty + totalFreeQty
+                                                })()
+                                              )}
+                                            </td>
                                             <td style={{ padding: '0.5rem', whiteSpace: 'nowrap' }}>{order.status || 'Pending'}</td>
-                                            <td style={{ padding: '0.5rem', whiteSpace: 'nowrap' }}>৳{order.totalPrice ? order.totalPrice.toFixed(2) : '0.00'}</td>
+                                            <td style={{ padding: '0.5rem', whiteSpace: 'nowrap' }}>৳{parseFloat(order.totalPrice || 0).toFixed(2)}</td>
+                                            <td style={{ padding: '0.5rem', whiteSpace: 'nowrap', fontWeight: 700 }}>
+                                              ৳{(() => {
+                                                const price = parseFloat(order.totalPrice || 0)
+                                                const discount = order.discountEnabled && order.discountAmount > 0 ? order.discountAmount : 1
+                                                return (price * discount).toFixed(2)
+                                              })()}
+                                            </td>
                                             <td style={{ padding: '0.5rem', whiteSpace: 'nowrap', fontWeight: 600, color: '#16a34a' }}>
                                               ৳{(() => {
                                                 const paid = order.paidAmount ? parseFloat(order.paidAmount) || 0 : 0
@@ -7976,16 +8347,22 @@ function AdminPage({ language, toggleLanguage, t }) {
                                             </td>
                                             <td style={{
                                               padding: '0.5rem', whiteSpace: 'nowrap', fontWeight: 600, color: (() => {
+                                                const price = parseFloat(order.totalPrice || 0)
+                                                const discount = order.discountEnabled && order.discountAmount > 0 ? order.discountAmount : 1
+                                                const grandTotal = price * discount
                                                 const paid = order.paidAmount ? parseFloat(order.paidAmount) || 0 : 0
                                                 const commission = (order.paymentHistory || []).reduce((cSum, p) => cSum + (parseFloat(p.commission) || 0), 0)
-                                                const due = Math.max(0, parseFloat(order.totalPrice || 0) - (paid + commission))
+                                                const due = Math.max(0, grandTotal - (paid + commission))
                                                 return due > 0 ? '#dc2626' : '#16a34a'
                                               })()
                                             }}>
                                               ৳{(() => {
+                                                const price = parseFloat(order.totalPrice || 0)
+                                                const discount = order.discountEnabled && order.discountAmount > 0 ? order.discountAmount : 1
+                                                const grandTotal = price * discount
                                                 const paid = order.paidAmount ? parseFloat(order.paidAmount) || 0 : 0
                                                 const commission = (order.paymentHistory || []).reduce((cSum, p) => cSum + (parseFloat(p.commission) || 0), 0)
-                                                const due = Math.max(0, parseFloat(order.totalPrice || 0) - (paid + commission))
+                                                const due = Math.max(0, grandTotal - (paid + commission))
                                                 return due.toFixed(2)
                                               })()}
                                             </td>
@@ -8008,7 +8385,10 @@ function AdminPage({ language, toggleLanguage, t }) {
                                       dealerOrders.map((order) => {
                                         const paid = order.paidAmount ? parseFloat(order.paidAmount) || 0 : 0
                                         const commission = (order.paymentHistory || []).reduce((cSum, p) => cSum + (parseFloat(p.commission) || 0), 0)
-                                        const due = Math.max(0, parseFloat(order.totalPrice || 0) - (paid + commission))
+                                        const price = parseFloat(order.totalPrice || 0)
+                                        const discount = order.discountEnabled && order.discountAmount > 0 ? order.discountAmount : 1
+                                        const grandTotal = price * discount
+                                        const due = Math.max(0, grandTotal - (paid + commission))
 
                                         return (
                                           <div className="mobile-card" key={order._id}>
@@ -8046,15 +8426,59 @@ function AdminPage({ language, toggleLanguage, t }) {
                                               </div>
                                               <div className="mobile-card-row">
                                                 <span className="mobile-card-label">{language === 'en' ? 'Variant' : 'ভ্যারিয়েন্ট'}</span>
-                                                <span className="mobile-card-value">{order.variant?.value ? (order.variant.name || order.variant.value) : '-'}</span>
+                                                <span className="mobile-card-value">{order.variant?.productCode ? `${order.variant.productCode} (${order.variant.packSize} ${order.variant.packUnit || 'ml'})` : '-'}</span>
                                               </div>
                                               <div className="mobile-card-row">
                                                 <span className="mobile-card-label">{language === 'en' ? 'Quantity' : 'পরিমাণ'}</span>
                                                 <span className="mobile-card-value">{order.quantity || 0}</span>
                                               </div>
                                               <div className="mobile-card-row">
+                                                <span className="mobile-card-label">{language === 'en' ? 'free Qty' : 'ফ্রি পরিমাণ'}</span>
+                                                <span className="mobile-card-value" style={{ color: '#16a34a' }}>
+                                                  {(() => {
+                                                    const totalPurchasedQty = parseFloat(order.quantity) || 0
+                                                    let totalFreeQty = 0
+                                                    const orderProduct = (products || []).find(p => p._id === (order.product?._id || order.product))
+                                                    if (orderProduct && orderProduct.hasOffer && orderProduct.buyQuantity && orderProduct.freeQuantity) {
+                                                      const buyQty = parseFloat(orderProduct.buyQuantity) || 0
+                                                      const freeQty = parseFloat(orderProduct.freeQuantity) || 0
+                                                      if (buyQty > 0) {
+                                                        const eligibleOffers = Math.floor(totalPurchasedQty / buyQty)
+                                                        totalFreeQty = eligibleOffers * freeQty
+                                                      }
+                                                    }
+                                                    return totalFreeQty
+                                                  })()}
+                                                </span>
+                                              </div>
+                                              <div className="mobile-card-row">
+                                                <span className="mobile-card-label">{language === 'en' ? 'total Qty' : 'মোট পরিমাণ'}</span>
+                                                <span className="mobile-card-value" style={{ fontWeight: 600 }}>
+                                                  {(() => {
+                                                    const totalPurchasedQty = parseFloat(order.quantity) || 0
+                                                    let totalFreeQty = 0
+                                                    const orderProduct = (products || []).find(p => p._id === (order.product?._id || order.product))
+                                                    if (orderProduct && orderProduct.hasOffer && orderProduct.buyQuantity && orderProduct.freeQuantity) {
+                                                      const buyQty = parseFloat(orderProduct.buyQuantity) || 0
+                                                      const freeQty = parseFloat(orderProduct.freeQuantity) || 0
+                                                      if (buyQty > 0) {
+                                                        const eligibleOffers = Math.floor(totalPurchasedQty / buyQty)
+                                                        totalFreeQty = eligibleOffers * freeQty
+                                                      }
+                                                    }
+                                                    return totalPurchasedQty + totalFreeQty
+                                                  })()}
+                                                </span>
+                                              </div>
+                                              <div className="mobile-card-row">
                                                 <span className="mobile-card-label">{language === 'en' ? 'Total' : 'মোট'}</span>
-                                                <span className="mobile-card-value">৳{order.totalPrice ? order.totalPrice.toFixed(2) : '0.00'}</span>
+                                                <span className="mobile-card-value">৳{parseFloat(order.totalPrice || 0).toFixed(2)}</span>
+                                              </div>
+                                              <div className="mobile-card-row">
+                                                <span className="mobile-card-label">{language === 'en' ? 'Grand total' : 'সর্বমোট'}</span>
+                                                <span className="mobile-card-value" style={{ fontWeight: 700 }}>
+                                                  ৳{grandTotal.toFixed(2)}
+                                                </span>
                                               </div>
                                               <div className="mobile-card-row">
                                                 <span className="mobile-card-label">{language === 'en' ? 'Paid' : 'পরিশোধিত'}</span>
@@ -8093,8 +8517,9 @@ function AdminPage({ language, toggleLanguage, t }) {
                       }}
                     >
                       {[
-                        { key: 'dealerId', label: language === 'en' ? 'Dealer ID' : 'ডিলার আইডি' },
-                        { key: 'name', label: language === 'en' ? 'Dealer Name' : 'ডিলারের নাম' },
+                        { key: 'dealerId', label: language === 'en' ? 'CID' : 'সিআইডি' },
+                        { key: 'shopName', label: language === 'en' ? 'Shop Name' : 'দোকানের নাম' },
+                        { key: 'name', label: language === 'en' ? 'Customer Name' : 'কাস্টমারের নাম' },
                         { key: 'phone', label: language === 'en' ? 'Phone' : 'ফোন' },
                         { key: 'email', label: language === 'en' ? 'Email' : 'ইমেইল' },
                         { key: 'area', label: language === 'en' ? 'Area' : 'এলাকা' },
@@ -8249,7 +8674,7 @@ function AdminPage({ language, toggleLanguage, t }) {
                           {(isEditingDealer ? editingDealerData?.agreement : viewingDealer.agreement) ? (
                             <a
                               href={isEditingDealer ? editingDealerData?.agreement : viewingDealer.agreement}
-                              download={`${viewingDealer.dealerId || 'agreement'}.pdf`}
+                              download={`${viewingDealer.shopName || viewingDealer.name || viewingDealer.dealerId || 'agreement'}.pdf`}
                               style={{
                                 display: 'inline-flex',
                                 alignItems: 'center',
@@ -8362,796 +8787,131 @@ function AdminPage({ language, toggleLanguage, t }) {
                 </div>
               )}
             </div>
-          )}
+          )
+          }
 
           {/* HR Tab */}
-          {activeTab === 'hr' && (
-            <div className="admin-tab-content">
-              <div className="admin-tab-header" style={{ gap: '0.75rem', flexWrap: 'wrap' }}>
-                <h1 className="admin-page-title" style={{ flex: 1 }}>{adminContent.hr}</h1>
-                <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
-                  <button className="admin-add-btn" onClick={() => setShowEmployeeForm(true)}>
-                    <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                      <line x1="12" y1="5" x2="12" y2="19" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
-                      <line x1="5" y1="12" x2="19" y2="12" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
-                    </svg>
-                    {adminContent.addNew}
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => loadEmployees()}
-                    className="admin-add-btn"
-                    style={{ backgroundColor: '#e2e8f0', color: '#0f172a' }}
-                  >
-                    {language === 'en' ? 'Refresh' : 'রিফ্রেশ'}
-                  </button>
-                </div>
-              </div>
-              <div className="admin-stats-grid">
-                <div className="admin-stat-card">
-                  <div className="admin-stat-icon">
-                    <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                      <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-                      <circle cx="9" cy="7" r="4" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-                    </svg>
-                  </div>
-                  <div className="admin-stat-info">
-                    <h3>{language === 'en' ? 'Total Employees' : 'মোট কর্মচারী'}</h3>
-                    <p>{employees.length}</p>
+          {
+            activeTab === 'hr' && (
+              <div className="admin-tab-content">
+                <div className="admin-tab-header" style={{ gap: '0.75rem', flexWrap: 'wrap' }}>
+                  <h1 className="admin-page-title" style={{ flex: 1 }}>{adminContent.hr}</h1>
+                  <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
+                    <button className="admin-add-btn" onClick={() => setShowEmployeeForm(true)}>
+                      <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                        <line x1="12" y1="5" x2="12" y2="19" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+                        <line x1="5" y1="12" x2="19" y2="12" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+                      </svg>
+                      {adminContent.addNew}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => loadEmployees()}
+                      className="admin-add-btn"
+                      style={{ backgroundColor: '#e2e8f0', color: '#0f172a' }}
+                    >
+                      {language === 'en' ? 'Refresh' : 'রিফ্রেশ'}
+                    </button>
                   </div>
                 </div>
-                <div className="admin-stat-card">
-                  <div className="admin-stat-icon">
-                    <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                      <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-                    </svg>
+                <div className="admin-stats-grid">
+                  <div className="admin-stat-card">
+                    <div className="admin-stat-icon">
+                      <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                        <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+                        <circle cx="9" cy="7" r="4" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+                      </svg>
+                    </div>
+                    <div className="admin-stat-info">
+                      <h3>{language === 'en' ? 'Total Employees' : 'মোট কর্মচারী'}</h3>
+                      <p>{employees.length}</p>
+                    </div>
                   </div>
-                  <div className="admin-stat-info">
-                    <h3>{language === 'en' ? 'Departments' : 'বিভাগ'}</h3>
-                    <p>0</p>
+                  <div className="admin-stat-card">
+                    <div className="admin-stat-icon">
+                      <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                        <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+                      </svg>
+                    </div>
+                    <div className="admin-stat-info">
+                      <h3>{language === 'en' ? 'Departments' : 'বিভাগ'}</h3>
+                      <p>0</p>
+                    </div>
+                  </div>
+                  <div className="admin-stat-card">
+                    <div className="admin-stat-icon">
+                      <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                        <rect x="3" y="4" width="18" height="18" rx="2" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+                        <path d="M16 2v4M8 2v4M3 10h18" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+                      </svg>
+                    </div>
+                    <div className="admin-stat-info">
+                      <h3>{language === 'en' ? 'Leave Requests' : 'ছুটির অনুরোধ'}</h3>
+                      <p>0</p>
+                    </div>
                   </div>
                 </div>
-                <div className="admin-stat-card">
-                  <div className="admin-stat-icon">
-                    <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                      <rect x="3" y="4" width="18" height="18" rx="2" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-                      <path d="M16 2v4M8 2v4M3 10h18" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-                    </svg>
-                  </div>
-                  <div className="admin-stat-info">
-                    <h3>{language === 'en' ? 'Leave Requests' : 'ছুটির অনুরোধ'}</h3>
-                    <p>0</p>
-                  </div>
-                </div>
-              </div>
 
-              {showEmployeeForm && (
-                <div className="admin-employee-form-overlay" style={{
-                  position: 'fixed',
-                  top: 0,
-                  left: 0,
-                  right: 0,
-                  bottom: 0,
-                  backgroundColor: 'rgba(0, 0, 0, 0.5)',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  zIndex: 1000,
-                  padding: '1rem'
-                }} onClick={() => {
-                  setShowEmployeeForm(false)
-                  setEmployeeStatus('')
-                  setGeneratedCredentials(null)
-                }}>
-                  <div className="admin-modal-content" onClick={(e) => e.stopPropagation()}>
-                    <div style={{
-                      position: 'absolute',
-                      inset: 0,
-                      pointerEvents: 'none',
-                      overflow: 'hidden',
-                      borderRadius: '0.75rem'
-                    }}>
+                {showEmployeeForm && (
+                  <div className="admin-employee-form-overlay" style={{
+                    position: 'fixed',
+                    top: 0,
+                    left: 0,
+                    right: 0,
+                    bottom: 0,
+                    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    zIndex: 1000,
+                    padding: '1rem'
+                  }} onClick={() => {
+                    setShowEmployeeForm(false)
+                    setEmployeeStatus('')
+                    setGeneratedCredentials(null)
+                  }}>
+                    <div className="admin-modal-content" onClick={(e) => e.stopPropagation()}>
                       <div style={{
                         position: 'absolute',
-                        width: '260px',
-                        height: '260px',
-                        top: '-120px',
-                        left: '-80px',
-                        background: 'radial-gradient(circle at 30% 30%, rgba(59,130,246,0.25), transparent 60%)',
-                        filter: 'blur(20px)'
-                      }} />
-                      <div style={{
-                        position: 'absolute',
-                        width: '240px',
-                        height: '240px',
-                        bottom: '-140px',
-                        right: '-100px',
-                        background: 'radial-gradient(circle at 70% 70%, rgba(16,185,129,0.22), transparent 60%)',
-                        filter: 'blur(20px)'
-                      }} />
-                    </div>
-
-                    <div style={{ position: 'relative', display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem', gap: '1rem' }}>
-                      <div>
-                        <h2 style={{ margin: 0, fontSize: '1.5rem', fontWeight: 800, color: '#0f172a' }}>
-                          {language === 'en' ? 'Add Employee' : 'কর্মচারী যোগ করুন'}
-                        </h2>
-                        <p style={{ margin: '0.25rem 0 0 0', color: '#475569', fontWeight: 600 }}>
-                          {language === 'en' ? 'Fill in employee details and save' : 'কর্মচারীর বিবরণ পূরণ করুন এবং সংরক্ষণ করুন'}
-                        </p>
-                      </div>
-                      <button
-                        onClick={() => {
-                          setShowEmployeeForm(false)
-                          setEmployeeStatus('')
-                          setGeneratedCredentials(null)
-                        }}
-                        style={{
-                          background: '#e2e8f0',
-                          border: 'none',
-                          padding: '0.4rem 0.65rem',
-                          borderRadius: '0.375rem',
-                          cursor: 'pointer',
-                          fontWeight: 700,
-                          color: '#475569'
-                        }}
-                      >
-                        ×
-                      </button>
-                    </div>
-
-                    <div style={{ position: 'relative', zIndex: 1 }}>
-                      {employeeStatus && (
+                        inset: 0,
+                        pointerEvents: 'none',
+                        overflow: 'hidden',
+                        borderRadius: '0.75rem'
+                      }}>
                         <div style={{
-                          padding: '0.75rem',
-                          marginBottom: '1rem',
-                          borderRadius: '0.5rem',
-                          border: employeeStatus.includes('fail') || employeeStatus.includes('ব্যর্থ') ? '1px solid #fecaca' : '1px solid #bbf7d0',
-                          backgroundColor: employeeStatus.includes('fail') || employeeStatus.includes('ব্যর্থ') ? '#fef2f2' : '#ecfdf3',
-                          color: employeeStatus.includes('fail') || employeeStatus.includes('ব্যর্থ') ? '#b91c1c' : '#065f46',
-                          fontWeight: 700
-                        }}>
-                          {employeeStatus}
-                        </div>
-                      )}
-                      {generatedCredentials && (
+                          position: 'absolute',
+                          width: '260px',
+                          height: '260px',
+                          top: '-120px',
+                          left: '-80px',
+                          background: 'radial-gradient(circle at 30% 30%, rgba(59,130,246,0.25), transparent 60%)',
+                          filter: 'blur(20px)'
+                        }} />
                         <div style={{
-                          marginBottom: '1rem',
-                          padding: '1rem',
-                          backgroundColor: '#f0f9ff',
-                          border: '2px solid #0ea5e9',
-                          borderRadius: '0.5rem',
-                          borderStyle: 'dashed'
-                        }}>
-                          <h4 style={{ marginTop: 0, marginBottom: '0.5rem', color: '#0369a1' }}>
-                            {language === 'en' ? 'Generated Login Credentials' : 'তৈরি করা লগইন পরিচয়পত্র'}
-                          </h4>
-                          <p style={{ margin: '0.25rem 0', fontSize: '0.875rem', color: '#0c4a6e' }}>
-                            <strong>{language === 'en' ? 'Username:' : 'ব্যবহারকারীর নাম:'}</strong> {generatedCredentials.username}
-                          </p>
-                          <p style={{ margin: '0.25rem 0', fontSize: '0.875rem', color: '#0c4a6e' }}>
-                            <strong>{language === 'en' ? 'Password:' : 'পাসওয়ার্ড:'}</strong> <span style={{ fontFamily: 'monospace', backgroundColor: '#fff', padding: '0.25rem 0.5rem', borderRadius: '0.25rem' }}>{generatedCredentials.password}</span>
-                          </p>
-                          <p style={{ margin: '0.5rem 0 0 0', fontSize: '0.75rem', color: '#dc2626', fontWeight: 600 }}>
-                            {language === 'en' ? '⚠️ Please save these credentials and share with the employee. This password will not be shown again.' : '⚠️ অনুগ্রহ করে এই পরিচয়পত্রগুলি সংরক্ষণ করুন এবং কর্মচারীর সাথে শেয়ার করুন। এই পাসওয়ার্ড আর দেখানো হবে না।'}
-                          </p>
-                          <button
-                            onClick={() => {
-                              setGeneratedCredentials(null)
-                              setShowEmployeeForm(false)
-                              setEmployeeStatus('')
-                            }}
-                            style={{
-                              marginTop: '0.75rem',
-                              padding: '0.5rem 1rem',
-                              backgroundColor: '#0ea5e9',
-                              color: 'white',
-                              border: 'none',
-                              borderRadius: '0.375rem',
-                              cursor: 'pointer',
-                              fontSize: '0.875rem',
-                              fontWeight: 600
-                            }}
-                          >
-                            {language === 'en' ? 'Close' : 'বন্ধ করুন'}
-                          </button>
-                        </div>
-                      )}
-                      <div className="admin-form-grid">
-                        <div className="admin-form-group">
-                          <label>{language === 'en' ? 'Name' : 'নাম'}</label>
-                          <input type="text" value={newEmployee.name} onChange={(e) => setNewEmployee({ ...newEmployee, name: e.target.value })} />
-                        </div>
-                        <div className="admin-form-group">
-                          <label>{language === 'en' ? 'Email' : 'ইমেইল'}</label>
-                          <input type="email" value={newEmployee.email} onChange={(e) => setNewEmployee({ ...newEmployee, email: e.target.value })} />
-                        </div>
-                        <div className="admin-form-group">
-                          <label>{language === 'en' ? 'Phone' : 'ফোন'}</label>
-                          <input type="tel" value={newEmployee.phone} onChange={(e) => setNewEmployee({ ...newEmployee, phone: e.target.value })} />
-                        </div>
-                        <div className="admin-form-group">
-                          <label>{language === 'en' ? 'Address' : 'ঠিকানা'}</label>
-                          <textarea value={newEmployee.address} onChange={(e) => setNewEmployee({ ...newEmployee, address: e.target.value })} rows={3} />
-                        </div>
-                        <div className="admin-form-group">
-                          <label>{language === 'en' ? 'NID (National ID)' : 'জাতীয় পরিচয়পত্র'}</label>
-                          <input type="text" value={newEmployee.nid} onChange={(e) => setNewEmployee({ ...newEmployee, nid: e.target.value })} />
-                        </div>
-                        <div className="admin-form-group">
-                          <label>{language === 'en' ? 'Document' : 'নথি'}</label>
-                          <input
-                            type="file"
-                            accept=".pdf,.doc,.docx,.jpg,.jpeg,.png"
-                            onChange={(e) => {
-                              const file = e.target.files[0]
-                              if (file) {
-                                const reader = new FileReader()
-                                reader.onloadend = () => {
-                                  setNewEmployee({ ...newEmployee, document: reader.result })
-                                }
-                                reader.readAsDataURL(file)
-                              }
-                            }}
-                            style={{ width: '100%', padding: '0.5rem', border: '1px solid #d1d5db', borderRadius: '0.375rem', fontSize: '0.875rem' }}
-                          />
-                          {newEmployee.document && (
-                            <p style={{ marginTop: '0.5rem', fontSize: '0.75rem', color: '#16a34a' }}>
-                              {language === 'en' ? '✓ Document uploaded' : '✓ নথি আপলোড হয়েছে'}
-                            </p>
-                          )}
-                        </div>
-                        <div className="admin-form-group">
-                          <label>{language === 'en' ? 'Emergency Contact Name' : 'জরুরি যোগাযোগের নাম'}</label>
-                          <input type="text" value={newEmployee.emergencyContactName} onChange={(e) => setNewEmployee({ ...newEmployee, emergencyContactName: e.target.value })} />
-                        </div>
-                        <div className="admin-form-group">
-                          <label>{language === 'en' ? 'Emergency Contact' : 'জরুরি যোগাযোগ'}</label>
-                          <input type="text" value={newEmployee.emergencyContact} onChange={(e) => setNewEmployee({ ...newEmployee, emergencyContact: e.target.value })} placeholder={language === 'en' ? 'Phone or Email' : 'ফোন বা ইমেইল'} />
-                        </div>
-                        <div className="admin-form-group">
-                          <label>{language === 'en' ? 'Salary' : 'বেতন'}</label>
-                          <input type="number" value={newEmployee.salary} onChange={(e) => setNewEmployee({ ...newEmployee, salary: e.target.value })} step="0.01" min="0" />
-                        </div>
-                        <div className="admin-form-group">
-                          <label>{language === 'en' ? 'Sales Target' : 'বিক্রয় লক্ষ্য'}</label>
-                          <input type="number" value={newEmployee.salesTarget} onChange={(e) => setNewEmployee({ ...newEmployee, salesTarget: e.target.value })} step="0.01" min="0" />
-                        </div>
-                        <div className="admin-form-group">
-                          <label>{language === 'en' ? 'Bank Name' : 'ব্যাংকের নাম'}</label>
-                          <input type="text" value={newEmployee.bankName} onChange={(e) => setNewEmployee({ ...newEmployee, bankName: e.target.value })} />
-                        </div>
-                        <div className="admin-form-group">
-                          <label>{language === 'en' ? 'Branch' : 'শাখা'}</label>
-                          <input type="text" value={newEmployee.bankBranch} onChange={(e) => setNewEmployee({ ...newEmployee, bankBranch: e.target.value })} />
-                        </div>
-                        <div className="admin-form-group">
-                          <label>{language === 'en' ? 'Account No.' : 'একাউন্ট নং'}</label>
-                          <input type="text" value={newEmployee.accountNumber} onChange={(e) => setNewEmployee({ ...newEmployee, accountNumber: e.target.value })} />
-                        </div>
-                        <div className="admin-form-group">
-                          <label>{language === 'en' ? 'Department' : 'বিভাগ'}</label>
-                          <input type="text" value={newEmployee.department} onChange={(e) => setNewEmployee({ ...newEmployee, department: e.target.value })} />
-                        </div>
-                        <div className="admin-form-group">
-                          <label>{language === 'en' ? 'Role' : 'ভূমিকা'}</label>
-                          <select
-                            value={newEmployee.role}
-                            onChange={(e) => setNewEmployee({ ...newEmployee, role: e.target.value })}
-                            style={{ width: '100%', padding: '0.5rem', border: '1px solid #d1d5db', borderRadius: '0.375rem', fontSize: '0.875rem' }}
-                          >
-                            <option value="">{language === 'en' ? 'Select Role' : 'ভূমিকা নির্বাচন করুন'}</option>
-                            <option value="Admin">Admin</option>
-                            <option value="RSM">RSM</option>
-                            <option value="Incharge">Incharge</option>
-                            <option value="SalesMan">SalesMan</option>
-                          </select>
-                        </div>
-                        <div className="admin-form-group">
-                          <label>{language === 'en' ? 'Designation' : 'পদবি'}</label>
-                          <input type="text" value={newEmployee.designation} onChange={(e) => setNewEmployee({ ...newEmployee, designation: e.target.value })} />
-                        </div>
-                        <div className="admin-form-group">
-                          <label>{language === 'en' ? 'Posting Area' : 'পোস্টিং এরিয়া'}</label>
-                          <input type="text" value={newEmployee.postingArea} onChange={(e) => setNewEmployee({ ...newEmployee, postingArea: e.target.value })} />
-                        </div>
-                        <div className="admin-form-group">
-                          <label>{language === 'en' ? 'Upload Photo' : 'ছবি আপলোড করুন'}</label>
-                          <input
-                            type="file"
-                            accept="image/*"
-                            onChange={async (e) => {
-                              const file = e.target.files?.[0]
-                              if (!file) return
-                              try {
-                                const base64 = await fileToBase64(file)
-                                setNewEmployee({ ...newEmployee, photo: base64 })
-                              } catch (err) {
-                                console.error('Photo upload failed', err)
-                              }
-                            }}
-                            style={{ width: '100%', padding: '0.5rem', border: '1px solid #d1d5db', borderRadius: '0.375rem', fontSize: '0.875rem' }}
-                          />
-                          {newEmployee.photo && (
-                            <p style={{ marginTop: '0.5rem', fontSize: '0.75rem', color: '#16a34a' }}>
-                              {language === 'en' ? '✓ Photo ready' : '✓ ছবি প্রস্তুত'}
-                            </p>
-                          )}
-                        </div>
-                      </div>
-                      <div style={{ display: 'flex', gap: '0.75rem', marginTop: '1rem' }}>
-                        <button className="admin-save-btn" onClick={async () => {
-                          try {
-                            setEmployeeStatus(language === 'en' ? 'Saving...' : 'সংরক্ষণ করা হচ্ছে...')
-                            setGeneratedCredentials(null)
-
-                            // Prepare employee data - ensure all fields are included
-                            const employeeData = {
-                              name: newEmployee.name || '',
-                              email: newEmployee.email || '',
-                              phone: newEmployee.phone || '',
-                              address: newEmployee.address || '',
-                              nid: newEmployee.nid || '',
-                              document: newEmployee.document || '',
-                              emergencyContactName: newEmployee.emergencyContactName || '',
-                              emergencyContact: newEmployee.emergencyContact || '',
-                              salary: newEmployee.salary || 0,
-                              salesTarget: newEmployee.salesTarget || 0,
-                              bankName: newEmployee.bankName || '',
-                              bankBranch: newEmployee.bankBranch || '',
-                              accountNumber: newEmployee.accountNumber || '',
-                              department: newEmployee.department || '',
-                              postingArea: newEmployee.postingArea || '',
-                              role: newEmployee.role || '',
-                              designation: newEmployee.designation || '',
-                              photo: newEmployee.photo || '',
-                              status: newEmployee.status || 'Unpaid'
-                            }
-
-                            console.log('[Frontend] Sending employee data:', { ...employeeData, document: employeeData.document ? 'Base64 data (hidden)' : 'No document' })
-
-                            const res = await fetch(`${API_BASE}/api/employees`, {
-                              method: 'POST',
-                              headers: { 'Content-Type': 'application/json' },
-                              body: JSON.stringify(employeeData)
-                            })
-                            if (!res.ok) {
-                              const errorData = await res.json().catch(() => ({}))
-                              console.error('[Frontend] Employee creation failed:', errorData)
-                              throw new Error(errorData.message || errorData.error || 'Failed to create employee')
-                            }
-                            const data = await res.json()
-                            console.log('[Frontend] Employee created successfully:', {
-                              employeeId: data.data?.employeeId,
-                              name: data.data?.name,
-                              hasAddress: !!data.data?.address,
-                              hasNID: !!data.data?.nid,
-                              hasDocument: !!data.data?.document,
-                              salary: data.data?.salary
-                            })
-                            setEmployees([
-                              { ...data.data, status: normalizeSalaryStatus(data.data.status) },
-                              ...employees.map((e) => ({ ...e, status: normalizeSalaryStatus(e.status) }))
-                            ])
-
-                            // Show generated credentials
-                            if (data.data.generatedPassword) {
-                              setGeneratedCredentials({
-                                username: data.data.username,
-                                password: data.data.generatedPassword
-                              })
-                              setEmployeeStatus(language === 'en' ? 'Employee created! Credentials generated below.' : 'কর্মচারী তৈরি হয়েছে! নিচে পরিচয়পত্র দেখুন।')
-                            } else {
-                              setEmployeeStatus(language === 'en' ? 'Saved to database' : 'ডাটাবেজে সংরক্ষিত')
-                            }
-
-                            setNewEmployee({ name: '', email: '', phone: '', address: '', nid: '', document: '', emergencyContactName: '', emergencyContact: '', salary: '', salesTarget: '', bankName: '', bankBranch: '', accountNumber: '', department: '', postingArea: '', role: '', designation: '', photo: '', status: 'Unpaid' })
-                            // Don't close form if credentials are shown
-                            if (!data.data.generatedPassword) {
-                              setShowEmployeeForm(false)
-                            }
-                          } catch (err) {
-                            setEmployeeStatus(language === 'en' ? `Save failed: ${err.message}` : `সংরক্ষণ ব্যর্থ: ${err.message}`)
-                          }
-                        }}>
-                          {language === 'en' ? 'Save' : 'সংরক্ষণ'}
-                        </button>
-                        <button className="admin-remove-btn" onClick={() => {
-                          setShowEmployeeForm(false);
-                          setEmployeeStatus('');
-                          setGeneratedCredentials(null);
-                        }}>
-                          {language === 'en' ? 'Cancel' : 'বাতিল'}
-                        </button>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              )}
-
-              <div className="admin-search-bar" style={{ marginTop: '1.5rem', marginBottom: '1rem' }}>
-                <input
-                  type="text"
-                  placeholder={language === 'en' ? 'Search employees...' : 'কর্মচারী খুঁজুন...'}
-                  value={employeeSearch || ''}
-                  onChange={(e) => setEmployeeSearch(e.target.value)}
-                />
-              </div>
-              <div className="admin-table-container">
-                <table className="admin-table">
-                  <thead>
-                    <tr>
-                      <th
-                        onClick={() => handleSortEmployees('employeeId')}
-                        style={{ cursor: 'pointer', userSelect: 'none' }}
-                      >
-                        {language === 'en' ? 'ID' : 'আইডি'}
-                        {employeeSortField === 'employeeId' && (employeeSortDirection === 'asc' ? ' ↑' : ' ↓')}
-                      </th>
-                      <th
-                        onClick={() => handleSortEmployees('name')}
-                        style={{ cursor: 'pointer', userSelect: 'none' }}
-                      >
-                        {language === 'en' ? 'Name' : 'নাম'}
-                        {employeeSortField === 'name' && (employeeSortDirection === 'asc' ? ' ↑' : ' ↓')}
-                      </th>
-                      <th
-                        onClick={() => handleSortEmployees('phone')}
-                        style={{ cursor: 'pointer', userSelect: 'none' }}
-                      >
-                        {language === 'en' ? 'Phone' : 'ফোন'}
-                        {employeeSortField === 'phone' && (employeeSortDirection === 'asc' ? ' ↑' : ' ↓')}
-                      </th>
-                      <th
-                        onClick={() => handleSortEmployees('designation')}
-                        style={{ cursor: 'pointer', userSelect: 'none' }}
-                      >
-                        {language === 'en' ? 'Designation' : 'পদবি'}
-                        {employeeSortField === 'designation' && (employeeSortDirection === 'asc' ? ' ↑' : ' ↓')}
-                      </th>
-                      <th
-                        onClick={() => handleSortEmployees('postingArea')}
-                        style={{ cursor: 'pointer', userSelect: 'none' }}
-                      >
-                        {language === 'en' ? 'Posting Area' : 'পোস্টিং এলাকা'}
-                        {employeeSortField === 'postingArea' && (employeeSortDirection === 'asc' ? ' ↑' : ' ↓')}
-                      </th>
-                      <th
-                        onClick={() => handleSortEmployees('salary')}
-                        style={{ cursor: 'pointer', userSelect: 'none' }}
-                      >
-                        {language === 'en' ? 'Salary' : 'বেতন'}
-                        {employeeSortField === 'salary' && (employeeSortDirection === 'asc' ? ' ↑' : ' ↓')}
-                      </th>
-                      <th
-                        onClick={() => handleSortEmployees('salesTarget')}
-                        style={{ cursor: 'pointer', userSelect: 'none' }}
-                      >
-                        {language === 'en' ? 'Sales Target' : 'বিক্রয় লক্ষ্য'}
-                        {employeeSortField === 'salesTarget' && (employeeSortDirection === 'asc' ? ' ↑' : ' ↓')}
-                      </th>
-                      <th
-                        onClick={() => handleSortEmployees('salaryStatus')}
-                        style={{ cursor: 'pointer', userSelect: 'none' }}
-                      >
-                        {language === 'en' ? 'Salary Status' : 'বেতন স্থিতি'}
-                        {employeeSortField === 'salaryStatus' && (employeeSortDirection === 'asc' ? ' ↑' : ' ↓')}
-                      </th>
-                      <th>{language === 'en' ? 'Actions' : 'কার্যক্রম'}</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {sortedEmployees.length === 0 ? (
-                      <tr>
-                        <td colSpan="9" style={{ textAlign: 'center', padding: '1.5rem' }}>
-                          {adminContent.noData}
-                        </td>
-                      </tr>
-                    ) : (
-                      sortedEmployees.map((emp, idx) => (
-                        <tr key={emp._id || idx}>
-                          <td>{emp.employeeId || 'N/A'}</td>
-                          <td>{emp.name || 'N/A'}</td>
-                          <td>{emp.phone || 'N/A'}</td>
-                          <td>{emp.designation || 'N/A'}</td>
-                          <td>{emp.postingArea || emp.area || 'N/A'}</td>
-                          <td>
-                            {emp.salary ? `${language === 'en' ? '৳' : '৳'} ${Math.round(parseFloat(emp.salary)).toLocaleString()}` : 'N/A'}
-                          </td>
-                          <td>
-                            {emp.salesTarget ? `${language === 'en' ? '৳' : '৳'} ${Math.round(parseFloat(emp.salesTarget)).toLocaleString()}` : (
-                              (emp.role || '').toUpperCase() === 'RSM' ? 'Set in Revenue' : 'N/A'
-                            )}
-                          </td>
-                          <td>{normalizeSalaryStatus(emp.status)}</td>
-                          <td>
-                            <button
-                              className="admin-action-btn"
-                              style={{ backgroundColor: '#3b82f6', color: 'white' }}
-                              onClick={async () => {
-                                // Fetch latest employee data to ensure password is up to date
-                                try {
-                                  const res = await fetch(`${API_BASE}/api/employees/${emp._id}`)
-                                  if (res.ok) {
-                                    const data = await res.json()
-                                    console.log('[View Employee] Fetched employee data:', {
-                                      _id: data.data._id,
-                                      name: data.data.name,
-                                      username: data.data.username,
-                                      hasPlainPassword: false,
-                                      plainPassword: 'hidden'
-                                    })
-                                    setViewingEmployee({ ...data.data, status: normalizeSalaryStatus(data.data.status) })
-                                    setLastGeneratedPassword(data.data.generatedPassword || '')
-                                    setShowSalesHistory(false) // Show employee details by default
-                                    setShowAssignedDealers(false) // Show employee details by default
-                                  } else {
-                                    // Fallback to existing data if fetch fails
-                                    console.log('[View Employee] Using cached employee data:', emp)
-                                    setViewingEmployee({ ...emp, status: normalizeSalaryStatus(emp.status) })
-                                    setLastGeneratedPassword(emp.generatedPassword || '')
-                                    setShowSalesHistory(false) // Show employee details by default
-                                    setShowAssignedDealers(false) // Show employee details by default
-                                  }
-                                } catch (err) {
-                                  console.error('Failed to fetch employee details', err)
-                                  // Fallback to existing data if fetch fails
-                                  setViewingEmployee({ ...emp, status: normalizeSalaryStatus(emp.status) })
-                                  setLastGeneratedPassword(emp.generatedPassword || '')
-                                  setShowSalesHistory(false) // Show employee details by default
-                                }
-                              }}
-                            >
-                              {adminContent.view}
-                            </button>
-                          </td>
-                        </tr>
-                      ))
-                    )}
-                  </tbody>
-                </table>
-              </div>
-
-              {/* Mobile Card View for Employees */}
-              <div className="mobile-card-container">
-                {sortedEmployees.length === 0 ? (
-                  <div style={{ textAlign: 'center', padding: '2rem', color: '#6b7280' }}>
-                    {adminContent.noData}
-                  </div>
-                ) : (
-                  sortedEmployees.map((emp, idx) => (
-                    <div className="mobile-card" key={emp._id || idx}>
-                      <div
-                        className="mobile-card-header"
-                        onClick={() => setExpandedEmployeeIds(prev => ({ ...prev, [emp._id]: !prev[emp._id] }))}
-                        style={{ cursor: 'pointer' }}
-                      >
-                        <div className="mobile-card-avatar">
-                          {emp.photo ? (
-                            <img src={emp.photo} alt={emp.name} style={{ width: '100%', height: '100%', objectFit: 'cover', borderRadius: '50%' }} />
-                          ) : (
-                            (emp.name || '?').charAt(0).toUpperCase()
-                          )}
-                        </div>
-                        <div className="mobile-card-header-text">
-                          <div className="mobile-card-title">{emp.name || 'N/A'}</div>
-                          <div className="mobile-card-subtitle">{emp.employeeId || 'N/A'}</div>
-                          <div className="mobile-card-subtitle" style={{ fontSize: '0.75rem', marginTop: '0.1rem' }}>
-                            {emp.designation || '-'}
-                          </div>
-                        </div>
-                        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', marginLeft: 'auto', alignSelf: 'stretch', justifyContent: 'space-between', flexShrink: 0, paddingBottom: 0 }}>
-                          <div className="mobile-card-status-badge" style={{
-                            backgroundColor: emp.status === 'Paid' ? '#dcfce7' : '#fee2e2',
-                            color: emp.status === 'Paid' ? '#166534' : '#dc2626',
-                            margin: 0,
-                            whiteSpace: 'nowrap',
-                            alignSelf: 'flex-end'
-                          }}>
-                            {normalizeSalaryStatus(emp.status)}
-                          </div>
-                          {emp.salary && (
-                            <div style={{ fontSize: '0.9rem', fontWeight: 700, color: '#475569', marginTop: '2rem' }}>
-                              {language === 'en' ? '৳' : '৳'} {Math.round(parseFloat(emp.salary)).toLocaleString()}
-                            </div>
-                          )}
-                        </div>
+                          position: 'absolute',
+                          width: '240px',
+                          height: '240px',
+                          bottom: '-140px',
+                          right: '-100px',
+                          background: 'radial-gradient(circle at 70% 70%, rgba(16,185,129,0.22), transparent 60%)',
+                          filter: 'blur(20px)'
+                        }} />
                       </div>
 
-                      {expandedEmployeeIds[emp._id] && (
-                        <>
-                          <div className="mobile-card-body">
-                            <div className="mobile-card-row">
-                              <span className="mobile-card-label">{language === 'en' ? 'Designation' : 'পদবি'}</span>
-                              <span className="mobile-card-value">{emp.designation || 'N/A'}</span>
-                            </div>
-                            <div className="mobile-card-row">
-                              <span className="mobile-card-label">{language === 'en' ? 'Phone' : 'ফোন'}</span>
-                              <span className="mobile-card-value">{emp.phone || 'N/A'}</span>
-                            </div>
-                            <div className="mobile-card-row">
-                              <span className="mobile-card-label">{language === 'en' ? 'Area' : 'এলাকা'}</span>
-                              <span className="mobile-card-value">{emp.postingArea || emp.area || 'N/A'}</span>
-                            </div>
-                            <div className="mobile-card-row">
-                              <span className="mobile-card-label">{language === 'en' ? 'Salary' : 'বেতন'}</span>
-                              <span className="mobile-card-value">
-                                {emp.salary ? `${language === 'en' ? '৳' : '৳'} ${Math.round(parseFloat(emp.salary)).toLocaleString()}` : 'N/A'}
-                              </span>
-                            </div>
-                            <div className="mobile-card-row">
-                              <span className="mobile-card-label">{language === 'en' ? 'Sales Target' : 'বিক্রয় লক্ষ্য'}</span>
-                              <span className="mobile-card-value">
-                                {emp.salesTarget ? `${language === 'en' ? '৳' : '৳'} ${Math.round(parseFloat(emp.salesTarget)).toLocaleString()}` : (
-                                  (emp.role || '').toUpperCase() === 'RSM' ? 'Set in Revenue' : 'N/A'
-                                )}
-                              </span>
-                            </div>
-                          </div>
-                          <div className="mobile-card-actions">
-                            <button
-                              className="mobile-action-btn"
-                              onClick={async (e) => {
-                                e.stopPropagation()
-                                try {
-                                  const res = await fetch(`${API_BASE}/api/employees/${emp._id}`)
-                                  if (res.ok) {
-                                    const data = await res.json()
-                                    setViewingEmployee({ ...data.data, status: normalizeSalaryStatus(data.data.status) })
-                                    setLastGeneratedPassword(data.data.generatedPassword || '')
-                                    setShowSalesHistory(false)
-                                    setShowAssignedDealers(false)
-                                  } else {
-                                    setViewingEmployee({ ...emp, status: normalizeSalaryStatus(emp.status) })
-                                    setLastGeneratedPassword(emp.generatedPassword || '')
-                                    setShowSalesHistory(false)
-                                    setShowAssignedDealers(false)
-                                  }
-                                } catch (err) {
-                                  setViewingEmployee({ ...emp, status: normalizeSalaryStatus(emp.status) })
-                                  setLastGeneratedPassword(emp.generatedPassword || '')
-                                  setShowSalesHistory(false)
-                                }
-                              }}
-                            >
-                              {adminContent.view}
-                            </button>
-                          </div>
-                        </>
-                      )}
-                    </div>
-                  ))
-                )}
-              </div>
-
-              {/* Employee Details Modal */}
-              {viewingEmployee && (
-                <div className="admin-employee-view-overlay" style={{
-                  position: 'fixed',
-                  top: 0,
-                  left: 0,
-                  right: 0,
-                  bottom: 0,
-                  backgroundColor: 'rgba(0, 0, 0, 0.5)',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  zIndex: 1000,
-                  padding: '1rem'
-                }} onClick={() => {
-                  setViewingEmployee(null)
-                  setIsEditingEmployee(false)
-                  setEditingEmployeeData(null)
-                  setLastGeneratedPassword('')
-                }}>
-                  <div className="admin-modal-content" onClick={(e) => e.stopPropagation()}>
-                    <div style={{
-                      position: 'absolute',
-                      inset: 0,
-                      pointerEvents: 'none',
-                      overflow: 'hidden',
-                      borderRadius: '0.75rem'
-                    }}>
-                      <div style={{
-                        position: 'absolute',
-                        width: '260px',
-                        height: '260px',
-                        top: '-120px',
-                        left: '-80px',
-                        background: 'radial-gradient(circle at 30% 30%, rgba(59,130,246,0.25), transparent 60%)',
-                        filter: 'blur(20px)'
-                      }} />
-                      <div style={{
-                        position: 'absolute',
-                        width: '240px',
-                        height: '240px',
-                        bottom: '-140px',
-                        right: '-100px',
-                        background: 'radial-gradient(circle at 70% 70%, rgba(16,185,129,0.22), transparent 60%)',
-                        filter: 'blur(20px)'
-                      }} />
-                    </div>
-
-                    <div className="admin-employee-view-header" style={{ position: 'relative', display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem', gap: '1rem' }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
-                        <div style={{
-                          width: 80,
-                          height: 80,
-                          borderRadius: '50%',
-                          overflow: 'hidden',
-                          border: '3px solid rgba(255,255,255,0.9)',
-                          boxShadow: '0 10px 30px rgba(0,0,0,0.12)',
-                          background: '#e5e7eb',
-                          display: 'flex',
-                          alignItems: 'center',
-                          justifyContent: 'center',
-                          fontWeight: 700,
-                          fontSize: '1.5rem',
-                          color: '#111827'
-                        }}>
-                          {viewingEmployee.photo ? (
-                            <img src={viewingEmployee.photo} alt={viewingEmployee.name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-                          ) : (
-                            (viewingEmployee.name || 'E').charAt(0)
-                          )}
-                        </div>
+                      <div style={{ position: 'relative', display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem', gap: '1rem' }}>
                         <div>
                           <h2 style={{ margin: 0, fontSize: '1.5rem', fontWeight: 800, color: '#0f172a' }}>
-                            {viewingEmployee.name || (language === 'en' ? 'Employee' : 'কর্মচারী')}
+                            {language === 'en' ? 'Add Employee' : 'কর্মচারী যোগ করুন'}
                           </h2>
-                          <p style={{ margin: '0.25rem 0 0 0', color: '#475569', fontWeight: 600 }}>{viewingEmployee.designation || viewingEmployee.role || ''}</p>
+                          <p style={{ margin: '0.25rem 0 0 0', color: '#475569', fontWeight: 600 }}>
+                            {language === 'en' ? 'Fill in employee details and save' : 'কর্মচারীর বিবরণ পূরণ করুন এবং সংরক্ষণ করুন'}
+                          </p>
                         </div>
-                      </div>
-                      <div className="admin-employee-view-buttons" style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
                         <button
                           onClick={() => {
-                            setShowSalesHistory((prev) => !prev)
-                            setShowAssignedDealers(false)
-                          }}
-                          style={{
-                            padding: '0.6rem 1.1rem',
-                            backgroundColor: '#3b82f6',
-                            color: 'white',
-                            border: 'none',
-                            borderRadius: '0.5rem',
-                            cursor: 'pointer',
-                            fontWeight: 700,
-                            fontSize: '0.9rem',
-                            boxShadow: '0 10px 20px rgba(59,130,246,0.35)'
-                          }}
-                        >
-                          {showSalesHistory
-                            ? (language === 'en' ? 'Back' : 'পেছনে যান')
-                            : (language === 'en' ? 'Sales History' : 'বিক্রয় ইতিহাস')}
-                        </button>
-                        {!showSalesHistory && (
-                          <button
-                            onClick={() => {
-                              setShowAssignedDealers((prev) => !prev)
-                              setShowSalesHistory(false)
-                            }}
-                            style={{
-                              padding: '0.6rem 1.1rem',
-                              backgroundColor: '#10b981',
-                              color: 'white',
-                              border: 'none',
-                              borderRadius: '0.5rem',
-                              cursor: 'pointer',
-                              fontWeight: 700,
-                              fontSize: '0.9rem',
-                              boxShadow: '0 10px 20px rgba(16,185,129,0.35)'
-                            }}
-                          >
-                            {showAssignedDealers
-                              ? (language === 'en' ? 'Back' : 'পেছনে যান')
-                              : (language === 'en' ? 'Dealers' : 'ডিলার')}
-                          </button>
-                        )}
-                        <button
-                          onClick={() => {
-                            setViewingEmployee(null)
-                            setIsEditingEmployee(false)
-                            setEditingEmployeeData(null)
+                            setShowEmployeeForm(false)
+                            setEmployeeStatus('')
+                            setGeneratedCredentials(null)
                           }}
                           style={{
                             background: '#e2e8f0',
@@ -9166,261 +8926,1078 @@ function AdminPage({ language, toggleLanguage, t }) {
                           ×
                         </button>
                       </div>
-                    </div>
 
-                    {showSalesHistory ? (
-                      <div className="admin-employee-sales-history-section" style={{ marginTop: '1rem', display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-                        {(() => {
-                          // Check if viewing employee is RSM
-                          const isRSM = (viewingEmployee?.role || '').toLowerCase() === 'rsm'
-
-                          // For RSM: calculate sales target as sum of all salesmen's targets
-                          // For others: use their own sales target
-                          // For RSM: use synced salesTarget from settings (or sum sum if 0/missing) -> Actually user wants synced target.
-                          // Let's use viewingEmployee.salesTarget if available (which we synced).
-                          // Logic: If isRSM && viewingEmployee.salesTarget > 0 => use it. Else => sum.
-                          const syncedTarget = parseFloat(viewingEmployee.salesTarget) || 0
-                          const calculatedSalesTarget = (isRSM && syncedTarget > 0)
-                            ? syncedTarget
-                            : (isRSM
-                              ? (employees || []).reduce((sum, emp) => {
-                                if ((emp.role || '').toLowerCase() === 'salesman') {
-                                  return sum + (parseFloat(emp.salesTarget) || 0)
+                      <div style={{ position: 'relative', zIndex: 1 }}>
+                        {employeeStatus && (
+                          <div style={{
+                            padding: '0.75rem',
+                            marginBottom: '1rem',
+                            borderRadius: '0.5rem',
+                            border: employeeStatus.includes('fail') || employeeStatus.includes('ব্যর্থ') ? '1px solid #fecaca' : '1px solid #bbf7d0',
+                            backgroundColor: employeeStatus.includes('fail') || employeeStatus.includes('ব্যর্থ') ? '#fef2f2' : '#ecfdf3',
+                            color: employeeStatus.includes('fail') || employeeStatus.includes('ব্যর্থ') ? '#b91c1c' : '#065f46',
+                            fontWeight: 700
+                          }}>
+                            {employeeStatus}
+                          </div>
+                        )}
+                        {generatedCredentials && (
+                          <div style={{
+                            marginBottom: '1rem',
+                            padding: '1rem',
+                            backgroundColor: '#f0f9ff',
+                            border: '2px solid #0ea5e9',
+                            borderRadius: '0.5rem',
+                            borderStyle: 'dashed'
+                          }}>
+                            <h4 style={{ marginTop: 0, marginBottom: '0.5rem', color: '#0369a1' }}>
+                              {language === 'en' ? 'Generated Login Credentials' : 'তৈরি করা লগইন পরিচয়পত্র'}
+                            </h4>
+                            <p style={{ margin: '0.25rem 0', fontSize: '0.875rem', color: '#0c4a6e' }}>
+                              <strong>{language === 'en' ? 'Username:' : 'ব্যবহারকারীর নাম:'}</strong> {generatedCredentials.username}
+                            </p>
+                            <p style={{ margin: '0.25rem 0', fontSize: '0.875rem', color: '#0c4a6e' }}>
+                              <strong>{language === 'en' ? 'Password:' : 'পাসওয়ার্ড:'}</strong> <span style={{ fontFamily: 'monospace', backgroundColor: '#fff', padding: '0.25rem 0.5rem', borderRadius: '0.25rem' }}>{generatedCredentials.password}</span>
+                            </p>
+                            <p style={{ margin: '0.5rem 0 0 0', fontSize: '0.75rem', color: '#dc2626', fontWeight: 600 }}>
+                              {language === 'en' ? '⚠️ Please save these credentials and share with the employee. This password will not be shown again.' : '⚠️ অনুগ্রহ করে এই পরিচয়পত্রগুলি সংরক্ষণ করুন এবং কর্মচারীর সাথে শেয়ার করুন। এই পাসওয়ার্ড আর দেখানো হবে না।'}
+                            </p>
+                            <button
+                              onClick={() => {
+                                setGeneratedCredentials(null)
+                                setShowEmployeeForm(false)
+                                setEmployeeStatus('')
+                              }}
+                              style={{
+                                marginTop: '0.75rem',
+                                padding: '0.5rem 1rem',
+                                backgroundColor: '#0ea5e9',
+                                color: 'white',
+                                border: 'none',
+                                borderRadius: '0.375rem',
+                                cursor: 'pointer',
+                                fontSize: '0.875rem',
+                                fontWeight: 600
+                              }}
+                            >
+                              {language === 'en' ? 'Close' : 'বন্ধ করুন'}
+                            </button>
+                          </div>
+                        )}
+                        <div className="admin-form-grid">
+                          <div className="admin-form-group">
+                            <label>{language === 'en' ? 'Name' : 'নাম'}</label>
+                            <input type="text" value={newEmployee.name} onChange={(e) => setNewEmployee({ ...newEmployee, name: e.target.value })} />
+                          </div>
+                          <div className="admin-form-group">
+                            <label>{language === 'en' ? 'Email' : 'ইমেইল'}</label>
+                            <input type="email" value={newEmployee.email} onChange={(e) => setNewEmployee({ ...newEmployee, email: e.target.value })} />
+                          </div>
+                          <div className="admin-form-group">
+                            <label>{language === 'en' ? 'Phone' : 'ফোন'}</label>
+                            <input type="tel" value={newEmployee.phone} onChange={(e) => setNewEmployee({ ...newEmployee, phone: e.target.value })} />
+                          </div>
+                          <div className="admin-form-group">
+                            <label>{language === 'en' ? 'Address' : 'ঠিকানা'}</label>
+                            <textarea value={newEmployee.address} onChange={(e) => setNewEmployee({ ...newEmployee, address: e.target.value })} rows={3} />
+                          </div>
+                          <div className="admin-form-group">
+                            <label>{language === 'en' ? 'NID (National ID)' : 'জাতীয় পরিচয়পত্র'}</label>
+                            <input type="text" value={newEmployee.nid} onChange={(e) => setNewEmployee({ ...newEmployee, nid: e.target.value })} />
+                          </div>
+                          <div className="admin-form-group">
+                            <label>{language === 'en' ? 'Document' : 'নথি'}</label>
+                            <input
+                              type="file"
+                              accept=".pdf,.doc,.docx,.jpg,.jpeg,.png"
+                              onChange={(e) => {
+                                const file = e.target.files[0]
+                                if (file) {
+                                  const reader = new FileReader()
+                                  reader.onloadend = () => {
+                                    setNewEmployee({ ...newEmployee, document: reader.result })
+                                  }
+                                  reader.readAsDataURL(file)
                                 }
-                                return sum
-                              }, 0)
-                              : (parseFloat(viewingEmployee.salesTarget) || 0)
-                            )
+                              }}
+                              style={{ width: '100%', padding: '0.5rem', border: '1px solid #d1d5db', borderRadius: '0.375rem', fontSize: '0.875rem' }}
+                            />
+                            {newEmployee.document && (
+                              <p style={{ marginTop: '0.5rem', fontSize: '0.75rem', color: '#16a34a' }}>
+                                {language === 'en' ? '✓ Document uploaded' : '✓ নথি আপলোড হয়েছে'}
+                              </p>
+                            )}
+                          </div>
+                          <div className="admin-form-group">
+                            <label>{language === 'en' ? 'Emergency Contact Name' : 'জরুরি যোগাযোগের নাম'}</label>
+                            <input type="text" value={newEmployee.emergencyContactName} onChange={(e) => setNewEmployee({ ...newEmployee, emergencyContactName: e.target.value })} />
+                          </div>
+                          <div className="admin-form-group">
+                            <label>{language === 'en' ? 'Emergency Contact' : 'জরুরি যোগাযোগ'}</label>
+                            <input type="text" value={newEmployee.emergencyContact} onChange={(e) => setNewEmployee({ ...newEmployee, emergencyContact: e.target.value })} placeholder={language === 'en' ? 'Phone or Email' : 'ফোন বা ইমেইল'} />
+                          </div>
+                          <div className="admin-form-group">
+                            <label>{language === 'en' ? 'Salary' : 'বেতন'}</label>
+                            <input type="number" value={newEmployee.salary} onChange={(e) => setNewEmployee({ ...newEmployee, salary: e.target.value })} step="0.01" min="0" />
+                          </div>
+                          <div className="admin-form-group">
+                            <label>{language === 'en' ? 'Sales Target' : 'বিক্রয় লক্ষ্য'}</label>
+                            <input type="number" value={newEmployee.salesTarget} onChange={(e) => setNewEmployee({ ...newEmployee, salesTarget: e.target.value })} step="0.01" min="0" />
+                          </div>
+                          <div className="admin-form-group">
+                            <label>{language === 'en' ? 'Bank Name' : 'ব্যাংকের নাম'}</label>
+                            <input type="text" value={newEmployee.bankName} onChange={(e) => setNewEmployee({ ...newEmployee, bankName: e.target.value })} />
+                          </div>
+                          <div className="admin-form-group">
+                            <label>{language === 'en' ? 'Branch' : 'শাখা'}</label>
+                            <input type="text" value={newEmployee.bankBranch} onChange={(e) => setNewEmployee({ ...newEmployee, bankBranch: e.target.value })} />
+                          </div>
+                          <div className="admin-form-group">
+                            <label>{language === 'en' ? 'Account No.' : 'একাউন্ট নং'}</label>
+                            <input type="text" value={newEmployee.accountNumber} onChange={(e) => setNewEmployee({ ...newEmployee, accountNumber: e.target.value })} />
+                          </div>
+                          <div className="admin-form-group">
+                            <label>{language === 'en' ? 'Department' : 'বিভাগ'}</label>
+                            <input type="text" value={newEmployee.department} onChange={(e) => setNewEmployee({ ...newEmployee, department: e.target.value })} />
+                          </div>
+                          <div className="admin-form-group">
+                            <label>{language === 'en' ? 'Role' : 'ভূমিকা'}</label>
+                            <select
+                              value={newEmployee.role}
+                              onChange={(e) => setNewEmployee({ ...newEmployee, role: e.target.value })}
+                              style={{ width: '100%', padding: '0.5rem', border: '1px solid #d1d5db', borderRadius: '0.375rem', fontSize: '0.875rem' }}
+                            >
+                              <option value="">{language === 'en' ? 'Select Role' : 'ভূমিকা নির্বাচন করুন'}</option>
+                              <option value="Admin">Admin</option>
+                              <option value="RSM">RSM</option>
+                              <option value="Incharge">Incharge</option>
+                              <option value="SalesMan">SalesMan</option>
+                            </select>
+                          </div>
+                          <div className="admin-form-group">
+                            <label>{language === 'en' ? 'Designation' : 'পদবি'}</label>
+                            <input type="text" value={newEmployee.designation} onChange={(e) => setNewEmployee({ ...newEmployee, designation: e.target.value })} />
+                          </div>
+                          <div className="admin-form-group">
+                            <label>{language === 'en' ? 'Posting Area' : 'পোস্টিং এরিয়া'}</label>
+                            <input type="text" value={newEmployee.postingArea} onChange={(e) => setNewEmployee({ ...newEmployee, postingArea: e.target.value })} />
+                          </div>
+                          <div className="admin-form-group">
+                            <label>{language === 'en' ? 'Upload Photo' : 'ছবি আপলোড করুন'}</label>
+                            <input
+                              type="file"
+                              accept="image/*"
+                              onChange={async (e) => {
+                                const file = e.target.files?.[0]
+                                if (!file) return
+                                try {
+                                  const base64 = await fileToBase64(file)
+                                  setNewEmployee({ ...newEmployee, photo: base64 })
+                                } catch (err) {
+                                  console.error('Photo upload failed', err)
+                                }
+                              }}
+                              style={{ width: '100%', padding: '0.5rem', border: '1px solid #d1d5db', borderRadius: '0.375rem', fontSize: '0.875rem' }}
+                            />
+                            {newEmployee.photo && (
+                              <p style={{ marginTop: '0.5rem', fontSize: '0.75rem', color: '#16a34a' }}>
+                                {language === 'en' ? '✓ Photo ready' : '✓ ছবি প্রস্তুত'}
+                              </p>
+                            )}
+                          </div>
+                        </div>
+                        <div style={{ display: 'flex', gap: '0.75rem', marginTop: '1rem' }}>
+                          <button className="admin-save-btn" onClick={async () => {
+                            try {
+                              setEmployeeStatus(language === 'en' ? 'Saving...' : 'সংরক্ষণ করা হচ্ছে...')
+                              setGeneratedCredentials(null)
 
-                          // Calculate individual employee's total collection and total due
-                          // Include both employee-created orders AND admin-created orders for assigned dealers
-                          const employeeId = viewingEmployee?._id || ''
+                              // Prepare employee data - ensure all fields are included
+                              const employeeData = {
+                                name: newEmployee.name || '',
+                                email: newEmployee.email || '',
+                                phone: newEmployee.phone || '',
+                                address: newEmployee.address || '',
+                                nid: newEmployee.nid || '',
+                                document: newEmployee.document || '',
+                                emergencyContactName: newEmployee.emergencyContactName || '',
+                                emergencyContact: newEmployee.emergencyContact || '',
+                                salary: newEmployee.salary || 0,
+                                salesTarget: newEmployee.salesTarget || 0,
+                                bankName: newEmployee.bankName || '',
+                                bankBranch: newEmployee.bankBranch || '',
+                                accountNumber: newEmployee.accountNumber || '',
+                                department: newEmployee.department || '',
+                                postingArea: newEmployee.postingArea || '',
+                                role: newEmployee.role || '',
+                                designation: newEmployee.designation || '',
+                                photo: newEmployee.photo || '',
+                                status: newEmployee.status || 'Unpaid'
+                              }
 
-                          // Get all dealers assigned to this employee
-                          const assignedDealerIds = (dealers || [])
-                            .filter(dealer => {
-                              const assignedToId = dealer.assignedTo?._id || dealer.assignedTo || ''
-                              return String(assignedToId) === String(employeeId)
-                            })
-                            .map(dealer => ({
-                              _id: String(dealer._id || ''),
-                              dealerId: String(dealer.dealerId || '')
-                            }))
-                            .filter(d => d._id || d.dealerId)
+                              console.log('[Frontend] Sending employee data:', { ...employeeData, document: employeeData.document ? 'Base64 data (hidden)' : 'No document' })
 
-                          // Filter orders: employee-created OR admin-created for assigned dealers
-                          const employeeOrders = (orders || []).filter(order => {
-                            const orderRequestedBy = order.requestedBy?._id || order.requestedBy || ''
-                            const isEmployeeOrder = String(orderRequestedBy) === String(employeeId)
-
-                            // Check if this is an admin-created order for an assigned dealer
-                            const isAdminOrder = (order.requestedByRole || '').toLowerCase() === 'admin'
-                            let isAdminOrderForAssignedDealer = false
-
-                            if (isAdminOrder) {
-                              const orderDealerId = order.dealer?._id || order.dealer || ''
-                              const orderDealerIdString = String(orderDealerId)
-                              const orderDealerIdFromDealer = order.dealerId || ''
-
-                              isAdminOrderForAssignedDealer = assignedDealerIds.some(assignedDealer =>
-                                assignedDealer._id === orderDealerIdString ||
-                                assignedDealer.dealerId === orderDealerIdFromDealer ||
-                                (order.dealer && String(order.dealer._id || order.dealer) === assignedDealer._id)
-                              )
-                            }
-
-                            return isEmployeeOrder || isAdminOrderForAssignedDealer
-                          })
-
-                          // Calculate date range for Current Month
-                          const now = new Date()
-                          const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1)
-                          const endOfMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59, 999)
-
-                          // Filter orders by Current Month
-                          // For RSM: Achieved Target = Total Revnue Achieved (All orders) for Current Month
-                          // For others: calculate from own approved orders + admin-created orders for assigned dealers
-                          let employeeAchievedTarget = 0
-                          if (isRSM) {
-                            // RSM gets credit for ALL approved orders in the current month (Company Wide)
-                            // This matches the "Achieve Amount" in Revenue Dashboard
-                            const allOrdersCurrentMonth = (orders || []).filter(order => {
-                              const d = new Date(order.createdAt)
-                              return d >= startOfMonth && d <= endOfMonth
-                            })
-
-                            employeeAchievedTarget = allOrdersCurrentMonth
-                              .filter(order => order.approvalStatus === 'Approved' && order.status !== 'Cancelled')
-                              .reduce((sum, order) => sum + (parseFloat(order.totalPrice) || 0), 0)
-
-                          } else {
-                            // Calculate achieved target from:
-                            // 1. Employee-created approved orders (excluding cancelled)
-                            // 2. Admin-created approved orders for dealers assigned to this employee (excluding cancelled)
-                            // 3. FILTERED by Current Month
-                            employeeAchievedTarget = employeeOrders
-                              .filter(order => {
-                                const d = new Date(order.createdAt)
-                                return (
-                                  order.approvalStatus === 'Approved' &&
-                                  order.status !== 'Cancelled' &&
-                                  order.approvalStatus !== 'Rejected' &&
-                                  d >= startOfMonth && d <= endOfMonth
-                                )
+                              const res = await fetch(`${API_BASE}/api/employees`, {
+                                method: 'POST',
+                                headers: { 'Content-Type': 'application/json' },
+                                body: JSON.stringify(employeeData)
                               })
-                              .reduce((sum, order) => {
-                                return sum + (parseFloat(order.totalPrice) || 0)
-                              }, 0)
-                          }
+                              if (!res.ok) {
+                                const errorData = await res.json().catch(() => ({}))
+                                console.error('[Frontend] Employee creation failed:', errorData)
+                                throw new Error(errorData.message || errorData.error || 'Failed to create employee')
+                              }
+                              const data = await res.json()
+                              console.log('[Frontend] Employee created successfully:', {
+                                employeeId: data.data?.employeeId,
+                                name: data.data?.name,
+                                hasAddress: !!data.data?.address,
+                                hasNID: !!data.data?.nid,
+                                hasDocument: !!data.data?.document,
+                                salary: data.data?.salary
+                              })
+                              setEmployees([
+                                { ...data.data, status: normalizeSalaryStatus(data.data.status) },
+                                ...employees.map((e) => ({ ...e, status: normalizeSalaryStatus(e.status) }))
+                              ])
 
-                          // For RSM: calculate collection and due from ALL orders (Current Month)
-                          // For others: calculate from own orders (Current Month)
-                          // For others: calculate from own orders (Current Month)
-                          let employeeTotalCollection = 0
-                          let employeeTotalDue = 0
+                              // Show generated credentials
+                              if (data.data.generatedPassword) {
+                                setGeneratedCredentials({
+                                  username: data.data.username,
+                                  password: data.data.generatedPassword
+                                })
+                                setEmployeeStatus(language === 'en' ? 'Employee created! Credentials generated below.' : 'কর্মচারী তৈরি হয়েছে! নিচে পরিচয়পত্র দেখুন।')
+                              } else {
+                                setEmployeeStatus(language === 'en' ? 'Saved to database' : 'ডাটাবেজে সংরক্ষিত')
+                              }
 
-                          if (isRSM) {
-                            // RSM gets stats from ALL orders in the current month (Company Wide)
-                            const allOrdersCurrentMonth = (orders || []).filter(order => {
-                              const d = new Date(order.createdAt)
-                              return d >= startOfMonth && d <= endOfMonth && order.status !== 'Cancelled' && order.approvalStatus !== 'Rejected'
-                            })
+                              setNewEmployee({ name: '', email: '', phone: '', address: '', nid: '', document: '', emergencyContactName: '', emergencyContact: '', salary: '', salesTarget: '', bankName: '', bankBranch: '', accountNumber: '', department: '', postingArea: '', role: '', designation: '', photo: '', status: 'Unpaid' })
+                              // Don't close form if credentials are shown
+                              if (!data.data.generatedPassword) {
+                                setShowEmployeeForm(false)
+                              }
+                            } catch (err) {
+                              setEmployeeStatus(language === 'en' ? `Save failed: ${err.message}` : `সংরক্ষণ ব্যর্থ: ${err.message}`)
+                            }
+                          }}>
+                            {language === 'en' ? 'Save' : 'সংরক্ষণ'}
+                          </button>
+                          <button className="admin-remove-btn" onClick={() => {
+                            setShowEmployeeForm(false);
+                            setEmployeeStatus('');
+                            setGeneratedCredentials(null);
+                          }}>
+                            {language === 'en' ? 'Cancel' : 'বাতিল'}
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                )}
 
-                            employeeTotalCollection = allOrdersCurrentMonth.reduce((sum, order) => {
-                              const paid = Number(order.paidAmount || 0)
-                              const commission = (order.paymentHistory || []).reduce((cSum, p) => cSum + (parseFloat(p.commission) || 0), 0)
-                              return sum + (paid + commission)
-                            }, 0)
+                <div className="admin-search-bar" style={{ marginTop: '1.5rem', marginBottom: '1rem' }}>
+                  <input
+                    type="text"
+                    placeholder={language === 'en' ? 'Search employees...' : 'কর্মচারী খুঁজুন...'}
+                    value={employeeSearch || ''}
+                    onChange={(e) => setEmployeeSearch(e.target.value)}
+                  />
+                </div>
+                <div className="admin-table-container">
+                  <table className="admin-table">
+                    <thead>
+                      <tr>
+                        <th
+                          onClick={() => handleSortEmployees('employeeId')}
+                          style={{ cursor: 'pointer', userSelect: 'none' }}
+                        >
+                          {language === 'en' ? 'ID' : 'আইডি'}
+                          {employeeSortField === 'employeeId' && (employeeSortDirection === 'asc' ? ' ↑' : ' ↓')}
+                        </th>
+                        <th
+                          onClick={() => handleSortEmployees('name')}
+                          style={{ cursor: 'pointer', userSelect: 'none' }}
+                        >
+                          {language === 'en' ? 'Name' : 'নাম'}
+                          {employeeSortField === 'name' && (employeeSortDirection === 'asc' ? ' ↑' : ' ↓')}
+                        </th>
+                        <th
+                          onClick={() => handleSortEmployees('phone')}
+                          style={{ cursor: 'pointer', userSelect: 'none' }}
+                        >
+                          {language === 'en' ? 'Phone' : 'ফোন'}
+                          {employeeSortField === 'phone' && (employeeSortDirection === 'asc' ? ' ↑' : ' ↓')}
+                        </th>
+                        <th
+                          onClick={() => handleSortEmployees('designation')}
+                          style={{ cursor: 'pointer', userSelect: 'none' }}
+                        >
+                          {language === 'en' ? 'Designation' : 'পদবি'}
+                          {employeeSortField === 'designation' && (employeeSortDirection === 'asc' ? ' ↑' : ' ↓')}
+                        </th>
+                        <th
+                          onClick={() => handleSortEmployees('postingArea')}
+                          style={{ cursor: 'pointer', userSelect: 'none' }}
+                        >
+                          {language === 'en' ? 'Posting Area' : 'পোস্টিং এলাকা'}
+                          {employeeSortField === 'postingArea' && (employeeSortDirection === 'asc' ? ' ↑' : ' ↓')}
+                        </th>
+                        <th
+                          onClick={() => handleSortEmployees('salary')}
+                          style={{ cursor: 'pointer', userSelect: 'none' }}
+                        >
+                          {language === 'en' ? 'Salary' : 'বেতন'}
+                          {employeeSortField === 'salary' && (employeeSortDirection === 'asc' ? ' ↑' : ' ↓')}
+                        </th>
+                        <th
+                          onClick={() => handleSortEmployees('salesTarget')}
+                          style={{ cursor: 'pointer', userSelect: 'none' }}
+                        >
+                          {language === 'en' ? 'Sales Target' : 'বিক্রয় লক্ষ্য'}
+                          {employeeSortField === 'salesTarget' && (employeeSortDirection === 'asc' ? ' ↑' : ' ↓')}
+                        </th>
+                        <th
+                          onClick={() => handleSortEmployees('salaryStatus')}
+                          style={{ cursor: 'pointer', userSelect: 'none' }}
+                        >
+                          {language === 'en' ? 'Salary Status' : 'বেতন স্থিতি'}
+                          {employeeSortField === 'salaryStatus' && (employeeSortDirection === 'asc' ? ' ↑' : ' ↓')}
+                        </th>
+                        <th>{language === 'en' ? 'Actions' : 'কার্যক্রম'}</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {sortedEmployees.length === 0 ? (
+                        <tr>
+                          <td colSpan="9" style={{ textAlign: 'center', padding: '1.5rem' }}>
+                            {adminContent.noData}
+                          </td>
+                        </tr>
+                      ) : (
+                        sortedEmployees.map((emp, idx) => (
+                          <tr key={emp._id || idx}>
+                            <td>{emp.employeeId || 'N/A'}</td>
+                            <td>{emp.name || 'N/A'}</td>
+                            <td>{emp.phone || 'N/A'}</td>
+                            <td>{emp.designation || 'N/A'}</td>
+                            <td>{emp.postingArea || emp.area || 'N/A'}</td>
+                            <td>
+                              {emp.salary ? `${language === 'en' ? '৳' : '৳'} ${Math.round(parseFloat(emp.salary)).toLocaleString()}` : 'N/A'}
+                            </td>
+                            <td>
+                              {emp.salesTarget ? `${language === 'en' ? '৳' : '৳'} ${Math.round(parseFloat(emp.salesTarget)).toLocaleString()}` : (
+                                (emp.role || '').toUpperCase() === 'RSM' ? 'Set in Revenue' : 'N/A'
+                              )}
+                            </td>
+                            <td>{normalizeSalaryStatus(emp.status)}</td>
+                            <td>
+                              <button
+                                className="admin-action-btn"
+                                style={{ backgroundColor: '#3b82f6', color: 'white' }}
+                                onClick={async () => {
+                                  // Fetch latest employee data to ensure password is up to date
+                                  try {
+                                    const res = await fetch(`${API_BASE}/api/employees/${emp._id}`)
+                                    if (res.ok) {
+                                      const data = await res.json()
+                                      console.log('[View Employee] Fetched employee data:', {
+                                        _id: data.data._id,
+                                        name: data.data.name,
+                                        username: data.data.username,
+                                        hasPlainPassword: false,
+                                        plainPassword: 'hidden'
+                                      })
+                                      setViewingEmployee({ ...data.data, status: normalizeSalaryStatus(data.data.status) })
+                                      setLastGeneratedPassword(data.data.generatedPassword || '')
+                                      setShowSalesHistory(false) // Show employee details by default
+                                      setShowAssignedDealers(false) // Show employee details by default
+                                    } else {
+                                      // Fallback to existing data if fetch fails
+                                      console.log('[View Employee] Using cached employee data:', emp)
+                                      setViewingEmployee({ ...emp, status: normalizeSalaryStatus(emp.status) })
+                                      setLastGeneratedPassword(emp.generatedPassword || '')
+                                      setShowSalesHistory(false) // Show employee details by default
+                                      setShowAssignedDealers(false) // Show employee details by default
+                                    }
+                                  } catch (err) {
+                                    console.error('Failed to fetch employee details', err)
+                                    // Fallback to existing data if fetch fails
+                                    setViewingEmployee({ ...emp, status: normalizeSalaryStatus(emp.status) })
+                                    setLastGeneratedPassword(emp.generatedPassword || '')
+                                    setShowSalesHistory(false) // Show employee details by default
+                                  }
+                                }}
+                              >
+                                {adminContent.view}
+                              </button>
+                            </td>
+                          </tr>
+                        ))
+                      )}
+                    </tbody>
+                  </table>
+                </div>
 
-                            employeeTotalDue = allOrdersCurrentMonth.reduce((sum, order) => {
-                              const totalPrice = Number(order.totalPrice || 0)
-                              const paid = Number(order.paidAmount || 0)
-                              const commission = (order.paymentHistory || []).reduce((cSum, p) => cSum + (parseFloat(p.commission) || 0), 0)
-                              const due = Math.max(0, totalPrice - (paid + commission))
-                              return sum + due
-                            }, 0)
-                          } else {
-                            // Filter employee orders by month
-                            const monthlyEmployeeOrders = employeeOrders.filter(order => {
-                              const d = new Date(order.createdAt)
-                              return d >= startOfMonth && d <= endOfMonth && order.status !== 'Cancelled' && order.approvalStatus !== 'Rejected'
-                            })
-
-                            employeeTotalCollection = monthlyEmployeeOrders.reduce((sum, order) => {
-                              const paid = Number(order.paidAmount || 0)
-                              const commission = (order.paymentHistory || []).reduce((cSum, p) => cSum + (parseFloat(p.commission) || 0), 0)
-                              return sum + (paid + commission)
-                            }, 0)
-
-                            employeeTotalDue = monthlyEmployeeOrders.reduce((sum, order) => {
-                              const totalPrice = Number(order.totalPrice || 0)
-                              const paid = Number(order.paidAmount || 0)
-                              const commission = (order.paymentHistory || []).reduce((cSum, p) => cSum + (parseFloat(p.commission) || 0), 0)
-                              const due = Math.max(0, totalPrice - (paid + commission))
-                              return sum + due
-                            }, 0)
-                          }
-
-                          return (
-                            <div className="admin-employee-stats-grid" style={{
-                              display: 'grid',
-                              gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))',
-                              gap: '0.75rem'
+                {/* Mobile Card View for Employees */}
+                <div className="mobile-card-container">
+                  {sortedEmployees.length === 0 ? (
+                    <div style={{ textAlign: 'center', padding: '2rem', color: '#6b7280' }}>
+                      {adminContent.noData}
+                    </div>
+                  ) : (
+                    sortedEmployees.map((emp, idx) => (
+                      <div className="mobile-card" key={emp._id || idx}>
+                        <div
+                          className="mobile-card-header"
+                          onClick={() => setExpandedEmployeeId(prev => (prev === emp._id ? null : emp._id))}
+                          style={{ cursor: 'pointer' }}
+                        >
+                          <div className="mobile-card-avatar">
+                            {emp.photo ? (
+                              <img src={emp.photo} alt={emp.name} style={{ width: '100%', height: '100%', objectFit: 'cover', borderRadius: '50%' }} />
+                            ) : (
+                              (emp.name || '?').charAt(0).toUpperCase()
+                            )}
+                          </div>
+                          <div className="mobile-card-header-text">
+                            <div className="mobile-card-title">{emp.name || 'N/A'}</div>
+                            <div className="mobile-card-subtitle">{emp.employeeId || 'N/A'}</div>
+                            <div className="mobile-card-subtitle" style={{ fontSize: '0.75rem', marginTop: '0.1rem' }}>
+                              {emp.designation || '-'}
+                            </div>
+                          </div>
+                          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', marginLeft: 'auto', alignSelf: 'stretch', justifyContent: 'space-between', flexShrink: 0, paddingBottom: 0 }}>
+                            <div className="mobile-card-status-badge" style={{
+                              backgroundColor: emp.status === 'Paid' ? '#dcfce7' : '#fee2e2',
+                              color: emp.status === 'Paid' ? '#166534' : '#dc2626',
+                              margin: 0,
+                              whiteSpace: 'nowrap',
+                              alignSelf: 'flex-end'
                             }}>
-                              <div style={{ padding: '1rem', borderRadius: '0.5rem', backgroundColor: '#f8fafc', border: '1px solid #e5e7eb' }}>
-                                <div style={{ fontSize: '0.9rem', color: '#6b7280', fontWeight: 700 }}>
-                                  {language === 'en' ? 'Total Target' : 'মোট টার্গেট'}
-                                </div>
-                                <div style={{ fontSize: '1.5rem', fontWeight: 800, color: '#0f172a', marginTop: '0.35rem' }}>
-                                  ৳{Math.round(calculatedSalesTarget || 0).toLocaleString()}
-                                </div>
+                              {normalizeSalaryStatus(emp.status)}
+                            </div>
+                            {emp.salary && (
+                              <div style={{ fontSize: '0.9rem', fontWeight: 700, color: '#475569', marginTop: '2rem' }}>
+                                {language === 'en' ? '৳' : '৳'} {Math.round(parseFloat(emp.salary)).toLocaleString()}
                               </div>
-                              <div style={{ padding: '1rem', borderRadius: '0.5rem', backgroundColor: '#f0fdf4', border: '1px solid #dcfce7' }}>
-                                <div style={{ fontSize: '0.9rem', color: '#15803d', fontWeight: 700 }}>
-                                  {language === 'en' ? 'Achieved Target' : 'অর্জিত টার্গেট'}
-                                </div>
-                                <div style={{ fontSize: '1.5rem', fontWeight: 800, color: '#166534', marginTop: '0.35rem' }}>
-                                  ৳{Math.round(employeeAchievedTarget || 0).toLocaleString()}
-                                </div>
+                            )}
+                          </div>
+                        </div>
+
+                        {expandedEmployeeId === emp._id && (
+                          <>
+                            <div className="mobile-card-body">
+                              <div className="mobile-card-row">
+                                <span className="mobile-card-label">{language === 'en' ? 'Designation' : 'পদবি'}</span>
+                                <span className="mobile-card-value">{emp.designation || 'N/A'}</span>
                               </div>
-                              <div style={{ padding: '1rem', borderRadius: '0.5rem', backgroundColor: '#eef2ff', border: '1px solid #e0e7ff' }}>
-                                <div style={{ fontSize: '0.9rem', color: '#4338ca', fontWeight: 700 }}>
-                                  {language === 'en' ? 'Progress' : 'অগ্রগতি'}
-                                </div>
-                                {(() => {
-                                  const total = Number(calculatedSalesTarget || 0) || 0
-                                  const achieved = Number(employeeAchievedTarget || 0) || 0
-                                  const pct = total > 0 ? Math.min(100, Math.round((achieved / total) * 100)) : 0
-                                  return (
-                                    <div style={{ marginTop: '0.35rem' }}>
-                                      <div style={{ height: '10px', background: '#e0e7ff', borderRadius: '999px', overflow: 'hidden' }}>
-                                        <div style={{ width: `${pct}%`, height: '100%', background: 'linear-gradient(90deg, #4f46e5, #22c55e)' }} />
-                                      </div>
-                                      <div style={{ marginTop: '0.35rem', fontWeight: 700, color: '#312e81' }}>{pct}%</div>
-                                    </div>
-                                  )
-                                })()}
+                              <div className="mobile-card-row">
+                                <span className="mobile-card-label">{language === 'en' ? 'Phone' : 'ফোন'}</span>
+                                <span className="mobile-card-value">{emp.phone || 'N/A'}</span>
                               </div>
-                              <div style={{ padding: '1rem', borderRadius: '0.5rem', backgroundColor: '#f8fafc', border: '1px solid #e5e7eb' }}>
-                                <div style={{ fontSize: '0.9rem', color: '#6b7280', fontWeight: 700 }}>
-                                  {language === 'en' ? 'Total Collection' : 'মোট সংগ্রহ'}
-                                </div>
-                                <div style={{ fontSize: '1.4rem', fontWeight: 800, color: '#0f172a', marginTop: '0.35rem' }}>
-                                  ৳{Math.round(employeeTotalCollection || 0).toLocaleString()}
-                                </div>
+                              <div className="mobile-card-row">
+                                <span className="mobile-card-label">{language === 'en' ? 'Area' : 'এলাকা'}</span>
+                                <span className="mobile-card-value">{emp.postingArea || emp.area || 'N/A'}</span>
                               </div>
-                              <div style={{ padding: '1rem', borderRadius: '0.5rem', backgroundColor: '#fff7ed', border: '1px solid #fed7aa' }}>
-                                <div style={{ fontSize: '0.9rem', color: '#c2410c', fontWeight: 700 }}>
-                                  {language === 'en' ? 'Total Due' : 'মোট বকেয়া'}
-                                </div>
-                                <div style={{ fontSize: '1.4rem', fontWeight: 800, color: '#9a3412', marginTop: '0.35rem' }}>
-                                  ৳{Math.round(employeeTotalDue || 0).toLocaleString()}
-                                </div>
+                              <div className="mobile-card-row">
+                                <span className="mobile-card-label">{language === 'en' ? 'Salary' : 'বেতন'}</span>
+                                <span className="mobile-card-value">
+                                  {emp.salary ? `${language === 'en' ? '৳' : '৳'} ${Math.round(parseFloat(emp.salary)).toLocaleString()}` : 'N/A'}
+                                </span>
+                              </div>
+                              <div className="mobile-card-row">
+                                <span className="mobile-card-label">{language === 'en' ? 'Sales Target' : 'বিক্রয় লক্ষ্য'}</span>
+                                <span className="mobile-card-value">
+                                  {emp.salesTarget ? `${language === 'en' ? '৳' : '৳'} ${Math.round(parseFloat(emp.salesTarget)).toLocaleString()}` : (
+                                    (emp.role || '').toUpperCase() === 'RSM' ? 'Set in Revenue' : 'N/A'
+                                  )}
+                                </span>
                               </div>
                             </div>
-                          )
-                        })()}
+                            <div className="mobile-card-actions">
+                              <button
+                                className="mobile-action-btn"
+                                onClick={async (e) => {
+                                  e.stopPropagation()
+                                  try {
+                                    const res = await fetch(`${API_BASE}/api/employees/${emp._id}`)
+                                    if (res.ok) {
+                                      const data = await res.json()
+                                      setViewingEmployee({ ...data.data, status: normalizeSalaryStatus(data.data.status) })
+                                      setLastGeneratedPassword(data.data.generatedPassword || '')
+                                      setShowSalesHistory(false)
+                                      setShowAssignedDealers(false)
+                                    } else {
+                                      setViewingEmployee({ ...emp, status: normalizeSalaryStatus(emp.status) })
+                                      setLastGeneratedPassword(emp.generatedPassword || '')
+                                      setShowSalesHistory(false)
+                                      setShowAssignedDealers(false)
+                                    }
+                                  } catch (err) {
+                                    setViewingEmployee({ ...emp, status: normalizeSalaryStatus(emp.status) })
+                                    setLastGeneratedPassword(emp.generatedPassword || '')
+                                    setShowSalesHistory(false)
+                                  }
+                                }}
+                              >
+                                {adminContent.view}
+                              </button>
+                            </div>
+                          </>
+                        )}
+                      </div>
+                    ))
+                  )}
+                </div>
 
-                        <h3 style={{ fontSize: '1.125rem', fontWeight: 700, color: '#0f172a', margin: '0.25rem 0' }}>
-                          {language === 'en' ? 'Sales History' : 'বিক্রয় ইতিহাস'}
-                        </h3>
-                        {viewingEmployee.salesHistory && Array.isArray(viewingEmployee.salesHistory) && viewingEmployee.salesHistory.length > 0 ? (
-                          <>
-                            <div className="admin-employee-sales-table-container admin-table-container" style={{
-                              border: '1px solid #e5e7eb',
+                {/* Employee Details Modal */}
+                {viewingEmployee && (
+                  <div className="admin-employee-view-overlay" style={{
+                    position: 'fixed',
+                    top: 0,
+                    left: 0,
+                    right: 0,
+                    bottom: 0,
+                    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    zIndex: 1000,
+                    padding: '1rem'
+                  }} onClick={() => {
+                    setViewingEmployee(null)
+                    setIsEditingEmployee(false)
+                    setEditingEmployeeData(null)
+                    setLastGeneratedPassword('')
+                  }}>
+                    <div className="admin-modal-content" onClick={(e) => e.stopPropagation()}>
+                      <div style={{
+                        position: 'absolute',
+                        inset: 0,
+                        pointerEvents: 'none',
+                        overflow: 'hidden',
+                        borderRadius: '0.75rem'
+                      }}>
+                        <div style={{
+                          position: 'absolute',
+                          width: '260px',
+                          height: '260px',
+                          top: '-120px',
+                          left: '-80px',
+                          background: 'radial-gradient(circle at 30% 30%, rgba(59,130,246,0.25), transparent 60%)',
+                          filter: 'blur(20px)'
+                        }} />
+                        <div style={{
+                          position: 'absolute',
+                          width: '240px',
+                          height: '240px',
+                          bottom: '-140px',
+                          right: '-100px',
+                          background: 'radial-gradient(circle at 70% 70%, rgba(16,185,129,0.22), transparent 60%)',
+                          filter: 'blur(20px)'
+                        }} />
+                      </div>
+
+                      <div className="admin-employee-view-header" style={{ position: 'relative', display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem', gap: '1rem' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
+                          <div style={{
+                            width: 80,
+                            height: 80,
+                            borderRadius: '50%',
+                            overflow: 'hidden',
+                            border: '3px solid rgba(255,255,255,0.9)',
+                            boxShadow: '0 10px 30px rgba(0,0,0,0.12)',
+                            background: '#e5e7eb',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            fontWeight: 700,
+                            fontSize: '1.5rem',
+                            color: '#111827'
+                          }}>
+                            {viewingEmployee.photo ? (
+                              <img src={viewingEmployee.photo} alt={viewingEmployee.name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                            ) : (
+                              (viewingEmployee.name || 'E').charAt(0)
+                            )}
+                          </div>
+                          <div>
+                            <h2 style={{ margin: 0, fontSize: '1.5rem', fontWeight: 800, color: '#0f172a' }}>
+                              {viewingEmployee.name || (language === 'en' ? 'Employee' : 'কর্মচারী')}
+                            </h2>
+                            <p style={{ margin: '0.25rem 0 0 0', color: '#475569', fontWeight: 600 }}>{viewingEmployee.designation || viewingEmployee.role || ''}</p>
+                          </div>
+                        </div>
+                        <div className="admin-employee-view-buttons" style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
+                          <button
+                            onClick={() => {
+                              setShowSalesHistory((prev) => !prev)
+                              setShowAssignedDealers(false)
+                            }}
+                            style={{
+                              padding: '0.6rem 1.1rem',
+                              backgroundColor: '#3b82f6',
+                              color: 'white',
+                              border: 'none',
                               borderRadius: '0.5rem',
-                              overflow: 'hidden',
-                              backgroundColor: '#fff'
-                            }}>
-                              <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-                                <thead>
-                                  <tr style={{ backgroundColor: '#f9fafb', borderBottom: '2px solid #e5e7eb' }}>
-                                    <th style={{ padding: '0.75rem', textAlign: 'left', fontSize: '0.875rem', fontWeight: 600, color: '#6b7280' }}>
-                                      {language === 'en' ? 'Date' : 'তারিখ'}
-                                    </th>
-                                    <th style={{ padding: '0.75rem', textAlign: 'left', fontSize: '0.875rem', fontWeight: 600, color: '#6b7280' }}>
-                                      {language === 'en' ? 'Order ID' : 'অর্ডার আইডি'}
-                                    </th>
-                                    <th style={{ padding: '0.75rem', textAlign: 'left', fontSize: '0.875rem', fontWeight: 600, color: '#6b7280' }}>
-                                      {language === 'en' ? 'Dealer' : 'ডিলার'}
-                                    </th>
-                                    <th style={{ padding: '0.75rem', textAlign: 'right', fontSize: '0.875rem', fontWeight: 600, color: '#6b7280' }}>
-                                      {language === 'en' ? 'Amount' : 'পরিমাণ'}
-                                    </th>
-                                    <th style={{ padding: '0.75rem', textAlign: 'left', fontSize: '0.875rem', fontWeight: 600, color: '#6b7280' }}>
-                                      {language === 'en' ? 'Order Created By' : 'অর্ডার তৈরিকারী'}
-                                    </th>
-                                    <th style={{ padding: '0.75rem', textAlign: 'left', fontSize: '0.875rem', fontWeight: 600, color: '#6b7280' }}>
-                                      {language === 'en' ? 'Approved By' : 'অনুমোদনকারী'}
-                                    </th>
-                                    <th style={{ padding: '0.75rem', textAlign: 'left', fontSize: '0.875rem', fontWeight: 600, color: '#6b7280' }}>
-                                      {language === 'en' ? 'Status' : 'অবস্থা'}
-                                    </th>
-                                  </tr>
-                                </thead>
-                                <tbody>
+                              cursor: 'pointer',
+                              fontWeight: 700,
+                              fontSize: '0.9rem',
+                              boxShadow: '0 10px 20px rgba(59,130,246,0.35)'
+                            }}
+                          >
+                            {showSalesHistory
+                              ? (language === 'en' ? 'Back' : 'পেছনে যান')
+                              : (language === 'en' ? 'Sales History' : 'বিক্রয় ইতিহাস')}
+                          </button>
+                          {!showSalesHistory && (
+                            <button
+                              onClick={() => {
+                                setShowAssignedDealers((prev) => !prev)
+                                setShowSalesHistory(false)
+                              }}
+                              style={{
+                                padding: '0.6rem 1.1rem',
+                                backgroundColor: '#10b981',
+                                color: 'white',
+                                border: 'none',
+                                borderRadius: '0.5rem',
+                                cursor: 'pointer',
+                                fontWeight: 700,
+                                fontSize: '0.9rem',
+                                boxShadow: '0 10px 20px rgba(16,185,129,0.35)'
+                              }}
+                            >
+                              {showAssignedDealers
+                                ? (language === 'en' ? 'Back' : 'পেছনে যান')
+                                : (language === 'en' ? 'Dealers' : 'ডিলার')}
+                            </button>
+                          )}
+                          <button
+                            onClick={() => {
+                              setViewingEmployee(null)
+                              setIsEditingEmployee(false)
+                              setEditingEmployeeData(null)
+                            }}
+                            style={{
+                              background: '#e2e8f0',
+                              border: 'none',
+                              padding: '0.4rem 0.65rem',
+                              borderRadius: '0.375rem',
+                              cursor: 'pointer',
+                              fontWeight: 700,
+                              color: '#475569'
+                            }}
+                          >
+                            ×
+                          </button>
+                        </div>
+                      </div>
+
+                      {showSalesHistory ? (
+                        <div className="admin-employee-sales-history-section" style={{ marginTop: '1rem', display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+                          {(() => {
+                            // Check if viewing employee is RSM
+                            const isRSM = (viewingEmployee?.role || '').toLowerCase() === 'rsm'
+
+                            // For RSM: calculate sales target as sum of all salesmen's targets
+                            // For others: use their own sales target
+                            // For RSM: use synced salesTarget from settings (or sum sum if 0/missing) -> Actually user wants synced target.
+                            // Let's use viewingEmployee.salesTarget if available (which we synced).
+                            // Logic: If isRSM && viewingEmployee.salesTarget > 0 => use it. Else => sum.
+                            const syncedTarget = parseFloat(viewingEmployee.salesTarget) || 0
+                            const calculatedSalesTarget = (isRSM && syncedTarget > 0)
+                              ? syncedTarget
+                              : (isRSM
+                                ? (employees || []).reduce((sum, emp) => {
+                                  if ((emp.role || '').toLowerCase() === 'salesman') {
+                                    return sum + (parseFloat(emp.salesTarget) || 0)
+                                  }
+                                  return sum
+                                }, 0)
+                                : (parseFloat(viewingEmployee.salesTarget) || 0)
+                              )
+
+                            // Calculate individual employee's total collection and total due
+                            // Include both employee-created orders AND admin-created orders for assigned dealers
+                            const employeeId = viewingEmployee?._id || ''
+
+                            // Get all dealers assigned to this employee
+                            const assignedDealerIds = (dealers || [])
+                              .filter(dealer => {
+                                const assignedToId = dealer.assignedTo?._id || dealer.assignedTo || ''
+                                return String(assignedToId) === String(employeeId)
+                              })
+                              .map(dealer => ({
+                                _id: String(dealer._id || ''),
+                                dealerId: String(dealer.dealerId || '')
+                              }))
+                              .filter(d => d._id || d.dealerId)
+
+                            // Filter orders: employee-created OR admin-created for assigned dealers
+                            const employeeOrders = (orders || []).filter(order => {
+                              const orderRequestedBy = order.requestedBy?._id || order.requestedBy || ''
+                              const isEmployeeOrder = String(orderRequestedBy) === String(employeeId)
+
+                              // Check if this is an admin-created order for an assigned dealer
+                              const isAdminOrder = (order.requestedByRole || '').toLowerCase() === 'admin'
+                              let isAdminOrderForAssignedDealer = false
+
+                              if (isAdminOrder) {
+                                const orderDealerId = order.dealer?._id || order.dealer || ''
+                                const orderDealerIdString = String(orderDealerId)
+                                const orderDealerIdFromDealer = order.dealerId || ''
+
+                                isAdminOrderForAssignedDealer = assignedDealerIds.some(assignedDealer =>
+                                  assignedDealer._id === orderDealerIdString ||
+                                  assignedDealer.dealerId === orderDealerIdFromDealer ||
+                                  (order.dealer && String(order.dealer._id || order.dealer) === assignedDealer._id)
+                                )
+                              }
+
+                              return isEmployeeOrder || isAdminOrderForAssignedDealer
+                            })
+
+                            // Calculate date range for Current Month
+                            const now = new Date()
+                            const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1)
+                            const endOfMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59, 999)
+
+                            // Filter orders by Current Month
+                            // For RSM: Achieved Target = Total Revnue Achieved (All orders) for Current Month
+                            // For others: calculate from own approved orders + admin-created orders for assigned dealers
+                            let employeeAchievedTarget = 0
+                            if (isRSM) {
+                              // RSM gets credit for ALL approved orders in the current month (Company Wide)
+                              // This matches the "Achieve Amount" in Revenue Dashboard
+                              const allOrdersCurrentMonth = (orders || []).filter(order => {
+                                const d = new Date(order.createdAt)
+                                return d >= startOfMonth && d <= endOfMonth
+                              })
+
+                              employeeAchievedTarget = allOrdersCurrentMonth
+                                .filter(order => order.approvalStatus === 'Approved' && order.status !== 'Cancelled')
+                                .reduce((sum, order) => sum + (parseFloat(order.totalPrice || 0) * (order.discountEnabled && order.discountAmount > 0 ? order.discountAmount : 1)), 0)
+
+                            } else {
+                              // Calculate achieved target from:
+                              // 1. Employee-created approved orders (excluding cancelled)
+                              // 2. Admin-created approved orders for dealers assigned to this employee (excluding cancelled)
+                              // 3. FILTERED by Current Month
+                              employeeAchievedTarget = employeeOrders
+                                .filter(order => {
+                                  const d = new Date(order.createdAt)
+                                  return (
+                                    order.approvalStatus === 'Approved' &&
+                                    order.status !== 'Cancelled' &&
+                                    order.approvalStatus !== 'Rejected' &&
+                                    d >= startOfMonth && d <= endOfMonth
+                                  )
+                                }).reduce((sum, order) => {
+                                  return sum + (parseFloat(order.totalPrice || 0) * (order.discountEnabled && order.discountAmount > 0 ? order.discountAmount : 1))
+                                }, 0)
+                            }
+
+                            let employeeTotalCollection = 0
+                            let employeeTotalDue = 0
+
+                            if (isRSM) {
+                              // RSM gets stats from ALL orders in the current month (Company Wide)
+                              const allOrdersCurrentMonth = (orders || []).filter(order => {
+                                const d = new Date(order.createdAt)
+                                return d >= startOfMonth && d <= endOfMonth && order.status !== 'Cancelled' && order.approvalStatus !== 'Rejected'
+                              })
+
+                              employeeTotalCollection = allOrdersCurrentMonth.reduce((sum, order) => {
+                                const paid = Number(order.paidAmount || 0)
+                                const commission = (order.paymentHistory || []).reduce((cSum, p) => cSum + (parseFloat(p.commission) || 0), 0)
+                                return sum + (paid + commission)
+                              }, 0)
+
+                              employeeTotalDue = allOrdersCurrentMonth.reduce((sum, order) => {
+                                const totalPrice = Number(order.totalPrice || 0)
+                                const discount = order.discountEnabled && order.discountAmount > 0 ? order.discountAmount : 1
+                                const grandTotal = totalPrice * discount
+                                const paid = Number(order.paidAmount || 0)
+                                const commission = (order.paymentHistory || []).reduce((cSum, p) => cSum + (parseFloat(p.commission) || 0), 0)
+                                const due = Math.max(0, grandTotal - (paid + commission))
+                                return sum + due
+                              }, 0)
+                            } else {
+                              // Filter employee orders by month
+                              const monthlyEmployeeOrders = employeeOrders.filter(order => {
+                                const d = new Date(order.createdAt)
+                                return d >= startOfMonth && d <= endOfMonth && order.status !== 'Cancelled' && order.approvalStatus !== 'Rejected'
+                              })
+
+                              employeeTotalCollection = monthlyEmployeeOrders.reduce((sum, order) => {
+                                const paid = Number(order.paidAmount || 0)
+                                const commission = (order.paymentHistory || []).reduce((cSum, p) => cSum + (parseFloat(p.commission) || 0), 0)
+                                return sum + (paid + commission)
+                              }, 0)
+
+                              employeeTotalDue = monthlyEmployeeOrders.reduce((sum, order) => {
+                                const totalPrice = Number(order.totalPrice || 0)
+                                const discount = order.discountEnabled && order.discountAmount > 0 ? order.discountAmount : 1
+                                const grandTotal = totalPrice * discount
+                                const paid = Number(order.paidAmount || 0)
+                                const commission = (order.paymentHistory || []).reduce((cSum, p) => cSum + (parseFloat(p.commission) || 0), 0)
+                                const due = Math.max(0, grandTotal - (paid + commission))
+                                return sum + due
+                              }, 0)
+                            }
+
+                            return (
+                              <div className="admin-employee-stats-grid" style={{
+                                display: 'grid',
+                                gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))',
+                                gap: '0.75rem'
+                              }}>
+                                <div style={{ padding: '1rem', borderRadius: '0.5rem', backgroundColor: '#f8fafc', border: '1px solid #e5e7eb' }}>
+                                  <div style={{ fontSize: '0.9rem', color: '#6b7280', fontWeight: 700 }}>
+                                    {language === 'en' ? 'Total Target' : 'মোট টার্গেট'}
+                                  </div>
+                                  <div style={{ fontSize: '1.5rem', fontWeight: 800, color: '#0f172a', marginTop: '0.35rem' }}>
+                                    ৳{Math.round(calculatedSalesTarget || 0).toLocaleString()}
+                                  </div>
+                                </div>
+                                <div style={{ padding: '1rem', borderRadius: '0.5rem', backgroundColor: '#f0fdf4', border: '1px solid #dcfce7' }}>
+                                  <div style={{ fontSize: '0.9rem', color: '#15803d', fontWeight: 700 }}>
+                                    {language === 'en' ? 'Achieved Target' : 'অর্জিত টার্গেট'}
+                                  </div>
+                                  <div style={{ fontSize: '1.5rem', fontWeight: 800, color: '#166534', marginTop: '0.35rem' }}>
+                                    ৳{Math.round(employeeAchievedTarget || 0).toLocaleString()}
+                                  </div>
+                                </div>
+                                <div style={{ padding: '1rem', borderRadius: '0.5rem', backgroundColor: '#eef2ff', border: '1px solid #e0e7ff' }}>
+                                  <div style={{ fontSize: '0.9rem', color: '#4338ca', fontWeight: 700 }}>
+                                    {language === 'en' ? 'Progress' : 'অগ্রগতি'}
+                                  </div>
                                   {(() => {
-                                    // Get all dealers assigned to this employee
+                                    const total = Number(calculatedSalesTarget || 0) || 0
+                                    const achieved = Number(employeeAchievedTarget || 0) || 0
+                                    const pct = total > 0 ? Math.min(100, Math.round((achieved / total) * 100)) : 0
+                                    return (
+                                      <div style={{ marginTop: '0.35rem' }}>
+                                        <div style={{ height: '10px', background: '#e0e7ff', borderRadius: '999px', overflow: 'hidden' }}>
+                                          <div style={{ width: `${pct}%`, height: '100%', background: 'linear-gradient(90deg, #4f46e5, #22c55e)' }} />
+                                        </div>
+                                        <div style={{ marginTop: '0.35rem', fontWeight: 700, color: '#312e81' }}>{pct}%</div>
+                                      </div>
+                                    )
+                                  })()}
+                                </div>
+                                <div style={{ padding: '1rem', borderRadius: '0.5rem', backgroundColor: '#f8fafc', border: '1px solid #e5e7eb' }}>
+                                  <div style={{ fontSize: '0.9rem', color: '#6b7280', fontWeight: 700 }}>
+                                    {language === 'en' ? 'Total Collection' : 'মোট সংগ্রহ'}
+                                  </div>
+                                  <div style={{ fontSize: '1.4rem', fontWeight: 800, color: '#0f172a', marginTop: '0.35rem' }}>
+                                    ৳{Math.round(employeeTotalCollection || 0).toLocaleString()}
+                                  </div>
+                                </div>
+                                <div style={{ padding: '1rem', borderRadius: '0.5rem', backgroundColor: '#fff7ed', border: '1px solid #fed7aa' }}>
+                                  <div style={{ fontSize: '0.9rem', color: '#c2410c', fontWeight: 700 }}>
+                                    {language === 'en' ? 'Total Due' : 'মোট বকেয়া'}
+                                  </div>
+                                  <div style={{ fontSize: '1.4rem', fontWeight: 800, color: '#9a3412', marginTop: '0.35rem' }}>
+                                    ৳{Math.round(employeeTotalDue || 0).toLocaleString()}
+                                  </div>
+                                </div>
+                              </div>
+                            )
+                          })()
+                          }
+
+                          <h3 style={{ fontSize: '1.125rem', fontWeight: 700, color: '#0f172a', margin: '0.25rem 0' }}>
+                            {language === 'en' ? 'Sales History' : 'বিক্রয় ইতিহাস'}
+                          </h3>
+                          {
+                            viewingEmployee.salesHistory && Array.isArray(viewingEmployee.salesHistory) && viewingEmployee.salesHistory.length > 0 ? (
+                              <>
+                                <div className="admin-employee-sales-table-container admin-table-container" style={{
+                                  border: '1px solid #e5e7eb',
+                                  borderRadius: '0.5rem',
+                                  overflow: 'hidden',
+                                  backgroundColor: '#fff'
+                                }}>
+                                  <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                                    <thead>
+                                      <tr style={{ backgroundColor: '#f9fafb', borderBottom: '2px solid #e5e7eb' }}>
+                                        <th style={{ padding: '0.75rem', textAlign: 'left', fontSize: '0.875rem', fontWeight: 600, color: '#6b7280' }}>
+                                          {language === 'en' ? 'Date' : 'তারিখ'}
+                                        </th>
+                                        <th style={{ padding: '0.75rem', textAlign: 'left', fontSize: '0.875rem', fontWeight: 600, color: '#6b7280' }}>
+                                          {language === 'en' ? 'Order ID' : 'অর্ডার আইডি'}
+                                        </th>
+                                        <th style={{ padding: '0.75rem', textAlign: 'left', fontSize: '0.875rem', fontWeight: 600, color: '#6b7280' }}>
+                                          {language === 'en' ? 'Customer' : 'কাস্টমার'}
+                                        </th>
+                                        <th style={{ padding: '0.75rem', textAlign: 'right', fontSize: '0.875rem', fontWeight: 600, color: '#6b7280' }}>
+                                          {language === 'en' ? 'Amount' : 'পরিমাণ'}
+                                        </th>
+                                        <th style={{ padding: '0.75rem', textAlign: 'right', fontSize: '0.875rem', fontWeight: 600, color: '#6b7280' }}>
+                                          {language === 'en' ? 'Grand Total' : 'সর্বমোট'}
+                                        </th>
+                                        <th style={{ padding: '0.75rem', textAlign: 'left', fontSize: '0.875rem', fontWeight: 600, color: '#6b7280' }}>
+                                          {language === 'en' ? 'Order Created By' : 'অর্ডার তৈরিকারী'}
+                                        </th>
+                                        <th style={{ padding: '0.75rem', textAlign: 'left', fontSize: '0.875rem', fontWeight: 600, color: '#6b7280' }}>
+                                          {language === 'en' ? 'Approved By' : 'অনুমোদনকারী'}
+                                        </th>
+                                        <th style={{ padding: '0.75rem', textAlign: 'left', fontSize: '0.875rem', fontWeight: 600, color: '#6b7280' }}>
+                                          {language === 'en' ? 'Status' : 'অবস্থা'}
+                                        </th>
+                                      </tr>
+                                    </thead>
+                                    <tbody>
+                                      {(() => {
+                                        // Get all dealers assigned to this employee
+                                        const employeeId = viewingEmployee?._id || ''
+                                        const assignedDealerIds = (dealers || [])
+                                          .filter(dealer => {
+                                            const assignedToId = dealer.assignedTo?._id || dealer.assignedTo || ''
+                                            return String(assignedToId) === String(employeeId)
+                                          })
+                                          .map(dealer => ({
+                                            _id: String(dealer._id || ''),
+                                            dealerId: String(dealer.dealerId || '')
+                                          }))
+                                          .filter(d => d._id || d.dealerId)
+
+                                        return (viewingEmployee.salesHistory || [])
+                                          .filter((sale) => {
+                                            // Filter out deleted orders - only show if order still exists
+                                            if (!sale || !sale.orderObjectId) return false
+
+                                            const order = (orders || []).find(o => {
+                                              if (!o) return false
+                                              const orderIdMatch = o._id && sale.orderObjectId && (
+                                                String(o._id) === String(sale.orderObjectId) ||
+                                                String(o._id) === String(sale.orderObjectId._id || sale.orderObjectId)
+                                              )
+                                              const orderIdStringMatch = o.orderId && sale.orderId && (
+                                                String(o.orderId) === String(sale.orderId)
+                                              )
+                                              return orderIdMatch || orderIdStringMatch
+                                            })
+
+                                            // Only show if order exists in the orders array
+                                            if (!order) return false
+
+                                            // Verify this order actually belongs to this employee
+                                            const orderRequestedBy = order.requestedBy?._id || order.requestedBy || ''
+                                            const isEmployeeOrder = String(orderRequestedBy) === String(employeeId)
+
+                                            // Check if this is an admin-created order for an assigned dealer
+                                            const isAdminOrder = (order.requestedByRole || '').toLowerCase() === 'admin'
+                                            let isAdminOrderForAssignedDealer = false
+
+                                            if (isAdminOrder) {
+                                              const orderDealerId = order.dealer?._id || order.dealer || ''
+                                              const orderDealerIdString = String(orderDealerId)
+                                              const orderDealerIdFromDealer = order.dealerId || ''
+
+                                              isAdminOrderForAssignedDealer = assignedDealerIds.some(assignedDealer =>
+                                                assignedDealer._id === orderDealerIdString ||
+                                                assignedDealer.dealerId === orderDealerIdFromDealer ||
+                                                (order.dealer && String(order.dealer._id || order.dealer) === assignedDealer._id)
+                                              )
+                                            }
+
+                                            // Only show if order belongs to this employee
+                                            return isEmployeeOrder || isAdminOrderForAssignedDealer
+                                          })
+                                          // Remove duplicates - keep only the first occurrence of each order
+                                          .filter((sale, index, self) => {
+                                            // Get unique identifier for this sale entry
+                                            const saleOrderObjectId = sale.orderObjectId?._id
+                                              ? String(sale.orderObjectId._id)
+                                              : (sale.orderObjectId ? String(sale.orderObjectId) : '')
+                                            const saleOrderId = String(sale.orderId || '')
+
+                                            // Find the first occurrence of this order (by orderObjectId or orderId)
+                                            const firstIndex = self.findIndex(s => {
+                                              const sOrderObjectId = s.orderObjectId?._id
+                                                ? String(s.orderObjectId._id)
+                                                : (s.orderObjectId ? String(s.orderObjectId) : '')
+                                              const sOrderId = String(s.orderId || '')
+
+                                              // Match by orderObjectId (preferred) or orderId
+                                              return (saleOrderObjectId && sOrderObjectId && saleOrderObjectId === sOrderObjectId) ||
+                                                (saleOrderId && sOrderId && saleOrderId === sOrderId && saleOrderId !== '')
+                                            })
+
+                                            // Only keep if this is the first occurrence
+                                            return index === firstIndex
+                                          })
+                                          .map((sale, idx) => {
+                                            // Find the order
+                                            const order = (orders || []).find(o => {
+                                              if (!o) return false
+                                              const orderIdMatch = o._id && sale.orderObjectId && (
+                                                String(o._id) === String(sale.orderObjectId) ||
+                                                String(o._id) === String(sale.orderObjectId._id || sale.orderObjectId)
+                                              )
+                                              const orderIdStringMatch = o.orderId && sale.orderId && (
+                                                String(o.orderId) === String(sale.orderId)
+                                              )
+                                              return orderIdMatch || orderIdStringMatch
+                                            }) || {}
+
+                                            const createdByName = order.requestedByName || order.requestedByRole || '-'
+                                            const approvedByName = order.approvedByName || '-'
+
+                                            return (
+                                              <tr key={idx} style={{ borderBottom: '1px solid #f3f4f6' }}>
+                                                <td style={{ padding: '0.75rem', fontSize: '0.875rem', color: '#111827' }}>
+                                                  {sale.date ? new Date(sale.date).toLocaleDateString() : (sale.createdAt ? new Date(sale.createdAt).toLocaleDateString() : (order.createdAt ? new Date(order.createdAt).toLocaleDateString() : '-'))}
+                                                </td>
+                                                <td style={{ padding: '0.75rem', fontSize: '0.875rem', color: '#111827', fontFamily: 'monospace' }}>
+                                                  {order.orderId || sale.orderId || '-'}
+                                                </td>
+                                                <td style={{ padding: '0.75rem', fontSize: '0.875rem', color: '#111827' }}>
+                                                  {order.dealerName || (order.dealer && order.dealer.name) || sale.dealerName || '-'}
+                                                </td>
+                                                <td style={{ padding: '0.75rem', fontSize: '0.875rem', color: '#111827', fontWeight: 500, textAlign: 'right' }}>
+                                                  ৳{Number(order.totalPrice || sale.amount || sale.totalAmount || 0).toLocaleString()}
+                                                </td>
+                                                <td style={{ padding: '0.75rem', fontSize: '0.875rem', color: '#16a34a', fontWeight: 700, textAlign: 'right' }}>
+                                                  ৳{(() => {
+                                                    const total = parseFloat(order.totalPrice || sale.amount || sale.totalAmount || 0)
+                                                    const discount = order.discountEnabled && order.discountAmount > 0 ? order.discountAmount : 1
+                                                    return (total * discount).toLocaleString()
+                                                  })()}
+                                                </td>
+                                                <td style={{ padding: '0.75rem', fontSize: '0.875rem', color: '#111827' }}>
+                                                  {createdByName}
+                                                </td>
+                                                <td style={{ padding: '0.75rem', fontSize: '0.875rem', color: '#111827' }}>
+                                                  {approvedByName}
+                                                </td>
+                                                <td style={{ padding: '0.75rem' }}>
+                                                  <span style={{
+                                                    padding: '0.25rem 0.5rem',
+                                                    borderRadius: '9999px',
+                                                    fontSize: '0.75rem',
+                                                    fontWeight: 500,
+                                                    backgroundColor: (order.status === 'Delivered' || order.status === 'Completed') ? '#dcfce7' : ((order.status === 'Cancelled' || order.approvalStatus === 'Rejected') ? '#fee2e2' : '#fef9c3'),
+                                                    color: (order.status === 'Delivered' || order.status === 'Completed') ? '#166534' : ((order.status === 'Cancelled' || order.approvalStatus === 'Rejected') ? '#991b1b' : '#854d0e')
+                                                  }}>
+                                                    {order.status || (language === 'en' ? 'Pending' : 'অপেক্ষমান')}
+                                                  </span>
+                                                </td>
+                                              </tr>
+                                            )
+                                          })
+                                      })()}
+                                    </tbody>
+                                  </table>
+                                </div>
+
+                                {/* Mobile Card View for Sales History */}
+                                <div className="mobile-card-container">
+                                  {(() => {
                                     const employeeId = viewingEmployee?._id || ''
                                     const assignedDealerIds = (dealers || [])
                                       .filter(dealer => {
@@ -9499,8 +10076,7 @@ function AdminPage({ language, toggleLanguage, t }) {
                                         // Only keep if this is the first occurrence
                                         return index === firstIndex
                                       })
-                                      .map((sale, idx) => {
-                                        // Find the order
+                                      .map((sale, index) => {
                                         const order = (orders || []).find(o => {
                                           if (!o) return false
                                           const orderIdMatch = o._id && sale.orderObjectId && (
@@ -9513,85 +10089,487 @@ function AdminPage({ language, toggleLanguage, t }) {
                                           return orderIdMatch || orderIdStringMatch
                                         }) || {}
 
-                                        const createdByName = order.requestedByName || order.requestedByRole || '-'
-                                        const approvedByName = order.approvedByName || '-'
-
                                         return (
-                                          <tr key={idx} style={{ borderBottom: '1px solid #f3f4f6' }}>
-                                            <td style={{ padding: '0.75rem', fontSize: '0.875rem', color: '#111827' }}>
-                                              {sale.date ? new Date(sale.date).toLocaleDateString() : (sale.createdAt ? new Date(sale.createdAt).toLocaleDateString() : '-')}
-                                            </td>
-                                            <td style={{ padding: '0.75rem', fontSize: '0.875rem', color: '#111827', fontFamily: 'monospace' }}>
-                                              {order.orderId || sale.orderId || '-'}
-                                            </td>
-                                            <td style={{ padding: '0.75rem', fontSize: '0.875rem', color: '#111827' }}>
-                                              {order.dealerName || (order.dealer && order.dealer.name) || sale.dealerName || '-'}
-                                            </td>
-                                            <td style={{ padding: '0.75rem', fontSize: '0.875rem', color: '#111827', fontWeight: 600, textAlign: 'right' }}>
-                                              ৳{Number(sale.amount || sale.totalAmount || 0).toLocaleString()}
-                                            </td>
-                                            <td style={{ padding: '0.75rem', fontSize: '0.875rem', color: '#111827' }}>
-                                              {createdByName}
-                                            </td>
-                                            <td style={{ padding: '0.75rem', fontSize: '0.875rem', color: '#111827' }}>
-                                              {approvedByName}
-                                            </td>
-                                            <td style={{ padding: '0.75rem' }}>
-                                              <span style={{
-                                                padding: '0.25rem 0.5rem',
-                                                borderRadius: '9999px',
-                                                fontSize: '0.75rem',
-                                                fontWeight: 500,
-                                                backgroundColor: '#dcfce7',
-                                                color: '#166534'
+                                          <div className="mobile-card" key={index}>
+                                            <div className="mobile-card-header">
+                                              <div className="mobile-card-avatar" style={{ backgroundColor: '#f0f9ff', color: '#0369a1' }}>
+                                                {(order.dealerName || order.dealer?.name || order.orderId || '?').charAt(0).toUpperCase()}
+                                              </div>
+                                              <div className="mobile-card-header-text">
+                                                <div className="mobile-card-title">
+                                                  {order.orderId || sale.orderId || 'N/A'}
+                                                </div>
+                                                <div className="mobile-card-subtitle">
+                                                  {sale.date ? new Date(sale.date).toLocaleDateString() : (sale.createdAt ? new Date(sale.createdAt).toLocaleDateString() : (order.createdAt ? new Date(order.createdAt).toLocaleDateString() : '-'))}
+                                                </div>
+                                              </div>
+                                              <div className="mobile-card-status-badge" style={{
+                                                position: 'static',
+                                                backgroundColor: (order.status === 'Delivered' || order.status === 'Completed') ? '#dcfce7' : ((order.status === 'Cancelled' || order.approvalStatus === 'Rejected') ? '#fee2e2' : '#fef9c3'),
+                                                color: (order.status === 'Delivered' || order.status === 'Completed') ? '#166534' : ((order.status === 'Cancelled' || order.approvalStatus === 'Rejected') ? '#991b1b' : '#854d0e')
                                               }}>
-                                                {language === 'en' ? 'Completed' : 'সম্পন্ন'}
-                                              </span>
-                                            </td>
-                                          </tr>
+                                                {order.status || (language === 'en' ? 'Pending' : 'অপেক্ষমান')}
+                                              </div>
+                                            </div>
+                                            <div className="mobile-card-body">
+                                              <div className="mobile-card-row">
+                                                <span className="mobile-card-label">{language === 'en' ? 'Shop Name' : 'দোকানের নাম'}</span>
+                                                <span className="mobile-card-value">{(order.dealer && order.dealer.shopName) || '-'}</span>
+                                              </div>
+                                              <div className="mobile-card-row">
+                                                <span className="mobile-card-label">{language === 'en' ? 'Customer' : 'কাস্টমার'}</span>
+                                                <span className="mobile-card-value">{order.dealerName || (order.dealer && order.dealer.name) || 'N/A'}</span>
+                                              </div>
+                                              <div className="mobile-card-row">
+                                                <span className="mobile-card-label">{language === 'en' ? 'CID' : 'সিআইডি'}</span>
+                                                <span className="mobile-card-value">{order.dealerId || (order.dealer && order.dealer.dealerId) || '-'}</span>
+                                              </div>
+                                              <div className="mobile-card-row">
+                                                <span className="mobile-card-label">{language === 'en' ? 'Amount' : 'পরিমাণ'}</span>
+                                                <span className="mobile-card-value" style={{ fontWeight: 500, color: '#475569' }}>
+                                                  ৳{Number(order.totalPrice || sale.amount || sale.totalAmount || 0).toLocaleString()}
+                                                </span>
+                                              </div>
+                                              <div className="mobile-card-row">
+                                                <span className="mobile-card-label">{language === 'en' ? 'Grand Total' : 'সর্বমোট'}</span>
+                                                <span className="mobile-card-value" style={{ fontWeight: 700, color: '#16a34a' }}>
+                                                  ৳{(() => {
+                                                    const total = parseFloat(order.totalPrice || sale.amount || sale.totalAmount || 0)
+                                                    const discount = order.discountEnabled && order.discountAmount > 0 ? order.discountAmount : 1
+                                                    return (total * discount).toLocaleString()
+                                                  })()}
+                                                </span>
+                                              </div>
+                                              <div className="mobile-card-row">
+                                                <span className="mobile-card-label">{language === 'en' ? 'Created By' : 'তৈরি করেছেন'}</span>
+                                                <span className="mobile-card-value">{order.requestedByName || order.requestedByRole || '-'}</span>
+                                              </div>
+                                              <div className="mobile-card-row">
+                                                <span className="mobile-card-label">{language === 'en' ? 'Approved By' : 'অনুমোদনকারী'}</span>
+                                                <span className="mobile-card-value">{order.approvedByName || '-'}</span>
+                                              </div>
+                                            </div>
+                                          </div>
                                         )
                                       })
                                   })()}
-                                </tbody>
-                              </table>
-                            </div>
+                                </div>
+                              </>
+                            ) : (
+                              <div style={{
+                                padding: '1rem',
+                                borderRadius: '0.5rem',
+                                border: '1px solid #e5e7eb',
+                                backgroundColor: '#fff',
+                                color: '#475569',
+                                fontWeight: 600
+                              }}>
+                                {language === 'en' ? 'No sales history found.' : 'কোন বিক্রয় ইতিহাস পাওয়া যায়নি।'}
+                              </div>
+                            )
+                          }
+                        </div>
+                      ) : showAssignedDealers ? (
+                        <div className="admin-employee-assigned-dealers-section" style={{ marginTop: '1rem', display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+                          <h3 style={{ fontSize: '1.125rem', fontWeight: 700, color: '#0f172a', margin: '0.25rem 0' }}>
+                            {language === 'en' ? 'Assigned Dealers' : 'নির্ধারিত ডিলার'}
+                          </h3>
+                          {(() => {
+                            // Filter dealers assigned to this employee
+                            const assignedDealers = (dealers || []).filter(dealer => {
+                              const assignedToId = dealer.assignedTo?._id || dealer.assignedTo || ''
+                              const employeeId = viewingEmployee?._id || ''
+                              return String(assignedToId) === String(employeeId)
+                            })
 
-                            {/* Mobile Card View for Sales History */}
-                            <div className="mobile-card-container">
-                              {(() => {
-                                const employeeId = viewingEmployee?._id || ''
-                                const assignedDealerIds = (dealers || [])
-                                  .filter(dealer => {
-                                    const assignedToId = dealer.assignedTo?._id || dealer.assignedTo || ''
-                                    return String(assignedToId) === String(employeeId)
-                                  })
-                                  .map(dealer => ({
-                                    _id: String(dealer._id || ''),
-                                    dealerId: String(dealer.dealerId || '')
-                                  }))
-                                  .filter(d => d._id || d.dealerId)
+                            if (assignedDealers.length === 0) {
+                              return (
+                                <div style={{
+                                  padding: '2rem',
+                                  textAlign: 'center',
+                                  backgroundColor: '#f9fafb',
+                                  borderRadius: '0.5rem',
+                                  border: '1px solid #e5e7eb',
+                                  color: '#6b7280'
+                                }}>
+                                  {language === 'en' ? 'No dealers assigned to this employee' : 'এই কর্মচারীর জন্য কোন ডিলার নির্ধারিত নেই'}
+                                </div>
+                              )
+                            }
 
-                                return (viewingEmployee.salesHistory || [])
-                                  .filter((sale) => {
-                                    // Filter out deleted orders - only show if order still exists
-                                    if (!sale || !sale.orderObjectId) return false
+                            return (
+                              <>
+                                <div className="admin-employee-dealers-table-container admin-table-container" style={{
+                                  border: '1px solid #e5e7eb',
+                                  borderRadius: '0.5rem',
+                                  overflow: 'hidden',
+                                  backgroundColor: '#fff'
+                                }}>
+                                  <table className="admin-table" style={{ width: '100%', borderCollapse: 'collapse' }}>
+                                    <thead>
+                                      <tr style={{ backgroundColor: '#f9fafb', borderBottom: '2px solid #e5e7eb' }}>
+                                        <th style={{ padding: '0.75rem', textAlign: 'left', fontSize: '0.875rem', fontWeight: 600, color: '#6b7280' }}>
+                                          {language === 'en' ? 'Dealer ID' : 'ডিলার আইডি'}
+                                        </th>
+                                        <th style={{ padding: '0.75rem', textAlign: 'left', fontSize: '0.875rem', fontWeight: 600, color: '#6b7280' }}>
+                                          {language === 'en' ? 'Dealer Name' : 'ডিলারের নাম'}
+                                        </th>
+                                        <th style={{ padding: '0.75rem', textAlign: 'left', fontSize: '0.875rem', fontWeight: 600, color: '#6b7280' }}>
+                                          {language === 'en' ? 'Contact' : 'যোগাযোগ'}
+                                        </th>
+                                        <th style={{ padding: '0.75rem', textAlign: 'left', fontSize: '0.875rem', fontWeight: 600, color: '#6b7280' }}>
+                                          {language === 'en' ? 'Address' : 'ঠিকানা'}
+                                        </th>
+                                        <th style={{ padding: '0.75rem', textAlign: 'right', fontSize: '0.875rem', fontWeight: 600, color: '#6b7280' }}>
+                                          {language === 'en' ? 'Due Amount' : 'বকেয়া পরিমাণ'}
+                                        </th>
+                                      </tr>
+                                    </thead>
+                                    <tbody>
+                                      {assignedDealers.map((dealer, idx) => {
+                                        // Calculate due amount for this dealer (excluding cancelled orders)
+                                        const dealerOrders = (orders || []).filter(order => {
+                                          const orderDealerId = order.dealerId || order.dealer?._id || ''
+                                          const dealerId = dealer.dealerId || dealer._id || ''
+                                          return (
+                                            (String(orderDealerId) === String(dealerId) ||
+                                              String(order.dealer?._id) === String(dealer._id)) &&
+                                            order.status !== 'Cancelled' &&
+                                            order.approvalStatus !== 'Rejected'
+                                          )
+                                        })
 
-                                    const order = (orders || []).find(o => {
-                                      if (!o) return false
-                                      const orderIdMatch = o._id && sale.orderObjectId && (
-                                        String(o._id) === String(sale.orderObjectId) ||
-                                        String(o._id) === String(sale.orderObjectId._id || sale.orderObjectId)
+                                        const dealerDueAmount = dealerOrders.reduce((sum, order) => {
+                                          const totalPrice = Number(order.totalPrice || 0)
+                                          const discount = order.discountEnabled && order.discountAmount > 0 ? order.discountAmount : 1
+                                          const grandTotal = totalPrice * discount
+                                          const paid = Number(order.paidAmount || 0)
+                                          const commission = (order.paymentHistory || []).reduce((cSum, p) => cSum + (parseFloat(p.commission) || 0), 0)
+                                          const due = Math.max(0, grandTotal - (paid + commission))
+                                          return sum + due
+                                        }, 0)
+
+                                        return (
+                                          <tr key={idx} style={{ borderBottom: '1px solid #f3f4f6' }}>
+                                            <td style={{ padding: '0.75rem', fontSize: '0.875rem', color: '#111827', fontFamily: 'monospace' }}>
+                                              {dealer.dealerId || '-'}
+                                            </td>
+                                            <td style={{ padding: '0.75rem', fontSize: '0.875rem', color: '#111827', fontWeight: 600 }}>
+                                              {dealer.name || '-'}
+                                            </td>
+                                            <td style={{ padding: '0.75rem', fontSize: '0.875rem', color: '#374151' }}>
+                                              {dealer.phone || '-'}
+                                            </td>
+                                            <td style={{ padding: '0.75rem', fontSize: '0.875rem', color: '#374151' }}>
+                                              {dealer.address || '-'}
+                                            </td>
+                                            <td style={{ padding: '0.75rem', fontSize: '0.875rem', color: dealerDueAmount > 0 ? '#dc2626' : '#16a34a', fontWeight: 600, textAlign: 'right' }}>
+                                              ৳{dealerDueAmount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                            </td>
+                                          </tr>
+                                        )
+                                      })}
+                                    </tbody>
+                                  </table>
+                                </div>
+                                <div className="mobile-card-container">
+                                  {assignedDealers.map((dealer, idx) => {
+                                    const dealerOrders = (orders || []).filter(order => {
+                                      const orderDealerId = order.dealerId || order.dealer?._id || ''
+                                      const dealerId = dealer.dealerId || dealer._id || ''
+                                      return (
+                                        (String(orderDealerId) === String(dealerId) ||
+                                          String(order.dealer?._id) === String(dealer._id)) &&
+                                        order.status !== 'Cancelled' &&
+                                        order.approvalStatus !== 'Rejected'
                                       )
-                                      const orderIdStringMatch = o.orderId && sale.orderId && (
-                                        String(o.orderId) === String(sale.orderId)
-                                      )
-                                      return orderIdMatch || orderIdStringMatch
                                     })
+                                    const dealerDueAmount = dealerOrders.reduce((sum, order) => {
+                                      const totalPrice = Number(order.totalPrice || 0)
+                                      const discount = order.discountEnabled && order.discountAmount > 0 ? order.discountAmount : 1
+                                      const grandTotal = totalPrice * discount
+                                      const paid = Number(order.paidAmount || 0)
+                                      const commission = (order.paymentHistory || []).reduce((cSum, p) => cSum + (parseFloat(p.commission) || 0), 0)
+                                      const due = Math.max(0, grandTotal - (paid + commission))
+                                      return sum + due
+                                    }, 0)
 
-                                    // Only show if order exists in the orders array
-                                    if (!order) return false
+                                    return (
+                                      <div key={idx} className="mobile-card" style={{ padding: '0.75rem', border: '1px solid #e2e8f0', boxShadow: 'none' }}>
+                                        <div className="mobile-card-row">
+                                          <span className="mobile-card-label" style={{ fontWeight: 600, color: '#475569' }}>{language === 'en' ? 'Dealer ID' : 'ডিলার আইডি'}</span>
+                                          <span className="mobile-card-value">{dealer.dealerId || '-'}</span>
+                                        </div>
+                                        <div className="mobile-card-row">
+                                          <span className="mobile-card-label">{language === 'en' ? 'Dealer Name' : 'ডিলারের নাম'}</span>
+                                          <span className="mobile-card-value" style={{ fontWeight: 600 }}>{dealer.name || '-'}</span>
+                                        </div>
+                                        <div className="mobile-card-row">
+                                          <span className="mobile-card-label">{language === 'en' ? 'Contact' : 'যোগাযোগ'}</span>
+                                          <span className="mobile-card-value">{dealer.phone || '-'}</span>
+                                        </div>
+                                        <div className="mobile-card-row">
+                                          <span className="mobile-card-label">{language === 'en' ? 'Address' : 'ঠিকানা'}</span>
+                                          <span className="mobile-card-value" style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: '150px' }}>{dealer.address || '-'}</span>
+                                        </div>
+                                        <div className="mobile-card-row">
+                                          <span className="mobile-card-label">{language === 'en' ? 'Due Amount' : 'বকেয়া পরিমাণ'}</span>
+                                          <span className="mobile-card-value" style={{ color: dealerDueAmount > 0 ? '#dc2626' : '#16a34a', fontWeight: 600 }}>৳{dealerDueAmount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                                        </div>
+                                      </div>
+                                    )
+                                  })}
+                                </div>
+                              </>
+                            )
+                          })()}
+                        </div>
+                      ) : (
+                        <div className="admin-employee-details-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))', gap: '1rem', position: 'relative', zIndex: 1 }}>
+                          {/* Employee ID */}
+                          <div style={{ padding: '1rem', backgroundColor: '#f9fafb', borderRadius: '0.375rem' }}>
+                            <label style={{ fontSize: '0.875rem', color: '#6b7280', fontWeight: 600 }}>
+                              {language === 'en' ? 'Employee ID' : 'কর্মচারী আইডি'}
+                            </label>
+                            <p style={{ margin: '0.5rem 0 0 0', fontSize: '1rem', fontWeight: 600, color: '#111827' }}>
+                              {(isEditingEmployee ? editingEmployeeData : viewingEmployee).employeeId || 'N/A'}
+                            </p>
+                          </div>
 
-                                    // Verify this order actually belongs to this employee
+                          {/* Name */}
+                          <div style={{ padding: '1rem', backgroundColor: '#f9fafb', borderRadius: '0.375rem' }}>
+                            <label style={{ fontSize: '0.875rem', color: '#6b7280', fontWeight: 600 }}>
+                              {language === 'en' ? 'Name' : 'নাম'}
+                            </label>
+                            {isEditingEmployee ? (
+                              <input
+                                type="text"
+                                value={editingEmployeeData?.name || ''}
+                                onChange={(e) => setEditingEmployeeData({ ...editingEmployeeData, name: e.target.value })}
+                                style={{
+                                  marginTop: '0.5rem',
+                                  width: '100%',
+                                  padding: '0.5rem',
+                                  border: '1px solid #d1d5db',
+                                  borderRadius: '0.375rem',
+                                  fontSize: '1rem'
+                                }}
+                              />
+                            ) : (
+                              <p style={{ margin: '0.5rem 0 0 0', fontSize: '1rem', color: '#111827' }}>
+                                {viewingEmployee.name || 'N/A'}
+                              </p>
+                            )}
+                          </div>
+
+                          {/* Email */}
+                          <div style={{ padding: '1rem', backgroundColor: '#f9fafb', borderRadius: '0.375rem' }}>
+                            <label style={{ fontSize: '0.875rem', color: '#6b7280', fontWeight: 600 }}>
+                              {language === 'en' ? 'Email' : 'ইমেইল'}
+                            </label>
+                            {isEditingEmployee ? (
+                              <input
+                                type="email"
+                                value={editingEmployeeData?.email || ''}
+                                onChange={(e) => setEditingEmployeeData({ ...editingEmployeeData, email: e.target.value })}
+                                style={{
+                                  marginTop: '0.5rem',
+                                  width: '100%',
+                                  padding: '0.5rem',
+                                  border: '1px solid #d1d5db',
+                                  borderRadius: '0.375rem',
+                                  fontSize: '1rem'
+                                }}
+                              />
+                            ) : (
+                              <p style={{ margin: '0.5rem 0 0 0', fontSize: '1rem', color: '#111827' }}>
+                                {viewingEmployee.email || 'N/A'}
+                              </p>
+                            )}
+                          </div>
+
+                          {/* Phone */}
+                          <div style={{ padding: '1rem', backgroundColor: '#f9fafb', borderRadius: '0.375rem' }}>
+                            <label style={{ fontSize: '0.875rem', color: '#6b7280', fontWeight: 600 }}>
+                              {language === 'en' ? 'Phone' : 'ফোন'}
+                            </label>
+                            {isEditingEmployee ? (
+                              <input
+                                type="text"
+                                value={editingEmployeeData?.phone || ''}
+                                onChange={(e) => setEditingEmployeeData({ ...editingEmployeeData, phone: e.target.value })}
+                                style={{
+                                  marginTop: '0.5rem',
+                                  width: '100%',
+                                  padding: '0.5rem',
+                                  border: '1px solid #d1d5db',
+                                  borderRadius: '0.375rem',
+                                  fontSize: '1rem'
+                                }}
+                              />
+                            ) : (
+                              <p style={{ margin: '0.5rem 0 0 0', fontSize: '1rem', color: '#111827' }}>
+                                {viewingEmployee.phone || 'N/A'}
+                              </p>
+                            )}
+                          </div>
+
+                          {/* Address */}
+                          <div className="admin-employee-detail-full-width" style={{ padding: '1rem', backgroundColor: '#f9fafb', borderRadius: '0.375rem', gridColumn: 'span 2' }}>
+                            <label style={{ fontSize: '0.875rem', color: '#6b7280', fontWeight: 600 }}>
+                              {language === 'en' ? 'Address' : 'ঠিকানা'}
+                            </label>
+                            {isEditingEmployee ? (
+                              <textarea
+                                value={editingEmployeeData?.address || ''}
+                                onChange={(e) => setEditingEmployeeData({ ...editingEmployeeData, address: e.target.value })}
+                                rows={3}
+                                style={{
+                                  marginTop: '0.5rem',
+                                  width: '100%',
+                                  padding: '0.5rem',
+                                  border: '1px solid #d1d5db',
+                                  borderRadius: '0.375rem',
+                                  fontSize: '1rem',
+                                  fontFamily: 'inherit',
+                                  resize: 'vertical'
+                                }}
+                              />
+                            ) : (
+                              <p style={{ margin: '0.5rem 0 0 0', fontSize: '1rem', color: '#111827', whiteSpace: 'pre-wrap' }}>
+                                {viewingEmployee.address || 'N/A'}
+                              </p>
+                            )}
+                          </div>
+
+                          {/* NID */}
+                          <div style={{ padding: '1rem', backgroundColor: '#f9fafb', borderRadius: '0.375rem' }}>
+                            <label style={{ fontSize: '0.875rem', color: '#6b7280', fontWeight: 600 }}>
+                              {language === 'en' ? 'NID (National ID)' : 'জাতীয় পরিচয়পত্র'}
+                            </label>
+                            {isEditingEmployee ? (
+                              <input
+                                type="text"
+                                value={editingEmployeeData?.nid || ''}
+                                onChange={(e) => setEditingEmployeeData({ ...editingEmployeeData, nid: e.target.value })}
+                                style={{
+                                  marginTop: '0.5rem',
+                                  width: '100%',
+                                  padding: '0.5rem',
+                                  border: '1px solid #d1d5db',
+                                  borderRadius: '0.375rem',
+                                  fontSize: '1rem'
+                                }}
+                              />
+                            ) : (
+                              <p style={{ margin: '0.5rem 0 0 0', fontSize: '1rem', color: '#111827' }}>
+                                {viewingEmployee.nid || 'N/A'}
+                              </p>
+                            )}
+                          </div>
+
+                          {/* Salary */}
+                          <div style={{ padding: '1rem', backgroundColor: '#f9fafb', borderRadius: '0.375rem' }}>
+                            <label style={{ fontSize: '0.875rem', color: '#6b7280', fontWeight: 600 }}>
+                              {language === 'en' ? 'Salary' : 'বেতন'}
+                            </label>
+                            {isEditingEmployee ? (
+                              <input
+                                type="number"
+                                value={editingEmployeeData?.salary || ''}
+                                onChange={(e) => setEditingEmployeeData({ ...editingEmployeeData, salary: e.target.value })}
+                                step="0.01"
+                                min="0"
+                                style={{
+                                  marginTop: '0.5rem',
+                                  width: '100%',
+                                  padding: '0.5rem',
+                                  border: '1px solid #d1d5db',
+                                  borderRadius: '0.375rem',
+                                  fontSize: '1rem'
+                                }}
+                              />
+                            ) : (
+                              <p style={{ margin: '0.5rem 0 0 0', fontSize: '1rem', color: '#111827', fontWeight: 600 }}>
+                                {viewingEmployee.salary ? `${language === 'en' ? '৳' : '৳'} ${parseFloat(viewingEmployee.salary).toLocaleString()}` : 'N/A'}
+                              </p>
+                            )}
+                          </div>
+
+                          {/* Sales Target */}
+                          <div style={{ padding: '1rem', backgroundColor: '#f9fafb', borderRadius: '0.375rem' }}>
+                            <label style={{ fontSize: '0.875rem', color: '#6b7280', fontWeight: 600 }}>
+                              {language === 'en' ? 'Sales Target' : 'বিক্রয় লক্ষ্য'}
+                            </label>
+                            {isEditingEmployee ? (
+                              <input
+                                type="number"
+                                value={editingEmployeeData?.salesTarget || ''}
+                                onChange={(e) => setEditingEmployeeData({ ...editingEmployeeData, salesTarget: e.target.value })}
+                                step="0.01"
+                                min="0"
+                                disabled={(viewingEmployee?.role || '').toLowerCase() === 'rsm'}
+                                style={{
+                                  marginTop: '0.5rem',
+                                  width: '100%',
+                                  padding: '0.5rem',
+                                  border: '1px solid #d1d5db',
+                                  borderRadius: '0.375rem',
+                                  fontSize: '1rem',
+                                  backgroundColor: (viewingEmployee?.role || '').toLowerCase() === 'rsm' ? '#f3f4f6' : 'white'
+                                }}
+                              />
+                            ) : (
+                              <p style={{ margin: '0.5rem 0 0 0', fontSize: '1rem', color: '#111827', fontWeight: 600 }}>
+                                {(() => {
+                                  const isRSM = (viewingEmployee?.role || '').toLowerCase() === 'rsm'
+                                  const calculatedTarget = isRSM
+                                    ? (employees || []).reduce((sum, emp) => {
+                                      if ((emp.role || '').toLowerCase() === 'salesman') {
+                                        return sum + (parseFloat(emp.salesTarget) || 0)
+                                      }
+                                      return sum
+                                    }, 0)
+                                    : (parseFloat(viewingEmployee.salesTarget) || 0)
+                                  return calculatedTarget > 0 ? `৳ ${Number(calculatedTarget).toLocaleString()}` : 'N/A'
+                                })()}
+                              </p>
+                            )}
+                          </div>
+
+                          {/* Achieved Target */}
+                          <div style={{ padding: '1rem', backgroundColor: '#f9fafb', borderRadius: '0.375rem' }}>
+                            <label style={{ fontSize: '0.875rem', color: '#6b7280', fontWeight: 600 }}>
+                              {language === 'en' ? 'Achieved Target' : 'অর্জিত লক্ষ্য'}
+                            </label>
+                            <p style={{ margin: '0.5rem 0 0 0', fontSize: '1rem', color: '#111827', fontWeight: 600 }}>
+                              {(() => {
+                                const isRSM = (viewingEmployee?.role || '').toLowerCase() === 'rsm'
+                                let achievedTarget = 0
+
+                                if (isRSM) {
+                                  // Sum all employees' achievedTarget values
+                                  achievedTarget = (employees || []).reduce((sum, emp) => {
+                                    return sum + (parseFloat(emp.achievedTarget) || 0)
+                                  }, 0)
+                                } else {
+                                  // Calculate achieved target from own approved orders + admin-created orders for assigned dealers
+                                  const employeeId = viewingEmployee?._id || ''
+
+                                  // Get all dealers assigned to this employee
+                                  const assignedDealerIds = (dealers || [])
+                                    .filter(dealer => {
+                                      const assignedToId = dealer.assignedTo?._id || dealer.assignedTo || ''
+                                      return String(assignedToId) === String(employeeId)
+                                    })
+                                    .map(dealer => ({
+                                      _id: String(dealer._id || ''),
+                                      dealerId: String(dealer.dealerId || '')
+                                    }))
+                                    .filter(d => d._id || d.dealerId)
+
+                                  // Filter orders: employee-created OR admin-created for assigned dealers
+                                  const employeeOrders = (orders || []).filter(order => {
                                     const orderRequestedBy = order.requestedBy?._id || order.requestedBy || ''
                                     const isEmployeeOrder = String(orderRequestedBy) === String(employeeId)
 
@@ -9611,480 +10589,37 @@ function AdminPage({ language, toggleLanguage, t }) {
                                       )
                                     }
 
-                                    // Only show if order belongs to this employee
                                     return isEmployeeOrder || isAdminOrderForAssignedDealer
                                   })
-                                  // Remove duplicates - keep only the first occurrence of each order
-                                  .filter((sale, index, self) => {
-                                    // Get unique identifier for this sale entry
-                                    const saleOrderObjectId = sale.orderObjectId?._id
-                                      ? String(sale.orderObjectId._id)
-                                      : (sale.orderObjectId ? String(sale.orderObjectId) : '')
-                                    const saleOrderId = String(sale.orderId || '')
 
-                                    // Find the first occurrence of this order (by orderObjectId or orderId)
-                                    const firstIndex = self.findIndex(s => {
-                                      const sOrderObjectId = s.orderObjectId?._id
-                                        ? String(s.orderObjectId._id)
-                                        : (s.orderObjectId ? String(s.orderObjectId) : '')
-                                      const sOrderId = String(s.orderId || '')
-
-                                      // Match by orderObjectId (preferred) or orderId
-                                      return (saleOrderObjectId && sOrderObjectId && saleOrderObjectId === sOrderObjectId) ||
-                                        (saleOrderId && sOrderId && saleOrderId === sOrderId && saleOrderId !== '')
-                                    })
-
-                                    // Only keep if this is the first occurrence
-                                    return index === firstIndex
-                                  })
-                                  .map((sale, index) => {
-                                    const order = (orders || []).find(o => {
-                                      if (!o) return false
-                                      const orderIdMatch = o._id && sale.orderObjectId && (
-                                        String(o._id) === String(sale.orderObjectId) ||
-                                        String(o._id) === String(sale.orderObjectId._id || sale.orderObjectId)
-                                      )
-                                      const orderIdStringMatch = o.orderId && sale.orderId && (
-                                        String(o.orderId) === String(sale.orderId)
-                                      )
-                                      return orderIdMatch || orderIdStringMatch
-                                    }) || {}
-
-                                    return (
-                                      <div className="mobile-card" key={index}>
-                                        <div className="mobile-card-header">
-                                          <div className="mobile-card-avatar" style={{ backgroundColor: '#f0f9ff', color: '#0369a1' }}>
-                                            {(order.dealerName || order.dealer?.name || order.orderId || '?').charAt(0).toUpperCase()}
-                                          </div>
-                                          <div className="mobile-card-header-text">
-                                            <div className="mobile-card-title">
-                                              {order.orderId || sale.orderId || 'N/A'}
-                                            </div>
-                                            <div className="mobile-card-subtitle">
-                                              {new Date(sale.date || sale.createdAt).toLocaleDateString()}
-                                            </div>
-                                          </div>
-                                          <div className="mobile-card-status-badge" style={{
-                                            position: 'static',
-                                            backgroundColor: '#dcfce7',
-                                            color: '#166534'
-                                          }}>
-                                            {language === 'en' ? 'Completed' : 'সম্পন্ন'}
-                                          </div>
-                                        </div>
-                                        <div className="mobile-card-body">
-                                          <div className="mobile-card-row">
-                                            <span className="mobile-card-label">{language === 'en' ? 'Dealer' : 'ডিলার'}</span>
-                                            <span className="mobile-card-value">{order.dealerName || order.dealer || 'N/A'}</span>
-                                          </div>
-                                          <div className="mobile-card-row">
-                                            <span className="mobile-card-label">{language === 'en' ? 'Amount' : 'পরিমাণ'}</span>
-                                            <span className="mobile-card-value" style={{ fontWeight: 600, color: '#16a34a' }}>
-                                              ৳{Number(sale.amount || 0).toLocaleString()}
-                                            </span>
-                                          </div>
-                                          <div className="mobile-card-row">
-                                            <span className="mobile-card-label">{language === 'en' ? 'Created By' : 'তৈরি করেছেন'}</span>
-                                            <span className="mobile-card-value">{order.requestedByName || order.requestedByRole || '-'}</span>
-                                          </div>
-                                          <div className="mobile-card-row">
-                                            <span className="mobile-card-label">{language === 'en' ? 'Approved By' : 'অনুমোদনকারী'}</span>
-                                            <span className="mobile-card-value">{order.approvedByName || '-'}</span>
-                                          </div>
-                                        </div>
-                                      </div>
-                                    )
-                                  })
-                              })()}
-                            </div>
-                          </>
-                        ) : (
-                          <div style={{
-                            padding: '1rem',
-                            borderRadius: '0.5rem',
-                            border: '1px solid #e5e7eb',
-                            backgroundColor: '#fff',
-                            color: '#475569',
-                            fontWeight: 600
-                          }}>
-                            {language === 'en' ? 'No sales history found.' : 'কোন বিক্রয় ইতিহাস পাওয়া যায়নি।'}
-                          </div>
-                        )}
-                      </div>
-                    ) : showAssignedDealers ? (
-                      <div className="admin-employee-assigned-dealers-section" style={{ marginTop: '1rem', display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-                        <h3 style={{ fontSize: '1.125rem', fontWeight: 700, color: '#0f172a', margin: '0.25rem 0' }}>
-                          {language === 'en' ? 'Assigned Dealers' : 'নির্ধারিত ডিলার'}
-                        </h3>
-                        {(() => {
-                          // Filter dealers assigned to this employee
-                          const assignedDealers = (dealers || []).filter(dealer => {
-                            const assignedToId = dealer.assignedTo?._id || dealer.assignedTo || ''
-                            const employeeId = viewingEmployee?._id || ''
-                            return String(assignedToId) === String(employeeId)
-                          })
-
-                          if (assignedDealers.length === 0) {
-                            return (
-                              <div style={{
-                                padding: '2rem',
-                                textAlign: 'center',
-                                backgroundColor: '#f9fafb',
-                                borderRadius: '0.5rem',
-                                border: '1px solid #e5e7eb',
-                                color: '#6b7280'
-                              }}>
-                                {language === 'en' ? 'No dealers assigned to this employee' : 'এই কর্মচারীর জন্য কোন ডিলার নির্ধারিত নেই'}
-                              </div>
-                            )
-                          }
-
-                          return (
-                            <>
-                              <div className="admin-employee-dealers-table-container admin-table-container" style={{
-                                border: '1px solid #e5e7eb',
-                                borderRadius: '0.5rem',
-                                overflow: 'hidden',
-                                backgroundColor: '#fff'
-                              }}>
-                                <table className="admin-table" style={{ width: '100%', borderCollapse: 'collapse' }}>
-                                  <thead>
-                                    <tr style={{ backgroundColor: '#f9fafb', borderBottom: '2px solid #e5e7eb' }}>
-                                      <th style={{ padding: '0.75rem', textAlign: 'left', fontSize: '0.875rem', fontWeight: 600, color: '#6b7280' }}>
-                                        {language === 'en' ? 'Dealer ID' : 'ডিলার আইডি'}
-                                      </th>
-                                      <th style={{ padding: '0.75rem', textAlign: 'left', fontSize: '0.875rem', fontWeight: 600, color: '#6b7280' }}>
-                                        {language === 'en' ? 'Dealer Name' : 'ডিলারের নাম'}
-                                      </th>
-                                      <th style={{ padding: '0.75rem', textAlign: 'left', fontSize: '0.875rem', fontWeight: 600, color: '#6b7280' }}>
-                                        {language === 'en' ? 'Contact' : 'যোগাযোগ'}
-                                      </th>
-                                      <th style={{ padding: '0.75rem', textAlign: 'left', fontSize: '0.875rem', fontWeight: 600, color: '#6b7280' }}>
-                                        {language === 'en' ? 'Address' : 'ঠিকানা'}
-                                      </th>
-                                      <th style={{ padding: '0.75rem', textAlign: 'right', fontSize: '0.875rem', fontWeight: 600, color: '#6b7280' }}>
-                                        {language === 'en' ? 'Due Amount' : 'বকেয়া পরিমাণ'}
-                                      </th>
-                                    </tr>
-                                  </thead>
-                                  <tbody>
-                                    {assignedDealers.map((dealer, idx) => {
-                                      // Calculate due amount for this dealer (excluding cancelled orders)
-                                      const dealerOrders = (orders || []).filter(order => {
-                                        const orderDealerId = order.dealerId || order.dealer?._id || ''
-                                        const dealerId = dealer.dealerId || dealer._id || ''
-                                        return (
-                                          (String(orderDealerId) === String(dealerId) ||
-                                            String(order.dealer?._id) === String(dealer._id)) &&
-                                          order.status !== 'Cancelled' &&
-                                          order.approvalStatus !== 'Rejected'
-                                        )
-                                      })
-
-                                      const dealerDueAmount = dealerOrders.reduce((sum, order) => {
-                                        const totalPrice = Number(order.totalPrice || 0)
-                                        const paid = Number(order.paidAmount || 0)
-                                        const commission = (order.paymentHistory || []).reduce((cSum, p) => cSum + (parseFloat(p.commission) || 0), 0)
-                                        const due = Math.max(0, totalPrice - (paid + commission))
-                                        return sum + due
-                                      }, 0)
-
-                                      return (
-                                        <tr key={idx} style={{ borderBottom: '1px solid #f3f4f6' }}>
-                                          <td style={{ padding: '0.75rem', fontSize: '0.875rem', color: '#111827', fontFamily: 'monospace' }}>
-                                            {dealer.dealerId || '-'}
-                                          </td>
-                                          <td style={{ padding: '0.75rem', fontSize: '0.875rem', color: '#111827', fontWeight: 600 }}>
-                                            {dealer.name || '-'}
-                                          </td>
-                                          <td style={{ padding: '0.75rem', fontSize: '0.875rem', color: '#374151' }}>
-                                            {dealer.phone || '-'}
-                                          </td>
-                                          <td style={{ padding: '0.75rem', fontSize: '0.875rem', color: '#374151' }}>
-                                            {dealer.address || '-'}
-                                          </td>
-                                          <td style={{ padding: '0.75rem', fontSize: '0.875rem', color: dealerDueAmount > 0 ? '#dc2626' : '#16a34a', fontWeight: 600, textAlign: 'right' }}>
-                                            ৳{dealerDueAmount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                                          </td>
-                                        </tr>
-                                      )
-                                    })}
-                                  </tbody>
-                                </table>
-                              </div>
-                              <div className="mobile-card-container">
-                                {assignedDealers.map((dealer, idx) => {
-                                  const dealerOrders = (orders || []).filter(order => {
-                                    const orderDealerId = order.dealerId || order.dealer?._id || ''
-                                    const dealerId = dealer.dealerId || dealer._id || ''
-                                    return (
-                                      (String(orderDealerId) === String(dealerId) ||
-                                        String(order.dealer?._id) === String(dealer._id)) &&
+                                  achievedTarget = employeeOrders
+                                    .filter(order =>
+                                      order.approvalStatus === 'Approved' &&
                                       order.status !== 'Cancelled' &&
                                       order.approvalStatus !== 'Rejected'
                                     )
-                                  })
-                                  const dealerDueAmount = dealerOrders.reduce((sum, order) => {
-                                    const totalPrice = Number(order.totalPrice || 0)
-                                    const paid = Number(order.paidAmount || 0)
-                                    const commission = (order.paymentHistory || []).reduce((cSum, p) => cSum + (parseFloat(p.commission) || 0), 0)
-                                    const due = Math.max(0, totalPrice - (paid + commission))
-                                    return sum + due
-                                  }, 0)
+                                    .reduce((sum, order) => {
+                                      const price = parseFloat(order.totalPrice || 0)
+                                      const discount = order.discountEnabled && order.discountAmount > 0 ? order.discountAmount : 1
+                                      return sum + (price * discount)
+                                    }, 0)
+                                }
 
-                                  return (
-                                    <div key={idx} className="mobile-card" style={{ padding: '0.75rem', border: '1px solid #e2e8f0', boxShadow: 'none' }}>
-                                      <div className="mobile-card-row">
-                                        <span className="mobile-card-label" style={{ fontWeight: 600, color: '#475569' }}>{language === 'en' ? 'Dealer ID' : 'ডিলার আইডি'}</span>
-                                        <span className="mobile-card-value">{dealer.dealerId || '-'}</span>
-                                      </div>
-                                      <div className="mobile-card-row">
-                                        <span className="mobile-card-label">{language === 'en' ? 'Dealer Name' : 'ডিলারের নাম'}</span>
-                                        <span className="mobile-card-value" style={{ fontWeight: 600 }}>{dealer.name || '-'}</span>
-                                      </div>
-                                      <div className="mobile-card-row">
-                                        <span className="mobile-card-label">{language === 'en' ? 'Contact' : 'যোগাযোগ'}</span>
-                                        <span className="mobile-card-value">{dealer.phone || '-'}</span>
-                                      </div>
-                                      <div className="mobile-card-row">
-                                        <span className="mobile-card-label">{language === 'en' ? 'Address' : 'ঠিকানা'}</span>
-                                        <span className="mobile-card-value" style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: '150px' }}>{dealer.address || '-'}</span>
-                                      </div>
-                                      <div className="mobile-card-row">
-                                        <span className="mobile-card-label">{language === 'en' ? 'Due Amount' : 'বকেয়া পরিমাণ'}</span>
-                                        <span className="mobile-card-value" style={{ color: dealerDueAmount > 0 ? '#dc2626' : '#16a34a', fontWeight: 600 }}>৳{dealerDueAmount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
-                                      </div>
-                                    </div>
-                                  )
-                                })}
-                              </div>
-                            </>
-                          )
-                        })()}
-                      </div>
-                    ) : (
-                      <div className="admin-employee-details-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))', gap: '1rem', position: 'relative', zIndex: 1 }}>
-                        {/* Employee ID */}
-                        <div style={{ padding: '1rem', backgroundColor: '#f9fafb', borderRadius: '0.375rem' }}>
-                          <label style={{ fontSize: '0.875rem', color: '#6b7280', fontWeight: 600 }}>
-                            {language === 'en' ? 'Employee ID' : 'কর্মচারী আইডি'}
-                          </label>
-                          <p style={{ margin: '0.5rem 0 0 0', fontSize: '1rem', fontWeight: 600, color: '#111827' }}>
-                            {(isEditingEmployee ? editingEmployeeData : viewingEmployee).employeeId || 'N/A'}
-                          </p>
-                        </div>
-
-                        {/* Name */}
-                        <div style={{ padding: '1rem', backgroundColor: '#f9fafb', borderRadius: '0.375rem' }}>
-                          <label style={{ fontSize: '0.875rem', color: '#6b7280', fontWeight: 600 }}>
-                            {language === 'en' ? 'Name' : 'নাম'}
-                          </label>
-                          {isEditingEmployee ? (
-                            <input
-                              type="text"
-                              value={editingEmployeeData?.name || ''}
-                              onChange={(e) => setEditingEmployeeData({ ...editingEmployeeData, name: e.target.value })}
-                              style={{
-                                marginTop: '0.5rem',
-                                width: '100%',
-                                padding: '0.5rem',
-                                border: '1px solid #d1d5db',
-                                borderRadius: '0.375rem',
-                                fontSize: '1rem'
-                              }}
-                            />
-                          ) : (
-                            <p style={{ margin: '0.5rem 0 0 0', fontSize: '1rem', color: '#111827' }}>
-                              {viewingEmployee.name || 'N/A'}
-                            </p>
-                          )}
-                        </div>
-
-                        {/* Email */}
-                        <div style={{ padding: '1rem', backgroundColor: '#f9fafb', borderRadius: '0.375rem' }}>
-                          <label style={{ fontSize: '0.875rem', color: '#6b7280', fontWeight: 600 }}>
-                            {language === 'en' ? 'Email' : 'ইমেইল'}
-                          </label>
-                          {isEditingEmployee ? (
-                            <input
-                              type="email"
-                              value={editingEmployeeData?.email || ''}
-                              onChange={(e) => setEditingEmployeeData({ ...editingEmployeeData, email: e.target.value })}
-                              style={{
-                                marginTop: '0.5rem',
-                                width: '100%',
-                                padding: '0.5rem',
-                                border: '1px solid #d1d5db',
-                                borderRadius: '0.375rem',
-                                fontSize: '1rem'
-                              }}
-                            />
-                          ) : (
-                            <p style={{ margin: '0.5rem 0 0 0', fontSize: '1rem', color: '#111827' }}>
-                              {viewingEmployee.email || 'N/A'}
-                            </p>
-                          )}
-                        </div>
-
-                        {/* Phone */}
-                        <div style={{ padding: '1rem', backgroundColor: '#f9fafb', borderRadius: '0.375rem' }}>
-                          <label style={{ fontSize: '0.875rem', color: '#6b7280', fontWeight: 600 }}>
-                            {language === 'en' ? 'Phone' : 'ফোন'}
-                          </label>
-                          {isEditingEmployee ? (
-                            <input
-                              type="text"
-                              value={editingEmployeeData?.phone || ''}
-                              onChange={(e) => setEditingEmployeeData({ ...editingEmployeeData, phone: e.target.value })}
-                              style={{
-                                marginTop: '0.5rem',
-                                width: '100%',
-                                padding: '0.5rem',
-                                border: '1px solid #d1d5db',
-                                borderRadius: '0.375rem',
-                                fontSize: '1rem'
-                              }}
-                            />
-                          ) : (
-                            <p style={{ margin: '0.5rem 0 0 0', fontSize: '1rem', color: '#111827' }}>
-                              {viewingEmployee.phone || 'N/A'}
-                            </p>
-                          )}
-                        </div>
-
-                        {/* Address */}
-                        <div className="admin-employee-detail-full-width" style={{ padding: '1rem', backgroundColor: '#f9fafb', borderRadius: '0.375rem', gridColumn: 'span 2' }}>
-                          <label style={{ fontSize: '0.875rem', color: '#6b7280', fontWeight: 600 }}>
-                            {language === 'en' ? 'Address' : 'ঠিকানা'}
-                          </label>
-                          {isEditingEmployee ? (
-                            <textarea
-                              value={editingEmployeeData?.address || ''}
-                              onChange={(e) => setEditingEmployeeData({ ...editingEmployeeData, address: e.target.value })}
-                              rows={3}
-                              style={{
-                                marginTop: '0.5rem',
-                                width: '100%',
-                                padding: '0.5rem',
-                                border: '1px solid #d1d5db',
-                                borderRadius: '0.375rem',
-                                fontSize: '1rem',
-                                fontFamily: 'inherit',
-                                resize: 'vertical'
-                              }}
-                            />
-                          ) : (
-                            <p style={{ margin: '0.5rem 0 0 0', fontSize: '1rem', color: '#111827', whiteSpace: 'pre-wrap' }}>
-                              {viewingEmployee.address || 'N/A'}
-                            </p>
-                          )}
-                        </div>
-
-                        {/* NID */}
-                        <div style={{ padding: '1rem', backgroundColor: '#f9fafb', borderRadius: '0.375rem' }}>
-                          <label style={{ fontSize: '0.875rem', color: '#6b7280', fontWeight: 600 }}>
-                            {language === 'en' ? 'NID (National ID)' : 'জাতীয় পরিচয়পত্র'}
-                          </label>
-                          {isEditingEmployee ? (
-                            <input
-                              type="text"
-                              value={editingEmployeeData?.nid || ''}
-                              onChange={(e) => setEditingEmployeeData({ ...editingEmployeeData, nid: e.target.value })}
-                              style={{
-                                marginTop: '0.5rem',
-                                width: '100%',
-                                padding: '0.5rem',
-                                border: '1px solid #d1d5db',
-                                borderRadius: '0.375rem',
-                                fontSize: '1rem'
-                              }}
-                            />
-                          ) : (
-                            <p style={{ margin: '0.5rem 0 0 0', fontSize: '1rem', color: '#111827' }}>
-                              {viewingEmployee.nid || 'N/A'}
-                            </p>
-                          )}
-                        </div>
-
-                        {/* Salary */}
-                        <div style={{ padding: '1rem', backgroundColor: '#f9fafb', borderRadius: '0.375rem' }}>
-                          <label style={{ fontSize: '0.875rem', color: '#6b7280', fontWeight: 600 }}>
-                            {language === 'en' ? 'Salary' : 'বেতন'}
-                          </label>
-                          {isEditingEmployee ? (
-                            <input
-                              type="number"
-                              value={editingEmployeeData?.salary || ''}
-                              onChange={(e) => setEditingEmployeeData({ ...editingEmployeeData, salary: e.target.value })}
-                              step="0.01"
-                              min="0"
-                              style={{
-                                marginTop: '0.5rem',
-                                width: '100%',
-                                padding: '0.5rem',
-                                border: '1px solid #d1d5db',
-                                borderRadius: '0.375rem',
-                                fontSize: '1rem'
-                              }}
-                            />
-                          ) : (
-                            <p style={{ margin: '0.5rem 0 0 0', fontSize: '1rem', color: '#111827', fontWeight: 600 }}>
-                              {viewingEmployee.salary ? `${language === 'en' ? '৳' : '৳'} ${parseFloat(viewingEmployee.salary).toLocaleString()}` : 'N/A'}
-                            </p>
-                          )}
-                        </div>
-
-                        {/* Sales Target */}
-                        <div style={{ padding: '1rem', backgroundColor: '#f9fafb', borderRadius: '0.375rem' }}>
-                          <label style={{ fontSize: '0.875rem', color: '#6b7280', fontWeight: 600 }}>
-                            {language === 'en' ? 'Sales Target' : 'বিক্রয় লক্ষ্য'}
-                          </label>
-                          {isEditingEmployee ? (
-                            <input
-                              type="number"
-                              value={editingEmployeeData?.salesTarget || ''}
-                              onChange={(e) => setEditingEmployeeData({ ...editingEmployeeData, salesTarget: e.target.value })}
-                              step="0.01"
-                              min="0"
-                              disabled={(viewingEmployee?.role || '').toLowerCase() === 'rsm'}
-                              style={{
-                                marginTop: '0.5rem',
-                                width: '100%',
-                                padding: '0.5rem',
-                                border: '1px solid #d1d5db',
-                                borderRadius: '0.375rem',
-                                fontSize: '1rem',
-                                backgroundColor: (viewingEmployee?.role || '').toLowerCase() === 'rsm' ? '#f3f4f6' : 'white'
-                              }}
-                            />
-                          ) : (
-                            <p style={{ margin: '0.5rem 0 0 0', fontSize: '1rem', color: '#111827', fontWeight: 600 }}>
-                              {(() => {
-                                const isRSM = (viewingEmployee?.role || '').toLowerCase() === 'rsm'
-                                const calculatedTarget = isRSM
-                                  ? (employees || []).reduce((sum, emp) => {
-                                    if ((emp.role || '').toLowerCase() === 'salesman') {
-                                      return sum + (parseFloat(emp.salesTarget) || 0)
-                                    }
-                                    return sum
-                                  }, 0)
-                                  : (parseFloat(viewingEmployee.salesTarget) || 0)
-                                return calculatedTarget > 0 ? `৳ ${Number(calculatedTarget).toLocaleString()}` : 'N/A'
+                                return `৳ ${Number(achievedTarget || 0).toLocaleString()}`
                               })()}
                             </p>
-                          )}
-                        </div>
-
-                        {/* Achieved Target */}
-                        <div style={{ padding: '1rem', backgroundColor: '#f9fafb', borderRadius: '0.375rem' }}>
-                          <label style={{ fontSize: '0.875rem', color: '#6b7280', fontWeight: 600 }}>
-                            {language === 'en' ? 'Achieved Target' : 'অর্জিত লক্ষ্য'}
-                          </label>
-                          <p style={{ margin: '0.5rem 0 0 0', fontSize: '1rem', color: '#111827', fontWeight: 600 }}>
                             {(() => {
                               const isRSM = (viewingEmployee?.role || '').toLowerCase() === 'rsm'
-                              let achievedTarget = 0
+                              const calculatedTarget = isRSM
+                                ? (employees || []).reduce((sum, emp) => {
+                                  if ((emp.role || '').toLowerCase() === 'salesman') {
+                                    return sum + (parseFloat(emp.salesTarget) || 0)
+                                  }
+                                  return sum
+                                }, 0)
+                                : (parseFloat(viewingEmployee.salesTarget) || 0)
 
+                              let achievedTarget = 0
                               if (isRSM) {
                                 // Sum all employees' achievedTarget values
                                 achievedTarget = (employees || []).reduce((sum, emp) => {
@@ -10100,33 +10635,18 @@ function AdminPage({ language, toggleLanguage, t }) {
                                     const assignedToId = dealer.assignedTo?._id || dealer.assignedTo || ''
                                     return String(assignedToId) === String(employeeId)
                                   })
-                                  .map(dealer => ({
-                                    _id: String(dealer._id || ''),
-                                    dealerId: String(dealer.dealerId || '')
-                                  }))
-                                  .filter(d => d._id || d.dealerId)
+                                  .map(dealer => String(dealer._id || dealer.dealerId || ''))
+                                  .filter(id => id)
 
                                 // Filter orders: employee-created OR admin-created for assigned dealers
                                 const employeeOrders = (orders || []).filter(order => {
                                   const orderRequestedBy = order.requestedBy?._id || order.requestedBy || ''
+                                  const orderDealerId = order.dealer?._id || order.dealer || ''
+                                  const orderDealerIdString = String(orderDealerId)
                                   const isEmployeeOrder = String(orderRequestedBy) === String(employeeId)
-
-                                  // Check if this is an admin-created order for an assigned dealer
-                                  const isAdminOrder = (order.requestedByRole || '').toLowerCase() === 'admin'
-                                  let isAdminOrderForAssignedDealer = false
-
-                                  if (isAdminOrder) {
-                                    const orderDealerId = order.dealer?._id || order.dealer || ''
-                                    const orderDealerIdString = String(orderDealerId)
-                                    const orderDealerIdFromDealer = order.dealerId || ''
-
-                                    isAdminOrderForAssignedDealer = assignedDealerIds.some(assignedDealer =>
-                                      assignedDealer._id === orderDealerIdString ||
-                                      assignedDealer.dealerId === orderDealerIdFromDealer ||
-                                      (order.dealer && String(order.dealer._id || order.dealer) === assignedDealer._id)
-                                    )
-                                  }
-
+                                  const isAdminOrderForAssignedDealer =
+                                    (order.requestedByRole || '').toLowerCase() === 'admin' &&
+                                    assignedDealerIds.includes(orderDealerIdString)
                                   return isEmployeeOrder || isAdminOrderForAssignedDealer
                                 })
 
@@ -10137,165 +10657,59 @@ function AdminPage({ language, toggleLanguage, t }) {
                                     order.approvalStatus !== 'Rejected'
                                   )
                                   .reduce((sum, order) => {
-                                    return sum + (parseFloat(order.totalPrice) || 0)
+                                    const price = parseFloat(order.totalPrice || 0)
+                                    const discount = order.discountEnabled && order.discountAmount > 0 ? order.discountAmount : 1
+                                    return sum + (price * discount)
                                   }, 0)
                               }
 
-                              return `৳ ${Number(achievedTarget || 0).toLocaleString()}`
+                              return calculatedTarget > 0 ? (
+                                <p style={{ margin: '0.25rem 0 0 0', fontSize: '0.875rem', color: '#6b7280' }}>
+                                  {(() => {
+                                    const progress = ((Number(achievedTarget || 0) / Number(calculatedTarget || 1)) * 100).toFixed(1)
+                                    return `${language === 'en' ? 'Progress' : 'অগ্রগতি'}: ${progress}%`
+                                  })()}
+                                </p>
+                              ) : null
                             })()}
-                          </p>
-                          {(() => {
-                            const isRSM = (viewingEmployee?.role || '').toLowerCase() === 'rsm'
-                            const calculatedTarget = isRSM
-                              ? (employees || []).reduce((sum, emp) => {
-                                if ((emp.role || '').toLowerCase() === 'salesman') {
-                                  return sum + (parseFloat(emp.salesTarget) || 0)
-                                }
-                                return sum
-                              }, 0)
-                              : (parseFloat(viewingEmployee.salesTarget) || 0)
+                          </div>
 
-                            let achievedTarget = 0
-                            if (isRSM) {
-                              // Sum all employees' achievedTarget values
-                              achievedTarget = (employees || []).reduce((sum, emp) => {
-                                return sum + (parseFloat(emp.achievedTarget) || 0)
-                              }, 0)
-                            } else {
-                              // Calculate achieved target from own approved orders + admin-created orders for assigned dealers
-                              const employeeId = viewingEmployee?._id || ''
-
-                              // Get all dealers assigned to this employee
-                              const assignedDealerIds = (dealers || [])
-                                .filter(dealer => {
-                                  const assignedToId = dealer.assignedTo?._id || dealer.assignedTo || ''
-                                  return String(assignedToId) === String(employeeId)
-                                })
-                                .map(dealer => String(dealer._id || dealer.dealerId || ''))
-                                .filter(id => id)
-
-                              // Filter orders: employee-created OR admin-created for assigned dealers
-                              const employeeOrders = (orders || []).filter(order => {
-                                const orderRequestedBy = order.requestedBy?._id || order.requestedBy || ''
-                                const orderDealerId = order.dealer?._id || order.dealer || ''
-                                const orderDealerIdString = String(orderDealerId)
-                                const isEmployeeOrder = String(orderRequestedBy) === String(employeeId)
-                                const isAdminOrderForAssignedDealer =
-                                  (order.requestedByRole || '').toLowerCase() === 'admin' &&
-                                  assignedDealerIds.includes(orderDealerIdString)
-                                return isEmployeeOrder || isAdminOrderForAssignedDealer
-                              })
-
-                              achievedTarget = employeeOrders
-                                .filter(order =>
-                                  order.approvalStatus === 'Approved' &&
-                                  order.status !== 'Cancelled' &&
-                                  order.approvalStatus !== 'Rejected'
-                                )
-                                .reduce((sum, order) => {
-                                  return sum + (parseFloat(order.totalPrice) || 0)
-                                }, 0)
-                            }
-
-                            return calculatedTarget > 0 ? (
-                              <p style={{ margin: '0.25rem 0 0 0', fontSize: '0.875rem', color: '#6b7280' }}>
-                                {(() => {
-                                  const progress = ((Number(achievedTarget || 0) / Number(calculatedTarget || 1)) * 100).toFixed(1)
-                                  return `${language === 'en' ? 'Progress' : 'অগ্রগতি'}: ${progress}%`
-                                })()}
+                          {/* Bank Name */}
+                          <div style={{ padding: '1rem', backgroundColor: '#f9fafb', borderRadius: '0.375rem' }}>
+                            <label style={{ fontSize: '0.875rem', color: '#6b7280', fontWeight: 600 }}>
+                              {language === 'en' ? 'Bank Name' : 'ব্যাংকের নাম'}
+                            </label>
+                            {isEditingEmployee ? (
+                              <input
+                                type="text"
+                                value={editingEmployeeData?.bankName || ''}
+                                onChange={(e) => setEditingEmployeeData({ ...editingEmployeeData, bankName: e.target.value })}
+                                style={{
+                                  marginTop: '0.5rem',
+                                  width: '100%',
+                                  padding: '0.5rem',
+                                  border: '1px solid #d1d5db',
+                                  borderRadius: '0.375rem',
+                                  fontSize: '1rem'
+                                }}
+                              />
+                            ) : (
+                              <p style={{ margin: '0.5rem 0 0 0', fontSize: '1rem', color: '#111827' }}>
+                                {viewingEmployee.bankName || 'N/A'}
                               </p>
-                            ) : null
-                          })()}
-                        </div>
+                            )}
+                          </div>
 
-                        {/* Bank Name */}
-                        <div style={{ padding: '1rem', backgroundColor: '#f9fafb', borderRadius: '0.375rem' }}>
-                          <label style={{ fontSize: '0.875rem', color: '#6b7280', fontWeight: 600 }}>
-                            {language === 'en' ? 'Bank Name' : 'ব্যাংকের নাম'}
-                          </label>
-                          {isEditingEmployee ? (
-                            <input
-                              type="text"
-                              value={editingEmployeeData?.bankName || ''}
-                              onChange={(e) => setEditingEmployeeData({ ...editingEmployeeData, bankName: e.target.value })}
-                              style={{
-                                marginTop: '0.5rem',
-                                width: '100%',
-                                padding: '0.5rem',
-                                border: '1px solid #d1d5db',
-                                borderRadius: '0.375rem',
-                                fontSize: '1rem'
-                              }}
-                            />
-                          ) : (
-                            <p style={{ margin: '0.5rem 0 0 0', fontSize: '1rem', color: '#111827' }}>
-                              {viewingEmployee.bankName || 'N/A'}
-                            </p>
-                          )}
-                        </div>
-
-                        {/* Bank Branch */}
-                        <div style={{ padding: '1rem', backgroundColor: '#f9fafb', borderRadius: '0.375rem' }}>
-                          <label style={{ fontSize: '0.875rem', color: '#6b7280', fontWeight: 600 }}>
-                            {language === 'en' ? 'Branch' : 'শাখা'}
-                          </label>
-                          {isEditingEmployee ? (
-                            <input
-                              type="text"
-                              value={editingEmployeeData?.bankBranch || ''}
-                              onChange={(e) => setEditingEmployeeData({ ...editingEmployeeData, bankBranch: e.target.value })}
-                              style={{
-                                marginTop: '0.5rem',
-                                width: '100%',
-                                padding: '0.5rem',
-                                border: '1px solid #d1d5db',
-                                borderRadius: '0.375rem',
-                                fontSize: '1rem'
-                              }}
-                            />
-                          ) : (
-                            <p style={{ margin: '0.5rem 0 0 0', fontSize: '1rem', color: '#111827' }}>
-                              {viewingEmployee.bankBranch || 'N/A'}
-                            </p>
-                          )}
-                        </div>
-
-                        {/* Account Number */}
-                        <div style={{ padding: '1rem', backgroundColor: '#f9fafb', borderRadius: '0.375rem' }}>
-                          <label style={{ fontSize: '0.875rem', color: '#6b7280', fontWeight: 600 }}>
-                            {language === 'en' ? 'Account No.' : 'একাউন্ট নং'}
-                          </label>
-                          {isEditingEmployee ? (
-                            <input
-                              type="text"
-                              value={editingEmployeeData?.accountNumber || ''}
-                              onChange={(e) => setEditingEmployeeData({ ...editingEmployeeData, accountNumber: e.target.value })}
-                              style={{
-                                marginTop: '0.5rem',
-                                width: '100%',
-                                padding: '0.5rem',
-                                border: '1px solid #d1d5db',
-                                borderRadius: '0.375rem',
-                                fontSize: '1rem'
-                              }}
-                            />
-                          ) : (
-                            <p style={{ margin: '0.5rem 0 0 0', fontSize: '1rem', color: '#111827' }}>
-                              {viewingEmployee.accountNumber || 'N/A'}
-                            </p>
-                          )}
-                        </div>
-
-                        {/* Salary Status */}
-                        <div style={{ padding: '1rem', backgroundColor: '#f9fafb', borderRadius: '0.375rem' }}>
-                          {isEditingEmployee ? (
-                            <>
-                              <label style={{ fontSize: '0.875rem', color: '#6b7280', fontWeight: 600 }}>
-                                {language === 'en' ? 'Salary Status' : 'বেতন স্থিতি'}
-                              </label>
-                              <select
-                                value={normalizeSalaryStatus(editingEmployeeData?.status)}
-                                onChange={(e) => setEditingEmployeeData({ ...editingEmployeeData, status: normalizeSalaryStatus(e.target.value) })}
+                          {/* Bank Branch */}
+                          <div style={{ padding: '1rem', backgroundColor: '#f9fafb', borderRadius: '0.375rem' }}>
+                            <label style={{ fontSize: '0.875rem', color: '#6b7280', fontWeight: 600 }}>
+                              {language === 'en' ? 'Branch' : 'শাখা'}
+                            </label>
+                            {isEditingEmployee ? (
+                              <input
+                                type="text"
+                                value={editingEmployeeData?.bankBranch || ''}
+                                onChange={(e) => setEditingEmployeeData({ ...editingEmployeeData, bankBranch: e.target.value })}
                                 style={{
                                   marginTop: '0.5rem',
                                   width: '100%',
@@ -10304,94 +10718,24 @@ function AdminPage({ language, toggleLanguage, t }) {
                                   borderRadius: '0.375rem',
                                   fontSize: '1rem'
                                 }}
-                              >
-                                <option value="Paid">{language === 'en' ? 'Paid' : 'পরিশোধিত'}</option>
-                                <option value="Unpaid">{language === 'en' ? 'Unpaid' : 'অপরিশোধিত'}</option>
-                              </select>
-                            </>
-                          ) : (
-                            <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', flexWrap: 'wrap' }}>
-                              <span style={{ fontSize: '0.95rem', color: '#6b7280', fontWeight: 600 }}>
-                                {language === 'en' ? 'Salary Status' : 'বেতন স্থিতি'}
-                              </span>
-                              <span style={{
-                                fontSize: '1rem',
-                                display: 'inline-flex',
-                                alignItems: 'center',
-                                padding: '0.35rem 0.85rem',
-                                borderRadius: '0.5rem',
-                                backgroundColor: normalizeSalaryStatus(viewingEmployee.status) === 'Paid' ? '#dcfce7' : '#fee2e2',
-                                color: normalizeSalaryStatus(viewingEmployee.status) === 'Paid' ? '#166534' : '#991b1b',
-                                fontWeight: 700
-                              }}>
-                                {normalizeSalaryStatus(viewingEmployee.status)}
-                              </span>
-                            </div>
-                          )}
-                        </div>
+                              />
+                            ) : (
+                              <p style={{ margin: '0.5rem 0 0 0', fontSize: '1rem', color: '#111827' }}>
+                                {viewingEmployee.bankBranch || 'N/A'}
+                              </p>
+                            )}
+                          </div>
 
-                        {/* Department */}
-                        <div style={{ padding: '1rem', backgroundColor: '#f9fafb', borderRadius: '0.375rem' }}>
-                          <label style={{ fontSize: '0.875rem', color: '#6b7280', fontWeight: 600 }}>
-                            {language === 'en' ? 'Department' : 'বিভাগ'}
-                          </label>
-                          {isEditingEmployee ? (
-                            <input
-                              type="text"
-                              value={editingEmployeeData?.department || ''}
-                              onChange={(e) => setEditingEmployeeData({ ...editingEmployeeData, department: e.target.value })}
-                              style={{
-                                marginTop: '0.5rem',
-                                width: '100%',
-                                padding: '0.5rem',
-                                border: '1px solid #d1d5db',
-                                borderRadius: '0.375rem',
-                                fontSize: '1rem'
-                              }}
-                            />
-                          ) : (
-                            <p style={{ margin: '0.5rem 0 0 0', fontSize: '1rem', color: '#111827' }}>
-                              {viewingEmployee.department || 'N/A'}
-                            </p>
-                          )}
-                        </div>
-
-                        {/* Posting Area */}
-                        <div style={{ padding: '1rem', backgroundColor: '#f9fafb', borderRadius: '0.375rem' }}>
-                          <label style={{ fontSize: '0.875rem', color: '#6b7280', fontWeight: 600 }}>
-                            {language === 'en' ? 'Posting Area' : 'পোস্টিং এরিয়া'}
-                          </label>
-                          {isEditingEmployee ? (
-                            <input
-                              type="text"
-                              value={editingEmployeeData?.postingArea || ''}
-                              onChange={(e) => setEditingEmployeeData({ ...editingEmployeeData, postingArea: e.target.value })}
-                              style={{
-                                marginTop: '0.5rem',
-                                width: '100%',
-                                padding: '0.5rem',
-                                border: '1px solid #d1d5db',
-                                borderRadius: '0.375rem',
-                                fontSize: '1rem'
-                              }}
-                            />
-                          ) : (
-                            <p style={{ margin: '0.5rem 0 0 0', fontSize: '1rem', color: '#111827' }}>
-                              {viewingEmployee.postingArea || 'N/A'}
-                            </p>
-                          )}
-                        </div>
-
-                        {/* Role */}
-                        <div style={{ padding: '1rem', backgroundColor: '#f9fafb', borderRadius: '0.375rem' }}>
-                          {isEditingEmployee ? (
-                            <>
-                              <label style={{ fontSize: '0.875rem', color: '#6b7280', fontWeight: 600 }}>
-                                {language === 'en' ? 'Role' : 'ভূমিকা'}
-                              </label>
-                              <select
-                                value={editingEmployeeData?.role || ''}
-                                onChange={(e) => setEditingEmployeeData({ ...editingEmployeeData, role: e.target.value })}
+                          {/* Account Number */}
+                          <div style={{ padding: '1rem', backgroundColor: '#f9fafb', borderRadius: '0.375rem' }}>
+                            <label style={{ fontSize: '0.875rem', color: '#6b7280', fontWeight: 600 }}>
+                              {language === 'en' ? 'Account No.' : 'একাউন্ট নং'}
+                            </label>
+                            {isEditingEmployee ? (
+                              <input
+                                type="text"
+                                value={editingEmployeeData?.accountNumber || ''}
+                                onChange={(e) => setEditingEmployeeData({ ...editingEmployeeData, accountNumber: e.target.value })}
                                 style={{
                                   marginTop: '0.5rem',
                                   width: '100%',
@@ -10400,391 +10744,513 @@ function AdminPage({ language, toggleLanguage, t }) {
                                   borderRadius: '0.375rem',
                                   fontSize: '1rem'
                                 }}
-                              >
-                                <option value="">{language === 'en' ? 'Select Role' : 'ভূমিকা নির্বাচন করুন'}</option>
-                                <option value="Admin">Admin</option>
-                                <option value="RSM">RSM</option>
-                                <option value="Incharge">Incharge</option>
-                                <option value="SalesMan">SalesMan</option>
-                              </select>
-                            </>
-                          ) : (
-                            <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', flexWrap: 'wrap' }}>
-                              <span style={{ fontSize: '0.95rem', color: '#6b7280', fontWeight: 600 }}>
-                                {language === 'en' ? 'Role' : 'ভূমিকা'}
-                              </span>
-                              <span style={{
+                              />
+                            ) : (
+                              <p style={{ margin: '0.5rem 0 0 0', fontSize: '1rem', color: '#111827' }}>
+                                {viewingEmployee.accountNumber || 'N/A'}
+                              </p>
+                            )}
+                          </div>
+
+                          {/* Salary Status */}
+                          <div style={{ padding: '1rem', backgroundColor: '#f9fafb', borderRadius: '0.375rem' }}>
+                            {isEditingEmployee ? (
+                              <>
+                                <label style={{ fontSize: '0.875rem', color: '#6b7280', fontWeight: 600 }}>
+                                  {language === 'en' ? 'Salary Status' : 'বেতন স্থিতি'}
+                                </label>
+                                <select
+                                  value={normalizeSalaryStatus(editingEmployeeData?.status)}
+                                  onChange={(e) => setEditingEmployeeData({ ...editingEmployeeData, status: normalizeSalaryStatus(e.target.value) })}
+                                  style={{
+                                    marginTop: '0.5rem',
+                                    width: '100%',
+                                    padding: '0.5rem',
+                                    border: '1px solid #d1d5db',
+                                    borderRadius: '0.375rem',
+                                    fontSize: '1rem'
+                                  }}
+                                >
+                                  <option value="Paid">{language === 'en' ? 'Paid' : 'পরিশোধিত'}</option>
+                                  <option value="Unpaid">{language === 'en' ? 'Unpaid' : 'অপরিশোধিত'}</option>
+                                </select>
+                              </>
+                            ) : (
+                              <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', flexWrap: 'wrap' }}>
+                                <span style={{ fontSize: '0.95rem', color: '#6b7280', fontWeight: 600 }}>
+                                  {language === 'en' ? 'Salary Status' : 'বেতন স্থিতি'}
+                                </span>
+                                <span style={{
+                                  fontSize: '1rem',
+                                  display: 'inline-flex',
+                                  alignItems: 'center',
+                                  padding: '0.35rem 0.85rem',
+                                  borderRadius: '0.5rem',
+                                  backgroundColor: normalizeSalaryStatus(viewingEmployee.status) === 'Paid' ? '#dcfce7' : '#fee2e2',
+                                  color: normalizeSalaryStatus(viewingEmployee.status) === 'Paid' ? '#166534' : '#991b1b',
+                                  fontWeight: 700
+                                }}>
+                                  {normalizeSalaryStatus(viewingEmployee.status)}
+                                </span>
+                              </div>
+                            )}
+                          </div>
+
+                          {/* Department */}
+                          <div style={{ padding: '1rem', backgroundColor: '#f9fafb', borderRadius: '0.375rem' }}>
+                            <label style={{ fontSize: '0.875rem', color: '#6b7280', fontWeight: 600 }}>
+                              {language === 'en' ? 'Department' : 'বিভাগ'}
+                            </label>
+                            {isEditingEmployee ? (
+                              <input
+                                type="text"
+                                value={editingEmployeeData?.department || ''}
+                                onChange={(e) => setEditingEmployeeData({ ...editingEmployeeData, department: e.target.value })}
+                                style={{
+                                  marginTop: '0.5rem',
+                                  width: '100%',
+                                  padding: '0.5rem',
+                                  border: '1px solid #d1d5db',
+                                  borderRadius: '0.375rem',
+                                  fontSize: '1rem'
+                                }}
+                              />
+                            ) : (
+                              <p style={{ margin: '0.5rem 0 0 0', fontSize: '1rem', color: '#111827' }}>
+                                {viewingEmployee.department || 'N/A'}
+                              </p>
+                            )}
+                          </div>
+
+                          {/* Posting Area */}
+                          <div style={{ padding: '1rem', backgroundColor: '#f9fafb', borderRadius: '0.375rem' }}>
+                            <label style={{ fontSize: '0.875rem', color: '#6b7280', fontWeight: 600 }}>
+                              {language === 'en' ? 'Posting Area' : 'পোস্টিং এরিয়া'}
+                            </label>
+                            {isEditingEmployee ? (
+                              <input
+                                type="text"
+                                value={editingEmployeeData?.postingArea || ''}
+                                onChange={(e) => setEditingEmployeeData({ ...editingEmployeeData, postingArea: e.target.value })}
+                                style={{
+                                  marginTop: '0.5rem',
+                                  width: '100%',
+                                  padding: '0.5rem',
+                                  border: '1px solid #d1d5db',
+                                  borderRadius: '0.375rem',
+                                  fontSize: '1rem'
+                                }}
+                              />
+                            ) : (
+                              <p style={{ margin: '0.5rem 0 0 0', fontSize: '1rem', color: '#111827' }}>
+                                {viewingEmployee.postingArea || 'N/A'}
+                              </p>
+                            )}
+                          </div>
+
+                          {/* Role */}
+                          <div style={{ padding: '1rem', backgroundColor: '#f9fafb', borderRadius: '0.375rem' }}>
+                            {isEditingEmployee ? (
+                              <>
+                                <label style={{ fontSize: '0.875rem', color: '#6b7280', fontWeight: 600 }}>
+                                  {language === 'en' ? 'Role' : 'ভূমিকা'}
+                                </label>
+                                <select
+                                  value={editingEmployeeData?.role || ''}
+                                  onChange={(e) => setEditingEmployeeData({ ...editingEmployeeData, role: e.target.value })}
+                                  style={{
+                                    marginTop: '0.5rem',
+                                    width: '100%',
+                                    padding: '0.5rem',
+                                    border: '1px solid #d1d5db',
+                                    borderRadius: '0.375rem',
+                                    fontSize: '1rem'
+                                  }}
+                                >
+                                  <option value="">{language === 'en' ? 'Select Role' : 'ভূমিকা নির্বাচন করুন'}</option>
+                                  <option value="Admin">Admin</option>
+                                  <option value="RSM">RSM</option>
+                                  <option value="Incharge">Incharge</option>
+                                  <option value="SalesMan">SalesMan</option>
+                                </select>
+                              </>
+                            ) : (
+                              <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', flexWrap: 'wrap' }}>
+                                <span style={{ fontSize: '0.95rem', color: '#6b7280', fontWeight: 600 }}>
+                                  {language === 'en' ? 'Role' : 'ভূমিকা'}
+                                </span>
+                                <span style={{
+                                  fontSize: '1rem',
+                                  display: 'inline-flex',
+                                  alignItems: 'center',
+                                  padding: '0.35rem 0.85rem',
+                                  borderRadius: '0.5rem',
+                                  backgroundColor: viewingEmployee.role === 'Admin' ? '#dcfce7' : '#fef3c7',
+                                  color: viewingEmployee.role === 'Admin' ? '#166534' : '#92400e',
+                                  fontWeight: 700
+                                }}>
+                                  {viewingEmployee.role || 'N/A'}
+                                </span>
+                              </div>
+                            )}
+                          </div>
+
+                          {/* Designation */}
+                          <div style={{ padding: '1rem', backgroundColor: '#f9fafb', borderRadius: '0.375rem' }}>
+                            <label style={{ fontSize: '0.875rem', color: '#6b7280', fontWeight: 600 }}>
+                              {language === 'en' ? 'Designation' : 'পদবি'}
+                            </label>
+                            {isEditingEmployee ? (
+                              <input
+                                type="text"
+                                value={editingEmployeeData?.designation || ''}
+                                onChange={(e) => setEditingEmployeeData({ ...editingEmployeeData, designation: e.target.value })}
+                                style={{
+                                  marginTop: '0.5rem',
+                                  width: '100%',
+                                  padding: '0.5rem',
+                                  border: '1px solid #d1d5db',
+                                  borderRadius: '0.375rem',
+                                  fontSize: '1rem'
+                                }}
+                              />
+                            ) : (
+                              <p style={{ margin: '0.5rem 0 0 0', fontSize: '1rem', color: '#111827' }}>
+                                {viewingEmployee.designation || 'N/A'}
+                              </p>
+                            )}
+                          </div>
+
+                          {/* Username */}
+                          <div style={{ padding: '1rem', backgroundColor: '#f9fafb', borderRadius: '0.375rem' }}>
+                            <label style={{ fontSize: '0.875rem', color: '#6b7280', fontWeight: 600 }}>
+                              {language === 'en' ? 'Username' : 'ব্যবহারকারীর নাম'}
+                            </label>
+                            <p style={{ margin: '0.5rem 0 0 0', fontSize: '1rem', color: '#111827', fontFamily: 'monospace' }}>
+                              {viewingEmployee.username || 'N/A'}
+                            </p>
+                          </div>
+
+                          {/* Password */}
+                          <div style={{ padding: '1rem', backgroundColor: '#f9fafb', borderRadius: '0.375rem' }}>
+                            <label style={{ fontSize: '0.875rem', color: '#6b7280', fontWeight: 600 }}>
+                              {language === 'en' ? 'Password' : 'পাসওয়ার্ড'}
+                            </label>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginTop: '0.5rem' }}>
+                              <p style={{
+                                margin: 0,
                                 fontSize: '1rem',
-                                display: 'inline-flex',
-                                alignItems: 'center',
-                                padding: '0.35rem 0.85rem',
-                                borderRadius: '0.5rem',
-                                backgroundColor: viewingEmployee.role === 'Admin' ? '#dcfce7' : '#fef3c7',
-                                color: viewingEmployee.role === 'Admin' ? '#166534' : '#92400e',
-                                fontWeight: 700
+                                color: '#111827',
+                                fontFamily: 'monospace',
+                                backgroundColor: '#fee2e2',
+                                padding: '0.5rem',
+                                borderRadius: '0.25rem',
+                                border: '1px solid #fecaca',
+                                fontWeight: 600,
+                                flex: 1
                               }}>
-                                {viewingEmployee.role || 'N/A'}
-                              </span>
+                                {lastGeneratedPassword || (language === 'en' ? 'Hidden' : 'লুকানো')}
+                              </p>
+                              <button
+                                onClick={async () => {
+                                  if (window.confirm(language === 'en' ? 'Reset password for this employee? A new password will be generated.' : 'এই কর্মচারীর পাসওয়ার্ড রিসেট করবেন? একটি নতুন পাসওয়ার্ড তৈরি করা হবে।')) {
+                                    try {
+                                      const res = await fetch(`${API_BASE}/api/employees/reset-password`, {
+                                        method: 'POST',
+                                        headers: { 'Content-Type': 'application/json' },
+                                        body: JSON.stringify({ id: viewingEmployee._id })
+                                      })
+                                      if (!res.ok) throw new Error('Failed to reset password')
+                                      const data = await res.json()
+
+                                      // Store newly generated password locally for display
+                                      setLastGeneratedPassword(data.newPassword)
+
+                                      // Refresh employee list
+                                      const resEmployees = await fetch(`${API_BASE}/api/employees`)
+                                      if (resEmployees.ok) {
+                                        const empData = await resEmployees.json()
+                                        setEmployees((empData.data || []).map((e) => ({
+                                          ...e,
+                                          status: normalizeSalaryStatus(e.status)
+                                        })))
+                                      }
+
+                                      alert(language === 'en'
+                                        ? `Password reset successfully! New password: ${data.newPassword}`
+                                        : `পাসওয়ার্ড সফলভাবে রিসেট করা হয়েছে! নতুন পাসওয়ার্ড: ${data.newPassword}`)
+                                    } catch (err) {
+                                      alert(language === 'en' ? 'Failed to reset password' : 'পাসওয়ার্ড রিসেট করতে ব্যর্থ')
+                                    }
+                                  }
+                                }}
+                                style={{
+                                  padding: '0.5rem 1rem',
+                                  backgroundColor: '#3b82f6',
+                                  color: 'white',
+                                  border: 'none',
+                                  borderRadius: '0.25rem',
+                                  cursor: 'pointer',
+                                  fontWeight: 600,
+                                  fontSize: '0.875rem',
+                                  whiteSpace: 'nowrap'
+                                }}
+                              >
+                                {language === 'en' ? 'Reset Password' : 'পাসওয়ার্ড রিসেট'}
+                              </button>
+                            </div>
+                          </div>
+
+                          {/* Emergency Contact Name */}
+                          <div style={{ padding: '1rem', backgroundColor: '#f9fafb', borderRadius: '0.375rem' }}>
+                            <label style={{ fontSize: '0.875rem', color: '#6b7280', fontWeight: 600 }}>
+                              {language === 'en' ? 'Emergency Contact Name' : 'জরুরি যোগাযোগের নাম'}
+                            </label>
+                            {isEditingEmployee ? (
+                              <input
+                                type="text"
+                                value={editingEmployeeData?.emergencyContactName || ''}
+                                onChange={(e) => setEditingEmployeeData({ ...editingEmployeeData, emergencyContactName: e.target.value })}
+                                style={{
+                                  marginTop: '0.5rem',
+                                  width: '100%',
+                                  padding: '0.5rem',
+                                  border: '1px solid #d1d5db',
+                                  borderRadius: '0.375rem',
+                                  fontSize: '1rem'
+                                }}
+                              />
+                            ) : (
+                              <p style={{ margin: '0.5rem 0 0 0', fontSize: '1rem', color: '#111827' }}>
+                                {viewingEmployee.emergencyContactName || 'N/A'}
+                              </p>
+                            )}
+                          </div>
+
+                          {/* Emergency Contact */}
+                          <div style={{ padding: '1rem', backgroundColor: '#f9fafb', borderRadius: '0.375rem' }}>
+                            <label style={{ fontSize: '0.875rem', color: '#6b7280', fontWeight: 600 }}>
+                              {language === 'en' ? 'Emergency Contact' : 'জরুরি যোগাযোগ'}
+                            </label>
+                            {isEditingEmployee ? (
+                              <input
+                                type="text"
+                                value={editingEmployeeData?.emergencyContact || ''}
+                                onChange={(e) => setEditingEmployeeData({ ...editingEmployeeData, emergencyContact: e.target.value })}
+                                style={{
+                                  marginTop: '0.5rem',
+                                  width: '100%',
+                                  padding: '0.5rem',
+                                  border: '1px solid #d1d5db',
+                                  borderRadius: '0.375rem',
+                                  fontSize: '1rem'
+                                }}
+                              />
+                            ) : (
+                              <p style={{ margin: '0.5rem 0 0 0', fontSize: '1rem', color: '#111827' }}>
+                                {viewingEmployee.emergencyContact || 'N/A'}
+                              </p>
+                            )}
+                          </div>
+
+                          {/* Document */}
+                          {viewingEmployee.document && (
+                            <div className="admin-employee-detail-full-width" style={{ padding: '1rem', backgroundColor: '#f9fafb', borderRadius: '0.375rem', gridColumn: 'span 2' }}>
+                              <label style={{ fontSize: '0.875rem', color: '#6b7280', fontWeight: 600 }}>
+                                {language === 'en' ? 'Document' : 'নথি'}
+                              </label>
+                              <div style={{ marginTop: '0.5rem' }}>
+                                {viewingEmployee.document.startsWith('data:') ? (
+                                  <a
+                                    href={viewingEmployee.document}
+                                    download={`${viewingEmployee.name}_document`}
+                                    style={{
+                                      display: 'inline-block',
+                                      padding: '0.5rem 1rem',
+                                      backgroundColor: '#3b82f6',
+                                      color: 'white',
+                                      borderRadius: '0.375rem',
+                                      textDecoration: 'none',
+                                      fontWeight: 600
+                                    }}
+                                  >
+                                    {language === 'en' ? 'Download Document' : 'নথি ডাউনলোড করুন'}
+                                  </a>
+                                ) : (
+                                  <p style={{ margin: 0, fontSize: '1rem', color: '#111827' }}>
+                                    {viewingEmployee.document}
+                                  </p>
+                                )}
+                              </div>
                             </div>
                           )}
-                        </div>
 
-                        {/* Designation */}
-                        <div style={{ padding: '1rem', backgroundColor: '#f9fafb', borderRadius: '0.375rem' }}>
-                          <label style={{ fontSize: '0.875rem', color: '#6b7280', fontWeight: 600 }}>
-                            {language === 'en' ? 'Designation' : 'পদবি'}
-                          </label>
-                          {isEditingEmployee ? (
-                            <input
-                              type="text"
-                              value={editingEmployeeData?.designation || ''}
-                              onChange={(e) => setEditingEmployeeData({ ...editingEmployeeData, designation: e.target.value })}
-                              style={{
-                                marginTop: '0.5rem',
-                                width: '100%',
-                                padding: '0.5rem',
-                                border: '1px solid #d1d5db',
-                                borderRadius: '0.375rem',
-                                fontSize: '1rem'
+                          {/* Photo */}
+                          <div className="admin-employee-detail-full-width" style={{ padding: '1rem', backgroundColor: '#f9fafb', borderRadius: '0.375rem', gridColumn: 'span 2', textAlign: 'center' }}>
+                            <label style={{ fontSize: '0.875rem', color: '#6b7280', fontWeight: 600, display: 'block', marginBottom: '0.5rem' }}>
+                              {language === 'en' ? 'Photo' : 'ছবি'}
+                            </label>
+                            {isEditingEmployee ? (
+                              <input
+                                type="file"
+                                accept="image/*"
+                                onChange={async (e) => {
+                                  const file = e.target.files?.[0]
+                                  if (!file) return
+                                  try {
+                                    const base64 = await fileToBase64(file)
+                                    setEditingEmployeeData({ ...editingEmployeeData, photo: base64 })
+                                  } catch (err) {
+                                    console.error('Photo upload failed', err)
+                                  }
+                                }}
+                                style={{
+                                  width: '100%',
+                                  padding: '0.5rem',
+                                  border: '1px solid #d1d5db',
+                                  borderRadius: '0.375rem',
+                                  fontSize: '0.875rem',
+                                  marginTop: '0.25rem'
+                                }}
+                              />
+                            ) : null}
+                            {(isEditingEmployee ? editingEmployeeData?.photo : viewingEmployee.photo) && (
+                              <img
+                                src={isEditingEmployee ? editingEmployeeData?.photo : viewingEmployee.photo}
+                                alt={viewingEmployee.name}
+                                style={{
+                                  maxWidth: '200px',
+                                  maxHeight: '200px',
+                                  borderRadius: '0.5rem',
+                                  border: '2px solid #e5e7eb',
+                                  marginTop: '0.5rem'
+                                }}
+                                onError={(e) => {
+                                  e.target.style.display = 'none'
+                                }}
+                              />
+                            )}
+                          </div>
+                        </div>
+                      )}
+
+
+                      <div style={{ marginTop: '1.5rem', display: 'flex', justifyContent: 'flex-end', gap: '0.5rem' }}>
+                        {isEditingEmployee ? (
+                          <>
+                            <button
+                              onClick={() => {
+                                setIsEditingEmployee(false)
+                                setEditingEmployeeData(null)
                               }}
-                            />
-                          ) : (
-                            <p style={{ margin: '0.5rem 0 0 0', fontSize: '1rem', color: '#111827' }}>
-                              {viewingEmployee.designation || 'N/A'}
-                            </p>
-                          )}
-                        </div>
-
-                        {/* Username */}
-                        <div style={{ padding: '1rem', backgroundColor: '#f9fafb', borderRadius: '0.375rem' }}>
-                          <label style={{ fontSize: '0.875rem', color: '#6b7280', fontWeight: 600 }}>
-                            {language === 'en' ? 'Username' : 'ব্যবহারকারীর নাম'}
-                          </label>
-                          <p style={{ margin: '0.5rem 0 0 0', fontSize: '1rem', color: '#111827', fontFamily: 'monospace' }}>
-                            {viewingEmployee.username || 'N/A'}
-                          </p>
-                        </div>
-
-                        {/* Password */}
-                        <div style={{ padding: '1rem', backgroundColor: '#f9fafb', borderRadius: '0.375rem' }}>
-                          <label style={{ fontSize: '0.875rem', color: '#6b7280', fontWeight: 600 }}>
-                            {language === 'en' ? 'Password' : 'পাসওয়ার্ড'}
-                          </label>
-                          <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginTop: '0.5rem' }}>
-                            <p style={{
-                              margin: 0,
-                              fontSize: '1rem',
-                              color: '#111827',
-                              fontFamily: 'monospace',
-                              backgroundColor: '#fee2e2',
-                              padding: '0.5rem',
-                              borderRadius: '0.25rem',
-                              border: '1px solid #fecaca',
-                              fontWeight: 600,
-                              flex: 1
-                            }}>
-                              {lastGeneratedPassword || (language === 'en' ? 'Hidden' : 'লুকানো')}
-                            </p>
+                              disabled={savingEmployee}
+                              style={{
+                                padding: '0.5rem 1.5rem',
+                                backgroundColor: '#6b7280',
+                                color: 'white',
+                                border: 'none',
+                                borderRadius: '0.375rem',
+                                cursor: savingEmployee ? 'not-allowed' : 'pointer',
+                                fontWeight: 600,
+                                opacity: savingEmployee ? 0.6 : 1
+                              }}
+                            >
+                              {adminContent.cancel}
+                            </button>
+                            <button
+                              onClick={handleSaveEmployeeEdit}
+                              disabled={savingEmployee}
+                              style={{
+                                padding: '0.5rem 1.5rem',
+                                backgroundColor: '#10b981',
+                                color: 'white',
+                                border: 'none',
+                                borderRadius: '0.375rem',
+                                cursor: savingEmployee ? 'not-allowed' : 'pointer',
+                                fontWeight: 600,
+                                opacity: savingEmployee ? 0.6 : 1
+                              }}
+                            >
+                              {savingEmployee ? (language === 'en' ? 'Saving...' : 'সংরক্ষণ করা হচ্ছে...') : adminContent.save}
+                            </button>
+                          </>
+                        ) : (
+                          <>
+                            <button
+                              onClick={() => {
+                                setIsEditingEmployee(true)
+                                setEditingEmployeeData({ ...viewingEmployee, status: normalizeSalaryStatus(viewingEmployee.status) })
+                              }}
+                              style={{
+                                padding: '0.5rem 1.5rem',
+                                backgroundColor: '#3b82f6',
+                                color: 'white',
+                                border: 'none',
+                                borderRadius: '0.375rem',
+                                cursor: 'pointer',
+                                fontWeight: 600
+                              }}
+                            >
+                              {adminContent.edit}
+                            </button>
                             <button
                               onClick={async () => {
-                                if (window.confirm(language === 'en' ? 'Reset password for this employee? A new password will be generated.' : 'এই কর্মচারীর পাসওয়ার্ড রিসেট করবেন? একটি নতুন পাসওয়ার্ড তৈরি করা হবে।')) {
+                                if (!viewingEmployee?._id) return
+                                if (window.confirm(language === 'en' ? 'Are you sure you want to delete this employee?' : 'আপনি কি নিশ্চিত যে আপনি এই কর্মচারীটি মুছতে চান?')) {
                                   try {
-                                    const res = await fetch(`${API_BASE}/api/employees/reset-password`, {
-                                      method: 'POST',
-                                      headers: { 'Content-Type': 'application/json' },
-                                      body: JSON.stringify({ id: viewingEmployee._id })
+                                    const res = await fetch(`${API_BASE}/api/employees/${viewingEmployee._id}`, {
+                                      method: 'DELETE'
                                     })
-                                    if (!res.ok) throw new Error('Failed to reset password')
-                                    const data = await res.json()
-
-                                    // Store newly generated password locally for display
-                                    setLastGeneratedPassword(data.newPassword)
-
-                                    // Refresh employee list
-                                    const resEmployees = await fetch(`${API_BASE}/api/employees`)
-                                    if (resEmployees.ok) {
-                                      const empData = await resEmployees.json()
-                                      setEmployees((empData.data || []).map((e) => ({
-                                        ...e,
-                                        status: normalizeSalaryStatus(e.status)
-                                      })))
-                                    }
-
-                                    alert(language === 'en'
-                                      ? `Password reset successfully! New password: ${data.newPassword}`
-                                      : `পাসওয়ার্ড সফলভাবে রিসেট করা হয়েছে! নতুন পাসওয়ার্ড: ${data.newPassword}`)
+                                    if (!res.ok) throw new Error('Failed to delete')
+                                    setEmployees(employees.filter(e => e._id !== viewingEmployee._id))
+                                    setViewingEmployee(null)
+                                    setIsEditingEmployee(false)
+                                    setEditingEmployeeData(null)
                                   } catch (err) {
-                                    alert(language === 'en' ? 'Failed to reset password' : 'পাসওয়ার্ড রিসেট করতে ব্যর্থ')
+                                    alert(language === 'en' ? 'Failed to delete employee' : 'কর্মচারী মুছে ফেলতে ব্যর্থ')
                                   }
                                 }
                               }}
                               style={{
-                                padding: '0.5rem 1rem',
-                                backgroundColor: '#3b82f6',
+                                padding: '0.5rem 1.5rem',
+                                backgroundColor: '#ef4444',
                                 color: 'white',
                                 border: 'none',
-                                borderRadius: '0.25rem',
+                                borderRadius: '0.375rem',
                                 cursor: 'pointer',
-                                fontWeight: 600,
-                                fontSize: '0.875rem',
-                                whiteSpace: 'nowrap'
+                                fontWeight: 600
                               }}
                             >
-                              {language === 'en' ? 'Reset Password' : 'পাসওয়ার্ড রিসেট'}
+                              {adminContent.delete}
                             </button>
-                          </div>
-                        </div>
-
-                        {/* Emergency Contact Name */}
-                        <div style={{ padding: '1rem', backgroundColor: '#f9fafb', borderRadius: '0.375rem' }}>
-                          <label style={{ fontSize: '0.875rem', color: '#6b7280', fontWeight: 600 }}>
-                            {language === 'en' ? 'Emergency Contact Name' : 'জরুরি যোগাযোগের নাম'}
-                          </label>
-                          {isEditingEmployee ? (
-                            <input
-                              type="text"
-                              value={editingEmployeeData?.emergencyContactName || ''}
-                              onChange={(e) => setEditingEmployeeData({ ...editingEmployeeData, emergencyContactName: e.target.value })}
-                              style={{
-                                marginTop: '0.5rem',
-                                width: '100%',
-                                padding: '0.5rem',
-                                border: '1px solid #d1d5db',
-                                borderRadius: '0.375rem',
-                                fontSize: '1rem'
+                            <button
+                              onClick={() => {
+                                setViewingEmployee(null)
+                                setIsEditingEmployee(false)
+                                setEditingEmployeeData(null)
+                                setLastGeneratedPassword('')
                               }}
-                            />
-                          ) : (
-                            <p style={{ margin: '0.5rem 0 0 0', fontSize: '1rem', color: '#111827' }}>
-                              {viewingEmployee.emergencyContactName || 'N/A'}
-                            </p>
-                          )}
-                        </div>
-
-                        {/* Emergency Contact */}
-                        <div style={{ padding: '1rem', backgroundColor: '#f9fafb', borderRadius: '0.375rem' }}>
-                          <label style={{ fontSize: '0.875rem', color: '#6b7280', fontWeight: 600 }}>
-                            {language === 'en' ? 'Emergency Contact' : 'জরুরি যোগাযোগ'}
-                          </label>
-                          {isEditingEmployee ? (
-                            <input
-                              type="text"
-                              value={editingEmployeeData?.emergencyContact || ''}
-                              onChange={(e) => setEditingEmployeeData({ ...editingEmployeeData, emergencyContact: e.target.value })}
                               style={{
-                                marginTop: '0.5rem',
-                                width: '100%',
-                                padding: '0.5rem',
-                                border: '1px solid #d1d5db',
+                                padding: '0.5rem 1.5rem',
+                                backgroundColor: '#6b7280',
+                                color: 'white',
+                                border: 'none',
                                 borderRadius: '0.375rem',
-                                fontSize: '1rem'
+                                cursor: 'pointer',
+                                fontWeight: 600
                               }}
-                            />
-                          ) : (
-                            <p style={{ margin: '0.5rem 0 0 0', fontSize: '1rem', color: '#111827' }}>
-                              {viewingEmployee.emergencyContact || 'N/A'}
-                            </p>
-                          )}
-                        </div>
-
-                        {/* Document */}
-                        {viewingEmployee.document && (
-                          <div className="admin-employee-detail-full-width" style={{ padding: '1rem', backgroundColor: '#f9fafb', borderRadius: '0.375rem', gridColumn: 'span 2' }}>
-                            <label style={{ fontSize: '0.875rem', color: '#6b7280', fontWeight: 600 }}>
-                              {language === 'en' ? 'Document' : 'নথি'}
-                            </label>
-                            <div style={{ marginTop: '0.5rem' }}>
-                              {viewingEmployee.document.startsWith('data:') ? (
-                                <a
-                                  href={viewingEmployee.document}
-                                  download={`${viewingEmployee.name}_document`}
-                                  style={{
-                                    display: 'inline-block',
-                                    padding: '0.5rem 1rem',
-                                    backgroundColor: '#3b82f6',
-                                    color: 'white',
-                                    borderRadius: '0.375rem',
-                                    textDecoration: 'none',
-                                    fontWeight: 600
-                                  }}
-                                >
-                                  {language === 'en' ? 'Download Document' : 'নথি ডাউনলোড করুন'}
-                                </a>
-                              ) : (
-                                <p style={{ margin: 0, fontSize: '1rem', color: '#111827' }}>
-                                  {viewingEmployee.document}
-                                </p>
-                              )}
-                            </div>
-                          </div>
+                            >
+                              {language === 'en' ? 'Close' : 'বন্ধ করুন'}
+                            </button>
+                          </>
                         )}
-
-                        {/* Photo */}
-                        <div className="admin-employee-detail-full-width" style={{ padding: '1rem', backgroundColor: '#f9fafb', borderRadius: '0.375rem', gridColumn: 'span 2', textAlign: 'center' }}>
-                          <label style={{ fontSize: '0.875rem', color: '#6b7280', fontWeight: 600, display: 'block', marginBottom: '0.5rem' }}>
-                            {language === 'en' ? 'Photo' : 'ছবি'}
-                          </label>
-                          {isEditingEmployee ? (
-                            <input
-                              type="file"
-                              accept="image/*"
-                              onChange={async (e) => {
-                                const file = e.target.files?.[0]
-                                if (!file) return
-                                try {
-                                  const base64 = await fileToBase64(file)
-                                  setEditingEmployeeData({ ...editingEmployeeData, photo: base64 })
-                                } catch (err) {
-                                  console.error('Photo upload failed', err)
-                                }
-                              }}
-                              style={{
-                                width: '100%',
-                                padding: '0.5rem',
-                                border: '1px solid #d1d5db',
-                                borderRadius: '0.375rem',
-                                fontSize: '0.875rem',
-                                marginTop: '0.25rem'
-                              }}
-                            />
-                          ) : null}
-                          {(isEditingEmployee ? editingEmployeeData?.photo : viewingEmployee.photo) && (
-                            <img
-                              src={isEditingEmployee ? editingEmployeeData?.photo : viewingEmployee.photo}
-                              alt={viewingEmployee.name}
-                              style={{
-                                maxWidth: '200px',
-                                maxHeight: '200px',
-                                borderRadius: '0.5rem',
-                                border: '2px solid #e5e7eb',
-                                marginTop: '0.5rem'
-                              }}
-                              onError={(e) => {
-                                e.target.style.display = 'none'
-                              }}
-                            />
-                          )}
-                        </div>
                       </div>
-                    )}
-
-
-                    <div style={{ marginTop: '1.5rem', display: 'flex', justifyContent: 'flex-end', gap: '0.5rem' }}>
-                      {isEditingEmployee ? (
-                        <>
-                          <button
-                            onClick={() => {
-                              setIsEditingEmployee(false)
-                              setEditingEmployeeData(null)
-                            }}
-                            disabled={savingEmployee}
-                            style={{
-                              padding: '0.5rem 1.5rem',
-                              backgroundColor: '#6b7280',
-                              color: 'white',
-                              border: 'none',
-                              borderRadius: '0.375rem',
-                              cursor: savingEmployee ? 'not-allowed' : 'pointer',
-                              fontWeight: 600,
-                              opacity: savingEmployee ? 0.6 : 1
-                            }}
-                          >
-                            {adminContent.cancel}
-                          </button>
-                          <button
-                            onClick={handleSaveEmployeeEdit}
-                            disabled={savingEmployee}
-                            style={{
-                              padding: '0.5rem 1.5rem',
-                              backgroundColor: '#10b981',
-                              color: 'white',
-                              border: 'none',
-                              borderRadius: '0.375rem',
-                              cursor: savingEmployee ? 'not-allowed' : 'pointer',
-                              fontWeight: 600,
-                              opacity: savingEmployee ? 0.6 : 1
-                            }}
-                          >
-                            {savingEmployee ? (language === 'en' ? 'Saving...' : 'সংরক্ষণ করা হচ্ছে...') : adminContent.save}
-                          </button>
-                        </>
-                      ) : (
-                        <>
-                          <button
-                            onClick={() => {
-                              setIsEditingEmployee(true)
-                              setEditingEmployeeData({ ...viewingEmployee, status: normalizeSalaryStatus(viewingEmployee.status) })
-                            }}
-                            style={{
-                              padding: '0.5rem 1.5rem',
-                              backgroundColor: '#3b82f6',
-                              color: 'white',
-                              border: 'none',
-                              borderRadius: '0.375rem',
-                              cursor: 'pointer',
-                              fontWeight: 600
-                            }}
-                          >
-                            {adminContent.edit}
-                          </button>
-                          <button
-                            onClick={async () => {
-                              if (!viewingEmployee?._id) return
-                              if (window.confirm(language === 'en' ? 'Are you sure you want to delete this employee?' : 'আপনি কি নিশ্চিত যে আপনি এই কর্মচারীটি মুছতে চান?')) {
-                                try {
-                                  const res = await fetch(`${API_BASE}/api/employees/${viewingEmployee._id}`, {
-                                    method: 'DELETE'
-                                  })
-                                  if (!res.ok) throw new Error('Failed to delete')
-                                  setEmployees(employees.filter(e => e._id !== viewingEmployee._id))
-                                  setViewingEmployee(null)
-                                  setIsEditingEmployee(false)
-                                  setEditingEmployeeData(null)
-                                } catch (err) {
-                                  alert(language === 'en' ? 'Failed to delete employee' : 'কর্মচারী মুছে ফেলতে ব্যর্থ')
-                                }
-                              }
-                            }}
-                            style={{
-                              padding: '0.5rem 1.5rem',
-                              backgroundColor: '#ef4444',
-                              color: 'white',
-                              border: 'none',
-                              borderRadius: '0.375rem',
-                              cursor: 'pointer',
-                              fontWeight: 600
-                            }}
-                          >
-                            {adminContent.delete}
-                          </button>
-                          <button
-                            onClick={() => {
-                              setViewingEmployee(null)
-                              setIsEditingEmployee(false)
-                              setEditingEmployeeData(null)
-                              setLastGeneratedPassword('')
-                            }}
-                            style={{
-                              padding: '0.5rem 1.5rem',
-                              backgroundColor: '#6b7280',
-                              color: 'white',
-                              border: 'none',
-                              borderRadius: '0.375rem',
-                              cursor: 'pointer',
-                              fontWeight: 600
-                            }}
-                          >
-                            {language === 'en' ? 'Close' : 'বন্ধ করুন'}
-                          </button>
-                        </>
-                      )}
                     </div>
                   </div>
-                </div>
-              )
-              }
-            </div >
-          )
+                )
+                }
+              </div >
+            )
           }
 
           {/* Orders Tab */}
@@ -10929,7 +11395,7 @@ function AdminPage({ language, toggleLanguage, t }) {
                         )}
                         <form onSubmit={(e) => { e.preventDefault(); handleAddOrderToCart() }} className="admin-form-grid">
                           <div className="admin-form-group">
-                            <label>{language === 'en' ? 'Dealer *' : 'ডিলার *'}</label>
+                            <label>{language === 'en' ? 'Customer *' : 'কাস্টমার *'}</label>
                             <select
                               value={orderForm.dealer}
                               onChange={(e) => setOrderForm({ ...orderForm, dealer: e.target.value })}
@@ -10942,7 +11408,7 @@ function AdminPage({ language, toggleLanguage, t }) {
                                 fontSize: '0.875rem'
                               }}
                             >
-                              <option value="">{language === 'en' ? 'Select Dealer' : 'ডিলার নির্বাচন করুন'}</option>
+                              <option value="">{language === 'en' ? 'Select Customer' : 'কাস্টমার নির্বাচন করুন'}</option>
                               {filteredDealers.map((dealer) => {
                                 // Get assigned employee name - handle both populated and unpopulated cases
                                 let assignedEmployeeName = ''
@@ -10974,7 +11440,7 @@ function AdminPage({ language, toggleLanguage, t }) {
                             <label>{language === 'en' ? 'Product *' : 'পণ্য *'}</label>
                             <select
                               value={orderForm.product}
-                              onChange={(e) => setOrderForm({ ...orderForm, product: e.target.value, variant: { name: '', value: '', price: 0 } })}
+                              onChange={(e) => setOrderForm({ ...orderForm, product: e.target.value, variant: { productCode: '', packSize: '', packUnit: 'ml', cartoonSize: 1, cartoonUnit: 'Pcs', price: 0 } })}
                               required
                               style={{
                                 width: '100%',
@@ -10997,16 +11463,19 @@ function AdminPage({ language, toggleLanguage, t }) {
                             <div className="admin-form-group">
                               <label>{language === 'en' ? 'Product Variant *' : 'পণ্যের ভ্যারিয়েন্ট *'}</label>
                               <select
-                                value={orderForm.variant.value}
+                                value={orderForm.variant.productCode}
                                 onChange={(e) => {
-                                  const selectedVariant = selectedProductVariants.find(v => v.value === e.target.value)
+                                  const selectedVariant = selectedProductVariants.find(v => v.productCode === e.target.value)
                                   setOrderForm({
                                     ...orderForm,
                                     variant: selectedVariant ? {
-                                      name: selectedVariant.name || '',
-                                      value: selectedVariant.value || '',
+                                      productCode: selectedVariant.productCode || '',
+                                      packSize: selectedVariant.packSize || '',
+                                      packUnit: selectedVariant.packUnit || 'ml',
+                                      cartoonSize: selectedVariant.cartoonSize || 1,
+                                      cartoonUnit: selectedVariant.cartoonUnit || 'Pcs',
                                       price: selectedVariant.price || 0
-                                    } : { name: '', value: '', price: 0 }
+                                    } : { productCode: '', packSize: '', packUnit: 'ml', cartoonSize: 1, cartoonUnit: 'Pcs', price: 0 }
                                   })
                                 }}
                                 required
@@ -11020,8 +11489,8 @@ function AdminPage({ language, toggleLanguage, t }) {
                               >
                                 <option value="">{language === 'en' ? 'Select Variant' : 'ভ্যারিয়েন্ট নির্বাচন করুন'}</option>
                                 {selectedProductVariants.map((variant, index) => (
-                                  <option key={index} value={variant.value}>
-                                    {variant.name || variant.value} - ৳{variant.price || 0}
+                                  <option key={index} value={variant.productCode}>
+                                    {variant.productCode} ({variant.packSize} {variant.packUnit || 'ml'}) - ৳{variant.price || 0}
                                   </option>
                                 ))}
                               </select>
@@ -11043,10 +11512,20 @@ function AdminPage({ language, toggleLanguage, t }) {
                                   fontWeight: 600,
                                   color: '#111827'
                                 }}>
-                                  ৳{orderForm.variant?.price || (() => {
-                                    const p = products.find(prod => prod._id === orderForm.product)
-                                    return p ? p.price : 0
-                                  })()}
+                                  <div style={{ display: 'flex', flexDirection: 'column', gap: '0.25rem' }}>
+                                    <div>
+                                      {language === 'en' ? 'CTN Price:' : 'কার্টুন মূল্য:'} ৳{orderForm.variant?.price || (() => {
+                                        const p = products.find(prod => prod._id === orderForm.product)
+                                        return p ? p.price : 0
+                                      })()}
+                                    </div>
+                                    <div style={{ fontSize: '0.875rem', color: '#16a34a' }}>
+                                      {language === 'en' ? 'Unit Price:' : 'ইউনিট মূল্য:'} ৳{((orderForm.variant?.price || (() => {
+                                        const p = products.find(prod => prod._id === orderForm.product)
+                                        return p ? p.price : 0
+                                      })()) / (orderForm.variant?.cartoonSize || 1)).toFixed(2)}
+                                    </div>
+                                  </div>
                                 </div>
                               </div>
                             )}
@@ -11237,7 +11716,7 @@ function AdminPage({ language, toggleLanguage, t }) {
                               </span>
                             </div>
                             <div style={{ marginBottom: '0.75rem', color: '#475569', fontWeight: 600 }}>
-                              {language === 'en' ? 'Dealer:' : 'ডিলার:'} {filteredDealers.find(d => d._id === orderForm.dealer)?.name || '-'}
+                              {language === 'en' ? 'Customer:' : 'কাস্টমার:'} {filteredDealers.find(d => d._id === orderForm.dealer)?.name || '-'}
                             </div>
                             <div className="admin-table-container" style={{ marginBottom: '1rem', background: '#fff', borderRadius: '0.5rem', border: '1px solid #e2e8f0' }}>
                               <table className="admin-table">
@@ -11249,6 +11728,7 @@ function AdminPage({ language, toggleLanguage, t }) {
                                     <th>{language === 'en' ? 'Free Qty' : 'ফ্রি পরিমাণ'}</th>
                                     <th>{language === 'en' ? 'Total Qty' : 'মোট পরিমাণ'}</th>
                                     <th>{language === 'en' ? 'Total Price' : 'মোট মূল্য'}</th>
+                                    <th>{language === 'en' ? 'Grand Total' : 'সর্বমোট'}</th>
                                     <th>{language === 'en' ? 'Status' : 'স্ট্যাটাস'}</th>
                                     <th>{language === 'en' ? 'Notes' : 'নোট'}</th>
                                     <th>{language === 'en' ? 'Actions' : 'কার্যক্রম'}</th>
@@ -11270,7 +11750,7 @@ function AdminPage({ language, toggleLanguage, t }) {
                                         <td>
                                           <span style={{ fontWeight: 600 }}>{item.productName || item.productId || '-'}</span>
                                         </td>
-                                        <td>{item.variant?.value ? (item.variant.name || item.variant.value) : '-'}</td>
+                                        <td>{item.variant?.productCode ? `${item.variant.productCode} (${item.variant.packSize} ${item.variant.packUnit || 'ml'})` : '-'}</td>
                                         <td style={{ textAlign: 'center', fontWeight: 600 }}>{item.quantity}</td>
                                         <td style={{ textAlign: 'center', fontWeight: 600, color: freeUnits > 0 ? '#16a34a' : '#6b7280' }}>
                                           {freeUnits > 0 ? (
@@ -11289,6 +11769,9 @@ function AdminPage({ language, toggleLanguage, t }) {
                                         </td>
                                         <td style={{ textAlign: 'center', fontWeight: 700, color: '#0f172a' }}>{totalQty}</td>
                                         <td style={{ fontWeight: 700, color: '#0f172a' }}>৳{getCartItemTotal(item).toFixed(2)}</td>
+                                        <td style={{ fontWeight: 800, color: '#16a34a', fontSize: '1.05rem' }}>
+                                          ৳{(discountEnabled && discountAmount > 0 ? Math.round(getCartItemTotal(item) * parseFloat(discountAmount)) : Math.round(getCartItemTotal(item)))}
+                                        </td>
                                         <td>
                                           <span style={{
                                             padding: '0.25rem 0.5rem',
@@ -11323,9 +11806,13 @@ function AdminPage({ language, toggleLanguage, t }) {
                                     <td colSpan="5" style={{ textAlign: 'right', fontWeight: 700, padding: '0.75rem' }}>
                                       {language === 'en' ? 'Cart Total:' : 'কার্ট মোট:'}
                                     </td>
-                                    <td colSpan="4" style={{ fontWeight: 800, fontSize: '1.1rem', color: '#0f172a', padding: '0.75rem' }}>
+                                    <td style={{ fontWeight: 800, fontSize: '1.1rem', color: '#0f172a', padding: '0.75rem' }}>
                                       ৳{getOrderCartTotal().toFixed(2)}
                                     </td>
+                                    <td style={{ fontWeight: 900, fontSize: '1.25rem', color: '#16a34a', padding: '0.75rem' }}>
+                                      ৳{(discountEnabled && discountAmount > 0 ? Math.round(getOrderCartTotal() * parseFloat(discountAmount)) : Math.round(getOrderCartTotal()))}
+                                    </td>
+                                    <td colSpan="3"></td>
                                   </tr>
                                 </tfoot>
                               </table>
@@ -11369,13 +11856,19 @@ function AdminPage({ language, toggleLanguage, t }) {
                                         <span className="mobile-card-value" style={{ fontWeight: 700 }}>৳{getCartItemTotal(item).toFixed(2)}</span>
                                       </div>
                                       <div className="mobile-card-row">
+                                        <span className="mobile-card-label" style={{ fontWeight: 700 }}>{language === 'en' ? 'Grand Total' : 'সর্বমোট'}</span>
+                                        <span className="mobile-card-value" style={{ fontWeight: 800, color: '#16a34a', fontSize: '1.05rem' }}>
+                                          ৳{(discountEnabled && discountAmount > 0 ? Math.round(getCartItemTotal(item) * parseFloat(discountAmount)) : Math.round(getCartItemTotal(item)))}
+                                        </span>
+                                      </div>
+                                      <div className="mobile-card-row">
                                         <span className="mobile-card-label">{language === 'en' ? 'Status' : 'স্ট্যাটাস'}</span>
                                         <span className="mobile-card-value">{item.status || 'Pending'}</span>
                                       </div>
                                     </div>
                                     <div className="mobile-card-footer" style={{ marginTop: '1rem', textAlign: 'right' }}>
                                       <button
-                                        className="mobile-action-btn delete"
+                                        className="admin-action-btn delete"
                                         onClick={() => handleRemoveCartItem(idx)}
                                         style={{
                                           padding: '0.35rem 1rem',
@@ -11395,9 +11888,21 @@ function AdminPage({ language, toggleLanguage, t }) {
                               })}
                               {orderCart.length > 0 && (
                                 <div className="mobile-card" style={{ marginTop: '1rem', padding: '1rem' }}>
-                                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontWeight: 800, fontSize: '1.1rem', color: '#0f172a' }}>
+                                  {discountEnabled && discountAmount > 0 && (
+                                    <>
+                                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontWeight: 600, fontSize: '0.95rem', color: '#475569', marginBottom: '0.5rem' }}>
+                                        <span>{language === 'en' ? 'Subtotal:' : 'উপ-মোট:'}</span>
+                                        <span>৳{getOrderCartTotal().toFixed(2)}</span>
+                                      </div>
+                                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontWeight: 600, fontSize: '0.95rem', color: '#dc2626', marginBottom: '0.5rem' }}>
+                                        <span>{language === 'en' ? 'Discount:' : 'ডিসকাউন্ট:'}</span>
+                                        <span>{((1 - parseFloat(discountAmount)) * 100).toFixed(0)}%</span>
+                                      </div>
+                                    </>
+                                  )}
+                                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontWeight: 800, fontSize: '1.1rem', color: '#0f172a', paddingTop: discountEnabled && discountAmount > 0 ? '0.5rem' : '0', borderTop: discountEnabled && discountAmount > 0 ? '2px solid #e2e8f0' : 'none' }}>
                                     <span>{language === 'en' ? 'Cart Total:' : 'কার্ট মোট:'}</span>
-                                    <span>৳{getOrderCartTotal().toFixed(2)}</span>
+                                    <span style={{ color: '#16a34a' }}>৳{(discountEnabled && discountAmount > 0 ? Math.round(getOrderCartTotal() * parseFloat(discountAmount)) : Math.round(getOrderCartTotal()))}</span>
                                   </div>
                                 </div>
                               )}
@@ -11551,8 +12056,8 @@ function AdminPage({ language, toggleLanguage, t }) {
                                     <tr>
                                       <th>{language === 'en' ? 'Date' : 'তারিখ'}</th>
                                       <th>{language === 'en' ? 'Order ID' : 'অর্ডার আইডি'}</th>
-                                      <th>{language === 'en' ? 'Dealer' : 'ডিলার'}</th>
-                                      <th>{language === 'en' ? 'Dealer ID' : 'ডিলার আইডি'}</th>
+                                      <th>{language === 'en' ? 'Customer' : 'কাস্টমার'}</th>
+                                      <th>{language === 'en' ? 'CID' : 'সিআইডি'}</th>
                                       <th>{language === 'en' ? 'Product' : 'পণ্য'}</th>
                                       <th>{language === 'en' ? 'Variant' : 'ভ্যারিয়েন্ট'}</th>
                                       <th>{language === 'en' ? 'Qty' : 'পরিমাণ'}</th>
@@ -11570,7 +12075,7 @@ function AdminPage({ language, toggleLanguage, t }) {
                                           <td>{order.dealerName || order.dealer?.name || '-'}</td>
                                           <td>{order.dealerId || order.dealer?.dealerId || '-'}</td>
                                           <td>{order.productName || order.product?.name || '-'}</td>
-                                          <td>{order.variant?.value ? (order.variant.name || order.variant.value) : '-'}</td>
+                                          <td>{order.variant?.productCode ? `${order.variant.productCode} (${order.variant.packSize} ${order.variant.packUnit || 'ml'})` : '-'}</td>
                                           <td>{order.quantity || 0}</td>
                                           <td>{order.requestedByName || order.requestedByRole || '-'}</td>
                                           <td>
@@ -11677,7 +12182,7 @@ function AdminPage({ language, toggleLanguage, t }) {
                                                     setOrderForm({
                                                       dealer: order.dealer?._id || order.dealer || '',
                                                       product: existingItems[0]?.product || '',
-                                                      variant: existingItems[0]?.variant || { name: '', value: '', price: 0 },
+                                                      variant: existingItems[0]?.variant || { productCode: '', packSize: '', packUnit: 'ml', cartoonSize: 1, cartoonUnit: 'Pcs', price: 0 },
                                                       quantity: existingItems[0]?.quantity || 1,
                                                       notes: existingItems[0]?.notes || '',
                                                       status: existingItems[0]?.status || 'Pending'
@@ -11707,7 +12212,7 @@ function AdminPage({ language, toggleLanguage, t }) {
                                     <div className="mobile-card" key={order._id}>
                                       <div
                                         className="mobile-card-header"
-                                        onClick={() => setExpandedRequestIds(prev => ({ ...prev, [order._id]: !prev[order._id] }))}
+                                        onClick={() => setExpandedRequestId(prev => (prev === order._id ? null : order._id))}
                                         style={{ cursor: 'pointer' }}
                                       >
                                         <div className="mobile-card-avatar-container" style={{ position: 'relative', width: '3rem', height: '3rem', display: 'flex', alignItems: 'center' }}>
@@ -11781,60 +12286,106 @@ function AdminPage({ language, toggleLanguage, t }) {
                                           <div style={{ fontSize: '0.75rem', color: '#64748b', marginBottom: '0.1rem' }}>
                                             {order.createdAt ? new Date(order.createdAt).toLocaleDateString() : '-'}
                                           </div>
+                                          <div style={{ fontSize: '0.85rem', color: '#64748b', marginBottom: '0.15rem', fontWeight: 600 }}>
+                                            {(() => {
+                                              const dealerShopName = order.dealer?.shopName
+                                              if (dealerShopName) return dealerShopName
+                                              // Try to find dealer in dealers list
+                                              const dealerId = order.dealer?._id || order.dealer
+                                              const foundDealer = dealers.find(d => d._id === dealerId)
+                                              return foundDealer?.shopName || '-'
+                                            })()}
+                                          </div>
                                           <div style={{ fontSize: '0.85rem', fontWeight: 600, color: '#334155' }}>
                                             {order.dealerName || order.dealer?.name || 'N/A'}
                                           </div>
-                                          <div style={{ fontSize: '0.9rem', fontWeight: 700, color: '#475569', marginTop: '0.25rem' }}>
-                                            ৳{order.totalPrice ? Number(order.totalPrice).toFixed(2) : ((parseFloat(order.variant?.price || order.product?.price || 0) * (parseFloat(order.quantity) || 1))).toFixed(2)}
+                                          <div style={{ fontSize: '0.9rem', fontWeight: 700, color: '#16a34a', marginTop: '0.25rem' }}>
+                                            ৳{(() => {
+                                              const total = parseFloat(order.totalPrice || 0)
+                                              const discount = order.discountEnabled && order.discountAmount > 0 ? order.discountAmount : 1
+                                              return (total * discount).toFixed(2)
+                                            })()}
                                           </div>
                                         </div>
                                       </div>
 
-                                      {expandedRequestIds[order._id] && (
+                                      {expandedRequestId === order._id && (
                                         <>
                                           <div className="mobile-card-body">
                                             {/* Detailed Items / Fallback */}
                                             {order.items && order.items.length > 0 ? (
                                               <div style={{ marginTop: '0.5rem', borderTop: '1px dashed #e2e8f0', paddingTop: '0.5rem' }}>
-                                                {order.items.map((item, idx) => (
-                                                  <div key={idx} style={{ marginBottom: '0.75rem', paddingBottom: '0.75rem', borderBottom: idx < order.items.length - 1 ? '1px solid #f1f5f9' : 'none' }}>
-                                                    <div className="mobile-card-row">
-                                                      <span className="mobile-card-label" style={{ fontWeight: 600 }}>{item.productName || item.product?.name || `Item ${idx + 1}`}</span>
-                                                    </div>
-                                                    {item.variant && (item.variant.name || item.variant.value) && (
+                                                {order.items.map((item, idx) => {
+                                                  // Calculate free quantities
+                                                  const itemProduct = products.find(p => p._id === item.product || p._id === item.product?._id)
+                                                  const hasOffer = itemProduct && itemProduct.hasOffer && itemProduct.buyQuantity && itemProduct.freeQuantity
+                                                  const buyQty = hasOffer ? (parseFloat(itemProduct.buyQuantity) || 0) : 0
+                                                  const freeQty = hasOffer ? (parseFloat(itemProduct.freeQuantity) || 0) : 0
+                                                  const orderQty = parseFloat(item.quantity) || 0
+                                                  const eligibleOffers = hasOffer ? Math.floor(orderQty / buyQty) : 0
+                                                  const freeUnits = eligibleOffers * freeQty
+                                                  const totalQty = orderQty + freeUnits
+
+                                                  return (
+                                                    <div key={idx} style={{ marginBottom: '0.75rem', paddingBottom: '0.75rem', borderBottom: idx < order.items.length - 1 ? '1px solid #f1f5f9' : 'none' }}>
                                                       <div className="mobile-card-row">
-                                                        <span className="mobile-card-label" style={{ fontSize: '0.8rem' }}>{language === 'en' ? 'Var' : 'ভ্যারিয়েন্ট'}</span>
-                                                        <span className="mobile-card-value" style={{ fontSize: '0.8rem' }}>{item.variant.name || item.variant.value}</span>
+                                                        <span className="mobile-card-label" style={{ fontWeight: 600 }}>{item.productName || item.product?.name || `Item ${idx + 1}`}</span>
                                                       </div>
-                                                    )}
-                                                    <div className="mobile-card-row">
-                                                      <span className="mobile-card-label" style={{ fontSize: '0.8rem' }}>{language === 'en' ? 'Qty' : 'পরিমাণ'}</span>
-                                                      <span className="mobile-card-value" style={{ fontSize: '0.8rem' }}>
-                                                        {item.quantity || 0} x ৳{item.unitPrice !== undefined ? (item.unitPrice || 0).toFixed(2) : (item.variant?.price || item.variant?.price === 0 ? item.variant.price : (item.product?.price || 0))}
-                                                      </span>
+                                                      {item.variant && item.variant.productCode && (
+                                                        <div className="mobile-card-row">
+                                                          <span className="mobile-card-label" style={{ fontSize: '0.8rem' }}>{language === 'en' ? 'Var' : 'ভ্যারিয়েন্ট'}</span>
+                                                          <span className="mobile-card-value" style={{ fontSize: '0.8rem' }}>{item.variant.productCode} ({item.variant.packSize} {item.variant.packUnit || 'ml'})</span>
+                                                        </div>
+                                                      )}
+                                                      <div className="mobile-card-row">
+                                                        <span className="mobile-card-label" style={{ fontSize: '0.8rem' }}>{language === 'en' ? 'Qty' : 'পরিমাণ'}</span>
+                                                        <span className="mobile-card-value" style={{ fontSize: '0.8rem' }}>
+                                                          {orderQty} {freeUnits > 0 && <span style={{ color: '#16a34a' }}>(+{freeUnits} Free)</span>} = {totalQty}
+                                                        </span>
+                                                      </div>
+                                                      <div className="mobile-card-row">
+                                                        <span className="mobile-card-label" style={{ fontSize: '0.8rem' }}>{language === 'en' ? 'Price' : 'দাম'}</span>
+                                                        <span className="mobile-card-value" style={{ fontSize: '0.8rem' }}>
+                                                          {orderQty} x ৳{item.unitPrice !== undefined ? (item.unitPrice || 0).toFixed(2) : (item.variant?.price || item.variant?.price === 0 ? item.variant.price : (item.product?.price || 0))}
+                                                        </span>
+                                                      </div>
+                                                      <div className="mobile-card-row">
+                                                        <span className="mobile-card-label" style={{ fontSize: '0.8rem' }}>{language === 'en' ? 'Total' : 'মোট'}</span>
+                                                        <span className="mobile-card-value" style={{ fontWeight: 600 }}>
+                                                          ৳{item.totalPrice !== undefined ? (item.totalPrice || 0).toFixed(2) : ((parseFloat(item.quantity) || 0) * parseFloat(item.variant?.price || item.variant?.price === 0 ? item.variant.price : (item.product?.price || 0))).toFixed(2)}
+                                                        </span>
+                                                      </div>
+                                                      <div className="mobile-card-row">
+                                                        <span className="mobile-card-label" style={{ fontSize: '0.8rem', fontWeight: 700 }}>{language === 'en' ? 'Grand Total' : 'সর্বমোট'}</span>
+                                                        <span className="mobile-card-value" style={{ fontWeight: 700, color: '#16a34a' }}>
+                                                          ৳{(() => {
+                                                            const itemTotal = item.totalPrice !== undefined ? (item.totalPrice || 0) : ((parseFloat(item.quantity) || 0) * parseFloat(item.variant?.price || item.variant?.price === 0 ? item.variant.price : (item.product?.price || 0)))
+                                                            const discount = order.discountEnabled && order.discountAmount > 0 ? order.discountAmount : 1
+                                                            return (itemTotal * discount).toFixed(2)
+                                                          })()}
+                                                        </span>
+                                                      </div>
                                                     </div>
-                                                    <div className="mobile-card-row">
-                                                      <span className="mobile-card-label" style={{ fontSize: '0.8rem' }}>{language === 'en' ? 'Total' : 'মোট'}</span>
-                                                      <span className="mobile-card-value" style={{ fontWeight: 600 }}>
-                                                        ৳{item.totalPrice !== undefined ? (item.totalPrice || 0).toFixed(2) : ((parseFloat(item.quantity) || 0) * parseFloat(item.variant?.price || item.variant?.price === 0 ? item.variant.price : (item.product?.price || 0))).toFixed(2)}
-                                                      </span>
-                                                    </div>
-                                                  </div>
-                                                ))}
+                                                  )
+                                                })}
                                                 <div className="mobile-card-row" style={{ borderTop: '2px solid #e2e8f0', paddingTop: '0.5rem', marginTop: '0.25rem' }}>
                                                   <span className="mobile-card-label" style={{ fontWeight: 700 }}>{language === 'en' ? 'Grand Total' : 'সর্বমোট'}</span>
-                                                  <span className="mobile-card-value" style={{ fontWeight: 700, color: '#0f172a', fontSize: '1.1rem' }}>
-                                                    ৳{order.totalPrice ? Number(order.totalPrice).toFixed(2) : order.items.reduce((sum, item) => sum + (item.totalPrice || ((parseFloat(item.quantity) || 0) * parseFloat(item.variant?.price || item.variant?.price === 0 ? item.variant.price : (item.product?.price || 0)))), 0).toFixed(2)}
+                                                  <span className="mobile-card-value" style={{ fontWeight: 700, color: '#16a34a', fontSize: '1.1rem' }}>
+                                                    ৳{(() => {
+                                                      const total = parseFloat(order.totalPrice || 0)
+                                                      const discount = order.discountEnabled && order.discountAmount > 0 ? order.discountAmount : 1
+                                                      return (total * discount).toFixed(2)
+                                                    })()}
                                                   </span>
                                                 </div>
                                               </div>
                                             ) : (
                                               <>
                                                 {/* Single Item Fallback (Hidden in Header, shown here for detail completeness) */}
-                                                {order.variant && (order.variant.name || order.variant.value) && (
+                                                {order.variant && order.variant.productCode && (
                                                   <div className="mobile-card-row">
                                                     <span className="mobile-card-label">{language === 'en' ? 'Variant' : 'ভ্যারিয়েন্ট'}</span>
-                                                    <span className="mobile-card-value">{order.variant.name || order.variant.value}</span>
+                                                    <span className="mobile-card-value">{order.variant.productCode} ({order.variant.packSize} {order.variant.packUnit || 'ml'})</span>
                                                   </div>
                                                 )}
                                                 <div className="mobile-card-row">
@@ -12083,14 +12634,14 @@ function AdminPage({ language, toggleLanguage, t }) {
                                 onClick={() => handleSortOrders('dealer')}
                                 style={{ cursor: 'pointer', userSelect: 'none', textAlign: 'center' }}
                               >
-                                {language === 'en' ? 'Dealer' : 'ডিলার'}
+                                {language === 'en' ? 'Customer' : 'কাস্টমার'}
                                 {orderSortField === 'dealer' && (orderSortDirection === 'asc' ? ' ↑' : ' ↓')}
                               </th>
                               <th
                                 onClick={() => handleSortOrders('dealerId')}
                                 style={{ cursor: 'pointer', userSelect: 'none', textAlign: 'center' }}
                               >
-                                {language === 'en' ? 'Dealer ID' : 'ডিলার আইডি'}
+                                {language === 'en' ? 'CID' : 'সিআইডি'}
                                 {orderSortField === 'dealerId' && (orderSortDirection === 'asc' ? ' ↑' : ' ↓')}
                               </th>
                               <th
@@ -12122,6 +12673,9 @@ function AdminPage({ language, toggleLanguage, t }) {
                                 {language === 'en' ? 'Total Price' : 'মোট মূল্য'}
                                 {orderSortField === 'totalPrice' && (orderSortDirection === 'asc' ? ' ↑' : ' ↓')}
                               </th>
+                              <th style={{ textAlign: 'center' }}>
+                                {language === 'en' ? 'Grand Total' : 'সর্বমোট'}
+                              </th>
                               <th
                                 onClick={() => handleSortOrders('paidAmount')}
                                 style={{ cursor: 'pointer', userSelect: 'none', textAlign: 'center' }}
@@ -12139,140 +12693,184 @@ function AdminPage({ language, toggleLanguage, t }) {
                                 {language === 'en' ? 'Due Amount' : 'বাকি পরিমাণ'}
                                 {orderSortField === 'dueAmount' && (orderSortDirection === 'asc' ? ' ↑' : ' ↓')}
                               </th>
-                              <th
-                                onClick={() => handleSortOrders('status')}
-                                style={{ cursor: 'pointer', userSelect: 'none', textAlign: 'center' }}
-                              >
-                                {language === 'en' ? 'Status' : 'স্ট্যাটাস'}
-                                {orderSortField === 'status' && (orderSortDirection === 'asc' ? ' ↑' : ' ↓')}
-                              </th>
                               <th style={{ textAlign: 'center' }}>{language === 'en' ? 'Actions' : 'কার্যক্রম'}</th>
                             </tr>
                           </thead>
                           <tbody>
-                            {sortedOrders.length ? sortedOrders.map((order) => (
-                              <tr key={order._id}>
-                                <td style={{ textAlign: 'center' }}>{order.createdAt ? new Date(order.createdAt).toLocaleDateString() : '-'}</td>
-                                <td style={{ textAlign: 'center' }}>{order.orderId || '-'}</td>
-                                <td style={{ textAlign: 'center' }}>{order.dealerName || order.dealer?.name || '-'}</td>
-                                <td style={{ textAlign: 'center' }}>{order.dealerId || order.dealer?.dealerId || '-'}</td>
-                                <td style={{ textAlign: 'center' }}>{order.productName || order.product?.name || '-'}</td>
-                                <td style={{ textAlign: 'center' }}>
-                                  {order.variant && order.variant.value
-                                    ? `${order.variant.name || order.variant.value}`
-                                    : '-'}
-                                </td>
-                                <td style={{ fontWeight: 700, color: '#0f172a', textAlign: 'center' }}>
-                                  {(() => {
-                                    // Calculate total quantity (purchased + free)
-                                    let totalPurchasedQty = 0
-                                    let totalFreeQty = 0
-
-                                    // Check if order has items array (multi-item order)
-                                    if (order.items && Array.isArray(order.items) && order.items.length > 0) {
-                                      // Sum quantities from all items
-                                      order.items.forEach(item => {
-                                        const itemQty = parseFloat(item.quantity) || 0
-                                        totalPurchasedQty += itemQty
-
-                                        // Calculate free quantity if product has offer
-                                        const itemProduct = products.find(p => p._id === item.product || p._id === item.product?._id)
-                                        if (itemProduct && itemProduct.hasOffer && itemProduct.buyQuantity && itemProduct.freeQuantity) {
-                                          const buyQty = parseFloat(itemProduct.buyQuantity) || 0
-                                          const freeQty = parseFloat(itemProduct.freeQuantity) || 0
+                            {sortedOrders.length ? sortedOrders.map((order) => {
+                              const discount = order.discountEnabled && order.discountAmount > 0 ? order.discountAmount : 1
+                              const grandTotal = parseFloat(order.totalPrice || 0) * discount
+                              return (
+                                <tr key={order._id}>
+                                  <td style={{ textAlign: 'center' }}>{order.createdAt ? new Date(order.createdAt).toLocaleDateString() : '-'}</td>
+                                  <td style={{ textAlign: 'center' }}>{order.orderId || '-'}</td>
+                                  <td style={{ textAlign: 'center' }}>
+                                    {(() => {
+                                      const dealer = dealers.find(d => d._id === (order.dealer?._id || order.dealer)) || order.dealer;
+                                      const shopName = dealer?.shopName || order.dealer?.shopName;
+                                      const name = order.dealerName || dealer?.name || order.dealer?.name;
+                                      return shopName ? (
+                                        <div style={{ display: 'flex', flexDirection: 'column' }}>
+                                          <span style={{ fontWeight: 600 }}>{shopName}</span>
+                                          <span style={{ fontSize: '0.8em', color: '#64748b' }}>{name}</span>
+                                        </div>
+                                      ) : (
+                                        name || '-'
+                                      );
+                                    })()}
+                                  </td>
+                                  <td style={{ textAlign: 'center' }}>{order.dealerId || order.dealer?.dealerId || '-'}</td>
+                                  <td style={{ textAlign: 'center' }}>
+                                    {order.items && order.items.length > 0 ? (
+                                      <div style={{ display: 'flex', flexDirection: 'column', gap: '0.25rem' }}>
+                                        {order.items.map((item, idx) => (
+                                          <div key={idx} style={{ borderBottom: idx < order.items.length - 1 ? '1px solid #f1f5f9' : 'none', padding: '6px 4px', minHeight: '45px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                                            {item.productName || item.product?.name || '-'}
+                                          </div>
+                                        ))}
+                                      </div>
+                                    ) : (
+                                      order.productName || order.product?.name || '-'
+                                    )}
+                                  </td>
+                                  <td style={{ textAlign: 'center' }}>
+                                    {order.items && order.items.length > 0 ? (
+                                      <div style={{ display: 'flex', flexDirection: 'column', gap: '0.25rem' }}>
+                                        {order.items.map((item, idx) => (
+                                          <div key={idx} style={{ borderBottom: idx < order.items.length - 1 ? '1px solid #f1f5f9' : 'none', padding: '6px 4px', minHeight: '45px', display: 'flex', alignItems: 'center', justifyContent: 'center', whiteSpace: 'nowrap' }}>
+                                            {item.variant && item.variant.packSize
+                                              ? `${item.variant.packSize} ${item.variant.packUnit || 'ml'} (${item.variant.cartoonSize || 1} ${item.variant.cartoonUnit || 'Pcs'})`
+                                              : '-'}
+                                          </div>
+                                        ))}
+                                      </div>
+                                    ) : (
+                                      order.variant && order.variant.packSize
+                                        ? `${order.variant.packSize} ${order.variant.packUnit || 'ml'} (${order.variant.cartoonSize || 1} ${order.variant.cartoonUnit || 'Pcs'})`
+                                        : '-'
+                                    )}
+                                  </td>
+                                  <td style={{ fontWeight: 700, color: '#0f172a', textAlign: 'center' }}>
+                                    {order.items && order.items.length > 0 ? (
+                                      <div style={{ display: 'flex', flexDirection: 'column', gap: '0.25rem' }}>
+                                        {order.items.map((item, idx) => {
+                                          const itemQty = parseFloat(item.quantity) || 0
+                                          let freeQty = 0
+                                          const itemProduct = products.find(p => p._id === item.product || p._id === item.product?._id)
+                                          if (itemProduct && itemProduct.hasOffer && itemProduct.buyQuantity && itemProduct.freeQuantity) {
+                                            const buyQty = parseFloat(itemProduct.buyQuantity) || 0
+                                            const offerFreeQty = parseFloat(itemProduct.freeQuantity) || 0
+                                            if (buyQty > 0) {
+                                              const eligibleOffers = Math.floor(itemQty / buyQty)
+                                              freeQty = eligibleOffers * offerFreeQty
+                                            }
+                                          }
+                                          return (
+                                            <div key={idx} style={{ borderBottom: idx < order.items.length - 1 ? '1px solid #f1f5f9' : 'none', padding: '6px 4px', minHeight: '45px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                                              {freeQty > 0 ? `${itemQty}+${freeQty}=${itemQty + freeQty}` : itemQty}
+                                            </div>
+                                          )
+                                        })}
+                                      </div>
+                                    ) : (
+                                      (() => {
+                                        // Single item order logic
+                                        const totalPurchasedQty = parseFloat(order.quantity) || 0
+                                        let totalFreeQty = 0
+                                        const orderProduct = products.find(p => p._id === order.product || p._id === order.product?._id)
+                                        if (orderProduct && orderProduct.hasOffer && orderProduct.buyQuantity && orderProduct.freeQuantity) {
+                                          const buyQty = parseFloat(orderProduct.buyQuantity) || 0
+                                          const freeQty = parseFloat(orderProduct.freeQuantity) || 0
                                           if (buyQty > 0) {
-                                            const eligibleOffers = Math.floor(itemQty / buyQty)
-                                            totalFreeQty += eligibleOffers * freeQty
+                                            const eligibleOffers = Math.floor(totalPurchasedQty / buyQty)
+                                            totalFreeQty = eligibleOffers * freeQty
                                           }
                                         }
-                                      })
-                                    } else {
-                                      // Single item order
-                                      totalPurchasedQty = parseFloat(order.quantity) || 0
-
-                                      // Calculate free quantity if product has offer
-                                      const orderProduct = products.find(p => p._id === order.product || p._id === order.product?._id)
-                                      if (orderProduct && orderProduct.hasOffer && orderProduct.buyQuantity && orderProduct.freeQuantity) {
-                                        const buyQty = parseFloat(orderProduct.buyQuantity) || 0
-                                        const freeQty = parseFloat(orderProduct.freeQuantity) || 0
-                                        if (buyQty > 0) {
-                                          const eligibleOffers = Math.floor(totalPurchasedQty / buyQty)
-                                          totalFreeQty = eligibleOffers * freeQty
-                                        }
-                                      }
-                                    }
-
-                                    const totalQty = totalPurchasedQty + totalFreeQty
-                                    return totalQty
-                                  })()}
-                                </td>
-                                <td style={{ textAlign: 'center' }}>{order.requestedByName || order.requestedByRole || '-'}</td>
-                                <td style={{ textAlign: 'center' }}>৳{order.totalPrice ? order.totalPrice.toFixed(2) : '0.00'}</td>
-                                <td style={{ fontWeight: 600, color: '#16a34a', textAlign: 'center' }}>
-                                  ৳{(() => {
-                                    const paid = parseFloat(order.paidAmount) || 0
-                                    const commission = (order.paymentHistory || []).reduce((cSum, p) => cSum + (parseFloat(p.commission) || 0), 0)
-                                    return (paid + commission).toFixed(2)
-                                  })()}
-                                </td>
-                                <td style={{ fontWeight: 600, color: '#111827', textAlign: 'center' }}>
-                                  ৳{(() => {
-                                    const commission = (order.paymentHistory || []).reduce((cSum, p) => cSum + (parseFloat(p.commission) || 0), 0)
-                                    return commission.toFixed(2)
-                                  })()}
-                                </td>
-                                <td style={{
-                                  fontWeight: 600, color: (() => {
-                                    const paid = parseFloat(order.paidAmount || 0)
-                                    const commission = (order.paymentHistory || []).reduce((cSum, p) => cSum + (parseFloat(p.commission) || 0), 0)
-                                    const due = Math.max(0, parseFloat(order.totalPrice || 0) - (paid + commission))
-                                    return due > 0 ? '#dc2626' : '#16a34a'
-                                  })()
-                                }}>
-                                  ৳{(() => {
-                                    const paid = parseFloat(order.paidAmount || 0)
-                                    const commission = (order.paymentHistory || []).reduce((cSum, p) => cSum + (parseFloat(p.commission) || 0), 0)
-                                    const due = Math.max(0, parseFloat(order.totalPrice || 0) - (paid + commission))
-                                    return due.toFixed(2)
-                                  })()}
-                                </td>
-                                <td style={{ textAlign: 'center' }}>
-                                  <span style={{
-                                    padding: '0.25rem 0.5rem',
-                                    borderRadius: '0.25rem',
-                                    fontSize: '0.75rem',
-                                    fontWeight: 600,
-                                    backgroundColor:
-                                      order.status === 'Complete' ? '#dcfce7' :
-                                        order.status === 'Delivered' ? '#d1fae5' :
-                                          order.status === 'Shipped' ? '#dbeafe' :
-                                            order.status === 'Processing' ? '#fef3c7' :
-                                              order.status === 'Cancelled' ? '#fee2e2' :
-                                                '#f3f4f6',
-                                    color:
-                                      order.status === 'Complete' ? '#166534' :
-                                        order.status === 'Delivered' ? '#065f46' :
-                                          order.status === 'Shipped' ? '#1e40af' :
-                                            order.status === 'Processing' ? '#92400e' :
-                                              order.status === 'Cancelled' ? '#b91c1c' :
-                                                '#374151'
+                                        return (
+                                          <span>
+                                            {totalFreeQty > 0 ? `${totalPurchasedQty}+${totalFreeQty}=${totalPurchasedQty + totalFreeQty}` : totalPurchasedQty}
+                                          </span>
+                                        )
+                                      })()
+                                    )}
+                                  </td>
+                                  <td style={{ textAlign: 'center' }}>{order.requestedByName || order.requestedByRole || '-'}</td>
+                                  <td style={{ textAlign: 'center' }}>৳{(order.totalPrice || 0).toFixed(2)}</td>
+                                  <td style={{ textAlign: 'center', fontWeight: 700, color: '#16a34a' }}>
+                                    ৳{grandTotal.toFixed(2)}
+                                  </td>
+                                  <td style={{ fontWeight: 600, color: '#16a34a', textAlign: 'center' }}>
+                                    ৳{(() => {
+                                      const paid = parseFloat(order.paidAmount) || 0
+                                      const commission = (order.paymentHistory || []).reduce((cSum, p) => cSum + (parseFloat(p.commission) || 0), 0)
+                                      return (paid + commission).toFixed(2)
+                                    })()}
+                                  </td>
+                                  <td style={{ fontWeight: 600, color: '#111827', textAlign: 'center' }}>
+                                    ৳{(() => {
+                                      const commission = (order.paymentHistory || []).reduce((cSum, p) => cSum + (parseFloat(p.commission) || 0), 0)
+                                      return commission.toFixed(2)
+                                    })()}
+                                  </td>
+                                  <td style={{
+                                    fontWeight: 600, color: (() => {
+                                      const paid = parseFloat(order.paidAmount || 0)
+                                      const commission = (order.paymentHistory || []).reduce((sum, p) => sum + (parseFloat(p.commission) || 0), 0)
+                                      const due = Math.max(0, grandTotal - (paid + commission))
+                                      return due > 0 ? '#dc2626' : '#16a34a'
+                                    })()
                                   }}>
-                                    {order.status || 'Pending'}
-                                  </span>
-                                </td>
-                                <td style={{ textAlign: 'center' }}>
-                                  <div className="admin-action-buttons" style={{ justifyContent: 'center' }}>
-                                    <button
-                                      className="admin-action-btn edit"
-                                      style={{ backgroundColor: '#e0e7ff', color: '#1d4ed8' }}
-                                      onClick={() => setViewingOrder(order)}
-                                    >
-                                      {language === 'en' ? 'View' : 'দেখুন'}
-                                    </button>
-                                  </div>
-                                </td>
-                              </tr>
-                            )) : (
+                                    ৳{(() => {
+                                      const paid = parseFloat(order.paidAmount || 0)
+                                      const commission = (order.paymentHistory || []).reduce((sum, p) => sum + (parseFloat(p.commission) || 0), 0)
+                                      const due = Math.max(0, grandTotal - (paid + commission))
+                                      return due.toFixed(2)
+                                    })()}
+                                  </td>
+                                  <td style={{ textAlign: 'center' }}>
+                                    <div className="admin-action-buttons" style={{ justifyContent: 'center', flexDirection: 'column', gap: '0.5rem', alignItems: 'center' }}>
+                                      <span style={{
+                                        padding: '0.25rem 0.5rem',
+                                        borderRadius: '0.25rem',
+                                        fontSize: '0.75rem',
+                                        fontWeight: 600,
+                                        backgroundColor:
+                                          order.status === 'Complete' ? '#dcfce7' :
+                                            order.status === 'Delivered' ? '#d1fae5' :
+                                              order.status === 'Shipped' ? '#dbeafe' :
+                                                order.status === 'Processing' ? '#fef3c7' :
+                                                  order.status === 'Cancelled' ? '#fee2e2' :
+                                                    '#f3f4f6',
+                                        color:
+                                          order.status === 'Complete' ? '#166534' :
+                                            order.status === 'Delivered' ? '#065f46' :
+                                              order.status === 'Shipped' ? '#1e40af' :
+                                                order.status === 'Processing' ? '#92400e' :
+                                                  order.status === 'Cancelled' ? '#b91c1c' :
+                                                    '#374151',
+                                        marginBottom: '0.25rem'
+                                      }}>
+                                        {order.status || 'Pending'}
+                                      </span>
+                                      <button
+                                        className="admin-action-btn edit"
+                                        style={{ backgroundColor: '#e0e7ff', color: '#1d4ed8', width: '100%' }}
+                                        onClick={() => setViewingOrder(order)}
+                                      >
+                                        {language === 'en' ? 'View' : 'দেখুন'}
+                                      </button>
+                                      <button
+                                        className="admin-action-btn"
+                                        style={{ backgroundColor: '#f3f4f6', color: '#374151', width: '100%' }}
+                                        onClick={() => handlePrintOrder(order)}
+                                      >
+                                        {language === 'en' ? 'Print Invoice' : 'ইনভয়েস প্রিন্ট'}
+                                      </button>
+                                    </div>
+                                  </td>
+                                </tr>
+                              )
+                            }) : (
                               <tr>
                                 <td colSpan="14" style={{ textAlign: 'center', padding: '2rem' }}>
                                   {adminContent.noData}
@@ -12292,9 +12890,11 @@ function AdminPage({ language, toggleLanguage, t }) {
                         ) : (
                           sortedOrders.map((order) => {
                             // Calculate financial values for card
+                            const discount = order.discountEnabled && order.discountAmount > 0 ? order.discountAmount : 1
+                            const grandTotalOrderPrice = parseFloat(order.totalPrice || 0) * discount
                             const paid = parseFloat(order.paidAmount) || 0
                             const commission = (order.paymentHistory || []).reduce((cSum, p) => cSum + (parseFloat(p.commission) || 0), 0)
-                            const due = Math.max(0, parseFloat(order.totalPrice || 0) - (paid + commission))
+                            const due = Math.max(0, grandTotalOrderPrice - (paid + commission))
 
                             // Calculate total quantity for card
                             let totalPurchasedQty = 0
@@ -12331,7 +12931,7 @@ function AdminPage({ language, toggleLanguage, t }) {
                               <div className="mobile-card" key={order._id}>
                                 <div
                                   className="mobile-card-header"
-                                  onClick={() => setExpandedOrderIds(prev => ({ ...prev, [order._id]: !prev[order._id] }))}
+                                  onClick={() => setExpandedOrderId(prev => (prev === order._id ? null : order._id))}
                                   style={{ cursor: 'pointer' }}
                                 >
                                   <div className="mobile-card-avatar-container" style={{ position: 'relative', width: '3rem', height: '3rem', display: 'flex', alignItems: 'center' }}>
@@ -12399,7 +12999,19 @@ function AdminPage({ language, toggleLanguage, t }) {
                                     )}
                                   </div>
                                   <div className="mobile-card-header-text">
-                                    <div className="mobile-card-title">{order.dealerName || order.dealer?.name || 'N/A'}</div>
+                                    <div className="mobile-card-title" style={{ fontSize: '0.85rem', fontWeight: 600 }}>
+                                      {(() => {
+                                        const dealerShopName = order.dealer?.shopName
+                                        if (dealerShopName) return dealerShopName
+                                        // Try to find dealer in dealers list
+                                        const dealerId = order.dealer?._id || order.dealer
+                                        const foundDealer = dealers.find(d => d._id === dealerId)
+                                        return foundDealer?.shopName || '-'
+                                      })()}
+                                    </div>
+                                    <div className="mobile-card-subtitle" style={{ marginTop: '0.15rem' }}>
+                                      {order.dealerName || order.dealer?.name || 'N/A'}
+                                    </div>
                                     <div className="mobile-card-subtitle">{order.orderId || '-'}</div>
                                   </div>
 
@@ -12433,13 +13045,13 @@ function AdminPage({ language, toggleLanguage, t }) {
                                         {order.createdAt ? new Date(order.createdAt).toLocaleDateString() : '-'}
                                       </div>
                                       <div style={{ fontSize: '0.9rem', fontWeight: 700, color: '#475569' }}>
-                                        ৳{order.totalPrice ? order.totalPrice.toFixed(2) : '0.00'}
+                                        ৳{grandTotalOrderPrice.toFixed(2)}
                                       </div>
                                     </div>
                                   </div>
                                 </div>
 
-                                {expandedOrderIds[order._id] && (
+                                {expandedOrderId === order._id && (
                                   <>
                                     <div className="mobile-card-body">
                                       <div className="mobile-card-row">
@@ -12450,7 +13062,6 @@ function AdminPage({ language, toggleLanguage, t }) {
                                       {order.items && order.items.length > 0 ? (
                                         <div style={{ marginTop: '0.5rem', borderTop: '1px dashed #e2e8f0', paddingTop: '0.5rem' }}>
                                           {order.items.map((item, idx) => {
-                                            // Recalculate item specific free quantities for display if needed
                                             const itemProduct = products.find(p => p._id === item.product || p._id === item.product?._id)
                                             const hasOffer = itemProduct && itemProduct.hasOffer && itemProduct.buyQuantity && itemProduct.freeQuantity
                                             const buyQty = hasOffer ? (parseFloat(itemProduct.buyQuantity) || 0) : 0
@@ -12465,10 +13076,15 @@ function AdminPage({ language, toggleLanguage, t }) {
                                                 <div className="mobile-card-row">
                                                   <span className="mobile-card-label" style={{ fontWeight: 600 }}>{item.productName || item.product?.name || `Item ${idx + 1}`}</span>
                                                 </div>
-                                                {item.variant && (item.variant.name || item.variant.value) && (
+                                                {item.variant && (item.variant.productCode || item.variant.packSize || item.variant.name) && (
                                                   <div className="mobile-card-row">
                                                     <span className="mobile-card-label" style={{ fontSize: '0.8rem' }}>{language === 'en' ? 'Var' : 'ভ্যারিয়েন্ট'}</span>
-                                                    <span className="mobile-card-value" style={{ fontSize: '0.8rem' }}>{item.variant.name || item.variant.value}</span>
+                                                    <span className="mobile-card-value" style={{ fontSize: '0.8rem' }}>
+                                                      {item.variant.productCode ? `${item.variant.productCode} ` : ''}
+                                                      {item.variant.packSize ? `(${item.variant.packSize} ${item.variant.packUnit || 'ml'}` : ''}
+                                                      {item.variant.cartoonSize ? ` - ${item.variant.cartoonSize} ${item.variant.cartoonUnit || 'Pcs'}/Cartoon` : ''}
+                                                      {item.variant.packSize ? ')' : (item.variant.name || item.variant.value || '-')}
+                                                    </span>
                                                   </div>
                                                 )}
                                                 <div className="mobile-card-row">
@@ -12489,15 +13105,18 @@ function AdminPage({ language, toggleLanguage, t }) {
                                                     ৳{item.totalPrice !== undefined ? (item.totalPrice || 0).toFixed(2) : ((parseFloat(item.quantity) || 0) * parseFloat(item.variant?.price || item.variant?.price === 0 ? item.variant.price : (item.product?.price || 0))).toFixed(2)}
                                                   </span>
                                                 </div>
+                                                <div className="mobile-card-row">
+                                                  <span className="mobile-card-label" style={{ fontSize: '0.8rem', fontWeight: 700 }}>{language === 'en' ? 'Grand Total' : 'সর্বমোট'}</span>
+                                                  <span className="mobile-card-value" style={{ fontWeight: 700, color: '#16a34a' }}>
+                                                    ৳{(() => {
+                                                      const itemTotal = item.totalPrice !== undefined ? (item.totalPrice || 0) : ((parseFloat(item.quantity) || 0) * parseFloat(item.variant?.price || item.variant?.price === 0 ? item.variant.price : (item.product?.price || 0)))
+                                                      return (itemTotal * discount).toFixed(2)
+                                                    })()}
+                                                  </span>
+                                                </div>
                                               </div>
                                             )
                                           })}
-                                          <div className="mobile-card-row" style={{ borderTop: '2px solid #e2e8f0', paddingTop: '0.5rem', marginTop: '0.25rem' }}>
-                                            <span className="mobile-card-label" style={{ fontWeight: 700 }}>{language === 'en' ? 'Grand Total' : 'সর্বমোট'}</span>
-                                            <span className="mobile-card-value" style={{ fontWeight: 700, color: '#0f172a', fontSize: '1.1rem' }}>
-                                              ৳{order.totalPrice ? Number(order.totalPrice).toFixed(2) : order.items.reduce((sum, item) => sum + (item.totalPrice || ((parseFloat(item.quantity) || 0) * parseFloat(item.variant?.price || item.variant?.price === 0 ? item.variant.price : (item.product?.price || 0)))), 0).toFixed(2)}
-                                            </span>
-                                          </div>
                                         </div>
                                       ) : (
                                         <>
@@ -12505,10 +13124,10 @@ function AdminPage({ language, toggleLanguage, t }) {
                                             <span className="mobile-card-label">{language === 'en' ? 'Product' : 'পণ্য'}</span>
                                             <span className="mobile-card-value">{order.productName || order.product?.name || '-'}</span>
                                           </div>
-                                          {order.variant && (order.variant.name || order.variant.value) && (
+                                          {order.variant && order.variant.productCode && (
                                             <div className="mobile-card-row">
                                               <span className="mobile-card-label">{language === 'en' ? 'Variant' : 'ভ্যারিয়েন্ট'}</span>
-                                              <span className="mobile-card-value">{order.variant.name || order.variant.value}</span>
+                                              <span className="mobile-card-value">{order.variant.productCode} ({order.variant.packSize} {order.variant.packUnit || 'ml'})</span>
                                             </div>
                                           )}
                                           <div className="mobile-card-row">
@@ -12517,26 +13136,56 @@ function AdminPage({ language, toggleLanguage, t }) {
                                           </div>
                                         </>
                                       )}
-                                      {/* Removed Total Price row as it is in header now, but user might want details? Keeping it is fine as 'Price details' usually repeated. */}
-                                      {/* Actually, user said 'show price details', maybe breakdown? */}
-                                      {/* I'll keep the breakdown rows. */}
-                                      <div className="mobile-card-row">
-                                        <span className="mobile-card-label">{language === 'en' ? 'Paid Amount' : 'পরিশোধিত পরিমাণ'}</span>
-                                        <span className="mobile-card-value" style={{ color: '#16a34a' }}>
-                                          ৳{paid.toFixed(2)}
-                                        </span>
+
+                                      {/* Price Summary Section */}
+                                      <div style={{ marginTop: '0.75rem', borderTop: '2px solid #e2e8f0', paddingTop: '0.5rem' }}>
+                                        {discount < 1 && (
+                                          <div className="mobile-card-row">
+                                            <span className="mobile-card-label">{language === 'en' ? 'Subtotal' : 'উপ-মোট'}</span>
+                                            <span className="mobile-card-value">৳{parseFloat(order.totalPrice || 0).toFixed(2)}</span>
+                                          </div>
+                                        )}
+                                        {discount < 1 && (
+                                          <div className="mobile-card-row">
+                                            <span className="mobile-card-label">{language === 'en' ? 'Discount' : 'ডিসকাউন্ট'}</span>
+                                            <span className="mobile-card-value" style={{ color: '#dc2626' }}>{((1 - discount) * 100).toFixed(0)}%</span>
+                                          </div>
+                                        )}
+                                        <div className="mobile-card-row" style={{ marginBottom: '0.5rem' }}>
+                                          <span className="mobile-card-label" style={{ fontWeight: 700 }}>{language === 'en' ? 'Grand Total' : 'সর্বমোট'}</span>
+                                          <span className="mobile-card-value" style={{ fontWeight: 700, color: '#0f172a', fontSize: '1.1rem' }}>
+                                            ৳{grandTotalOrderPrice.toFixed(2)}
+                                          </span>
+                                        </div>
                                       </div>
-                                      <div className="mobile-card-row">
-                                        <span className="mobile-card-label">{language === 'en' ? 'Commission' : 'কমিশন'}</span>
-                                        <span className="mobile-card-value" style={{ color: '#ca8a04' }}>
-                                          ৳{commission.toFixed(2)}
-                                        </span>
-                                      </div>
-                                      <div className="mobile-card-row">
-                                        <span className="mobile-card-label">{language === 'en' ? 'Due Amount' : 'বাকি পরিমাণ'}</span>
-                                        <span className="mobile-card-value" style={{ color: due > 0 ? '#dc2626' : '#166534', fontWeight: 600 }}>
-                                          ৳{due.toFixed(2)}
-                                        </span>
+
+                                      {/* Payment Summary Section */}
+                                      <div style={{ borderTop: '1px solid #e2e8f0', paddingTop: '0.5rem' }}>
+                                        <div className="mobile-card-row">
+                                          <span className="mobile-card-label">{language === 'en' ? 'Paid Amount' : 'পরিশোধিত পরিমাণ'}</span>
+                                          <span className="mobile-card-value" style={{ color: '#16a34a' }}>
+                                            ৳{paid.toFixed(2)}
+                                          </span>
+                                        </div>
+                                        <div className="mobile-card-row">
+                                          <span className="mobile-card-label">{language === 'en' ? 'Commission' : 'কমিশন'}</span>
+                                          <span className="mobile-card-value" style={{ color: '#ca8a04' }}>
+                                            ৳{commission.toFixed(2)}
+                                          </span>
+                                        </div>
+                                        <div className="mobile-card-row">
+                                          <span className="mobile-card-label">{language === 'en' ? 'Total Paid Amount' : 'সর্বমোট পরিশোধিত'}</span>
+                                          <span className="mobile-card-value" style={{ color: '#16a34a', fontWeight: 600 }}>
+                                            ৳{(paid + commission).toFixed(2)}
+                                          </span>
+                                        </div>
+
+                                        <div className="mobile-card-row">
+                                          <span className="mobile-card-label">{language === 'en' ? 'Due Amount' : 'বাকি পরিমাণ'}</span>
+                                          <span className="mobile-card-value" style={{ color: due > 0 ? '#dc2626' : '#166534', fontWeight: 600 }}>
+                                            ৳{due.toFixed(2)}
+                                          </span>
+                                        </div>
                                       </div>
                                     </div>
                                     <div className="mobile-card-actions">
@@ -12549,10 +13198,21 @@ function AdminPage({ language, toggleLanguage, t }) {
                                       >
                                         {language === 'en' ? 'View/Edit' : 'দেখুন/সম্পাদনা'}
                                       </button>
+                                      <button
+                                        className="mobile-action-btn"
+                                        style={{ backgroundColor: '#f3f4f6', color: '#374151' }}
+                                        onClick={(e) => {
+                                          e.stopPropagation()
+                                          handlePrintOrder(order)
+                                        }}
+                                      >
+                                        {language === 'en' ? 'Print' : 'প্রিন্ট'}
+                                      </button>
                                       {/* Add Print Button if needed? */}
                                     </div>
                                   </>
-                                )}
+                                )
+                                }
                               </div>
 
                             )
@@ -12663,23 +13323,37 @@ function AdminPage({ language, toggleLanguage, t }) {
                             </p>
                           </div>
 
-                          {/* Dealer Name */}
-                          <div style={{ padding: '1rem', backgroundColor: '#f9fafb', borderRadius: '0.375rem' }}>
-                            <label style={{ fontSize: '0.875rem', color: '#6b7280', fontWeight: 600 }}>
-                              {language === 'en' ? 'Dealer Name' : 'ডিলারের নাম'}
-                            </label>
-                            <p style={{ margin: '0.5rem 0 0 0', fontSize: '1rem', color: '#111827' }}>
-                              {viewingOrder.dealerName || viewingOrder.dealer?.name || 'N/A'}
-                            </p>
-                          </div>
-
                           {/* Dealer ID */}
                           <div style={{ padding: '1rem', backgroundColor: '#f9fafb', borderRadius: '0.375rem' }}>
                             <label style={{ fontSize: '0.875rem', color: '#6b7280', fontWeight: 600 }}>
-                              {language === 'en' ? 'Dealer ID' : 'ডিলার আইডি'}
+                              {language === 'en' ? 'CID' : 'সিআইডি'}
                             </label>
                             <p style={{ margin: '0.5rem 0 0 0', fontSize: '1rem', color: '#111827' }}>
                               {viewingOrder.dealerId || viewingOrder.dealer?.dealerId || 'N/A'}
+                            </p>
+                          </div>
+
+                          {/* Shop Name */}
+                          <div style={{ padding: '1rem', backgroundColor: '#f9fafb', borderRadius: '0.375rem' }}>
+                            <label style={{ fontSize: '0.875rem', color: '#6b7280', fontWeight: 600 }}>
+                              {language === 'en' ? 'Shop Name' : 'দোকানের নাম'}
+                            </label>
+                            <p style={{ margin: '0.5rem 0 0 0', fontSize: '1rem', color: '#111827' }}>
+                              {(() => {
+                                const dealerId = viewingOrder.dealer?._id || viewingOrder.dealer;
+                                const foundDealer = dealers.find(d => d._id === dealerId);
+                                return foundDealer?.shopName || viewingOrder.dealer?.shopName || '-';
+                              })()}
+                            </p>
+                          </div>
+
+                          {/* Dealer Name */}
+                          <div style={{ padding: '1rem', backgroundColor: '#f9fafb', borderRadius: '0.375rem' }}>
+                            <label style={{ fontSize: '0.875rem', color: '#6b7280', fontWeight: 600 }}>
+                              {language === 'en' ? 'Customer Name' : 'কাস্টমারের নাম'}
+                            </label>
+                            <p style={{ margin: '0.5rem 0 0 0', fontSize: '1rem', color: '#111827' }}>
+                              {viewingOrder.dealerName || viewingOrder.dealer?.name || 'N/A'}
                             </p>
                           </div>
 
@@ -12688,8 +13362,22 @@ function AdminPage({ language, toggleLanguage, t }) {
                             <label style={{ fontSize: '0.875rem', color: '#6b7280', fontWeight: 600 }}>
                               {language === 'en' ? 'Total Price' : 'মোট মূল্য'}
                             </label>
-                            <p style={{ margin: '0.5rem 0 0 0', fontSize: '1rem', color: '#111827', fontWeight: 600 }}>
-                              ৳{viewingOrder.totalPrice ? viewingOrder.totalPrice.toFixed(2) : '0.00'}
+                            <p style={{ margin: '0.5rem 0 0 0', fontSize: '1rem', fontWeight: 600, color: '#111827' }}>
+                              ৳{(viewingOrder.totalPrice || 0).toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 0 })}
+                            </p>
+                          </div>
+
+                          {/* Grand Total */}
+                          <div style={{ padding: '1rem', backgroundColor: '#f9fafb', borderRadius: '0.375rem' }}>
+                            <label style={{ fontSize: '0.875rem', color: '#6b7280', fontWeight: 600 }}>
+                              {language === 'en' ? 'Grand Total' : 'সর্বমোট মূল্য'}
+                            </label>
+                            <p style={{ margin: '0.5rem 0 0 0', fontSize: '1.1rem', color: '#16a34a', fontWeight: 800 }}>
+                              ৳{(() => {
+                                const total = parseFloat(viewingOrder.totalPrice || 0)
+                                const discount = viewingOrder.discountEnabled && viewingOrder.discountAmount > 0 ? viewingOrder.discountAmount : 1
+                                return (total * discount).toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 0 })
+                              })()}
                             </p>
                           </div>
 
@@ -12713,6 +13401,7 @@ function AdminPage({ language, toggleLanguage, t }) {
                             ) : (
                               <p style={{ margin: '0.5rem 0 0 0', fontSize: '1rem', color: '#16a34a', fontWeight: 600 }}>
                                 ৳{(() => {
+                                  // Paid Amount in UI should show total credit (Paid + Commissions)
                                   const paid = viewingOrder.paidAmount ? parseFloat(viewingOrder.paidAmount) || 0 : 0
                                   const comm = (viewingOrder.paymentHistory || []).reduce((sum, p) => sum + (parseFloat(p.commission) || 0), 0)
                                   return (paid + comm).toFixed(2)
@@ -12742,8 +13431,9 @@ function AdminPage({ language, toggleLanguage, t }) {
                                   const currentComm = (pay * rate) / 100
                                   const histComm = (viewingOrder.paymentHistory || []).reduce((sum, p) => sum + (parseFloat(p.commission) || 0), 0)
 
-                                  const total = parseFloat(viewingOrder.totalPrice || 0)
-                                  const due = Math.max(0, total - (newTotalPaid + currentComm + histComm))
+                                  const discount = viewingOrder.discountEnabled && viewingOrder.discountAmount > 0 ? viewingOrder.discountAmount : 1
+                                  const grandTotalVal = parseFloat(viewingOrder.totalPrice || 0) * discount
+                                  const due = Math.max(0, grandTotalVal - (newTotalPaid + currentComm + histComm))
 
                                   setEditingOrderDetails({
                                     ...editingOrderDetails,
@@ -12785,8 +13475,9 @@ function AdminPage({ language, toggleLanguage, t }) {
                                     const originalPaid = parseFloat(viewingOrder.paidAmount || 0)
                                     const newTotalPaid = originalPaid + pay
                                     const histComm = (viewingOrder.paymentHistory || []).reduce((sum, p) => sum + (parseFloat(p.commission) || 0), 0)
-                                    const total = parseFloat(viewingOrder.totalPrice || 0)
-                                    const due = Math.max(0, total - (newTotalPaid + currentComm + histComm))
+                                    const discount = viewingOrder.discountEnabled && viewingOrder.discountAmount > 0 ? viewingOrder.discountAmount : 1
+                                    const grandTotalVal = parseFloat(viewingOrder.totalPrice || 0) * discount
+                                    const due = Math.max(0, grandTotalVal - (newTotalPaid + currentComm + histComm))
 
                                     setEditingOrderDetails({ ...editingOrderDetails, commission: newComm, dueAmount: due })
                                   }}
@@ -12850,10 +13541,12 @@ function AdminPage({ language, toggleLanguage, t }) {
                                 if (isEditingOrderDetails && editingOrderDetails) {
                                   due = parseFloat(editingOrderDetails.dueAmount || 0)
                                 } else {
-                                  const total = parseFloat(viewingOrder.totalPrice || 0)
+                                  const totalRaw = parseFloat(viewingOrder.totalPrice || 0)
+                                  const discount = viewingOrder.discountEnabled && viewingOrder.discountAmount > 0 ? viewingOrder.discountAmount : 1
+                                  const grandTotalVal = totalRaw * discount
                                   const paid = parseFloat(viewingOrder.paidAmount || 0)
                                   const comm = (viewingOrder.paymentHistory || []).reduce((sum, p) => sum + (parseFloat(p.commission) || 0), 0)
-                                  due = Math.max(0, total - (paid + comm))
+                                  due = Math.max(0, grandTotalVal - (paid + comm))
                                 }
                                 return due > 0 ? '#dc2626' : '#16a34a'
                               })(),
@@ -12864,10 +13557,12 @@ function AdminPage({ language, toggleLanguage, t }) {
                                 if (isEditingOrderDetails && editingOrderDetails) {
                                   due = parseFloat(editingOrderDetails.dueAmount || 0)
                                 } else {
-                                  const total = parseFloat(viewingOrder.totalPrice || 0)
+                                  const totalRaw = parseFloat(viewingOrder.totalPrice || 0)
+                                  const discount = viewingOrder.discountEnabled && viewingOrder.discountAmount > 0 ? viewingOrder.discountAmount : 1
+                                  const grandTotalVal = totalRaw * discount
                                   const paid = parseFloat(viewingOrder.paidAmount || 0)
                                   const comm = (viewingOrder.paymentHistory || []).reduce((sum, p) => sum + (parseFloat(p.commission) || 0), 0)
-                                  due = Math.max(0, total - (paid + comm))
+                                  due = Math.max(0, grandTotalVal - (paid + comm))
                                 }
                                 return due.toFixed(2)
                               })()}
@@ -13012,11 +13707,12 @@ function AdminPage({ language, toggleLanguage, t }) {
                                       <tr>
                                         <th style={{ textAlign: 'center' }}>{language === 'en' ? 'Product' : 'পণ্য'}</th>
                                         <th style={{ textAlign: 'center' }}>{language === 'en' ? 'Variant' : 'ভ্যারিয়েন্ট'}</th>
+                                        <th style={{ textAlign: 'center' }}>{language === 'en' ? 'Qty' : 'পরিমাণ'}</th>
                                         <th style={{ textAlign: 'center' }}>{language === 'en' ? 'Free Qty' : 'ফ্রি পরিমাণ'}</th>
                                         <th style={{ textAlign: 'center' }}>{language === 'en' ? 'Total Qty' : 'মোট পরিমাণ'}</th>
                                         <th style={{ textAlign: 'center' }}>{language === 'en' ? 'Unit Price' : 'একক মূল্য'}</th>
                                         <th style={{ textAlign: 'center' }}>{language === 'en' ? 'Total Price' : 'মোট মূল্য'}</th>
-                                        <th style={{ textAlign: 'center' }}>{language === 'en' ? 'Notes' : 'নোট'}</th>
+                                        <th style={{ textAlign: 'center' }}>{language === 'en' ? 'Grand Total' : 'সর্বমোট'}</th>
                                       </tr>
                                     </thead>
                                     <tbody>
@@ -13034,7 +13730,8 @@ function AdminPage({ language, toggleLanguage, t }) {
                                         return (
                                           <tr key={idx}>
                                             <td style={{ textAlign: 'center' }}>{item.productName || itemProduct?.name || '-'}</td>
-                                            <td style={{ textAlign: 'center' }}>{item.variant?.value ? (item.variant.name || item.variant.value) : '-'}</td>
+                                            <td style={{ textAlign: 'center' }}>{item.variant && item.variant.packSize ? `${item.variant.packSize} ${item.variant.packUnit || 'ml'} (${item.variant.cartoonSize || 1} ${item.variant.cartoonUnit || 'Pcs'})` : '-'}</td>
+                                            <td style={{ textAlign: 'center', fontWeight: 600 }}>{orderQty}</td>
                                             <td style={{ textAlign: 'center', fontWeight: 600, color: freeUnits > 0 ? '#16a34a' : '#6b7280' }}>
                                               {freeUnits > 0 ? (
                                                 <span style={{
@@ -13053,7 +13750,13 @@ function AdminPage({ language, toggleLanguage, t }) {
                                             <td style={{ textAlign: 'center', fontWeight: 700, color: '#0f172a' }}>{totalQty}</td>
                                             <td style={{ textAlign: 'center' }}>৳{item.unitPrice !== undefined ? (item.unitPrice || 0).toFixed(2) : '-'}</td>
                                             <td style={{ textAlign: 'center', fontWeight: 700, color: '#0f172a' }}>৳{item.totalPrice !== undefined ? (item.totalPrice || 0).toFixed(2) : '-'}</td>
-                                            <td style={{ textAlign: 'center' }}>{item.notes || '-'}</td>
+                                            <td style={{ textAlign: 'center', fontWeight: 900, color: '#16a34a', fontSize: '1rem' }}>
+                                              ৳{(() => {
+                                                const itemTotal = parseFloat(item.totalPrice || 0)
+                                                const discount = viewingOrder.discountEnabled && viewingOrder.discountAmount > 0 ? viewingOrder.discountAmount : 1
+                                                return (itemTotal * discount).toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 0 })
+                                              })()}
+                                            </td>
                                           </tr>
                                         )
                                       })}
@@ -13079,7 +13782,11 @@ function AdminPage({ language, toggleLanguage, t }) {
                                         </div>
                                         <div className="mobile-card-row">
                                           <span className="mobile-card-label">{language === 'en' ? 'Variant' : 'ভ্যারিয়েন্ট'}</span>
-                                          <span className="mobile-card-value">{item.variant?.value ? (item.variant.name || item.variant.value) : '-'}</span>
+                                          <span className="mobile-card-value">{item.variant && item.variant.packSize ? `${item.variant.packSize} ${item.variant.packUnit || 'ml'} (${item.variant.cartoonSize || 1} ${item.variant.cartoonUnit || 'Pcs'})` : '-'}</span>
+                                        </div>
+                                        <div className="mobile-card-row">
+                                          <span className="mobile-card-label">{language === 'en' ? 'Qty' : 'পরিমাণ'}</span>
+                                          <span className="mobile-card-value">{orderQty}</span>
                                         </div>
                                         {freeUnits > 0 && (
                                           <div className="mobile-card-row">
@@ -13092,8 +13799,14 @@ function AdminPage({ language, toggleLanguage, t }) {
                                           <span className="mobile-card-value">{totalQty}</span>
                                         </div>
                                         <div className="mobile-card-row">
-                                          <span className="mobile-card-label">{language === 'en' ? 'Total Price' : 'মোট মূল্য'}</span>
-                                          <span className="mobile-card-value" style={{ fontWeight: 600 }}>৳{item.totalPrice !== undefined ? (item.totalPrice || 0).toFixed(2) : '-'}</span>
+                                          <span className="mobile-card-label">{language === 'en' ? 'Grand Total' : 'সর্বমোট'}</span>
+                                          <span className="mobile-card-value" style={{ fontWeight: 800, color: '#16a34a' }}>
+                                            ৳{(() => {
+                                              const itemTotal = parseFloat(item.totalPrice || 0)
+                                              const discount = viewingOrder.discountEnabled && viewingOrder.discountAmount > 0 ? viewingOrder.discountAmount : 1
+                                              return (itemTotal * discount).toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 0 })
+                                            })()}
+                                          </span>
                                         </div>
                                       </div>
                                     )
@@ -13115,6 +13828,7 @@ function AdminPage({ language, toggleLanguage, t }) {
                                 <tr>
                                   <th style={{ textAlign: 'center', whiteSpace: 'nowrap', padding: '0.75rem' }}>{language === 'en' ? 'Date' : 'তারিখ'}</th>
                                   <th style={{ textAlign: 'center', whiteSpace: 'nowrap', padding: '0.75rem' }}>{language === 'en' ? 'Total Price' : 'মোট মূল্য'}</th>
+                                  <th style={{ textAlign: 'center', whiteSpace: 'nowrap', padding: '0.75rem' }}>{language === 'en' ? 'Grand Total' : 'সর্বমোট'}</th>
                                   <th style={{ textAlign: 'center', whiteSpace: 'nowrap', padding: '0.75rem' }}>{language === 'en' ? 'Total Paid Amount' : 'মোট পরিশোধিত'}</th>
                                   <th style={{ textAlign: 'center', whiteSpace: 'nowrap', padding: '0.75rem' }}>{language === 'en' ? 'Pay Amount' : 'পরিশোধের পরিমাণ'}</th>
                                   <th style={{ textAlign: 'center', whiteSpace: 'nowrap', padding: '0.75rem' }}>{language === 'en' ? 'Commission %' : 'কমিশন %'}</th>
@@ -13128,31 +13842,63 @@ function AdminPage({ language, toggleLanguage, t }) {
                                   (() => {
                                     let runningPaid = 0
                                     let runningCommission = 0
-                                    return viewingOrder.paymentHistory.map((payment, index) => {
+                                    const totalPrice = parseFloat(viewingOrder.totalPrice || 0)
+                                    const discount = viewingOrder.discountEnabled && viewingOrder.discountAmount > 0 ? viewingOrder.discountAmount : 1
+                                    const orderGrandTotal = totalPrice * discount
+
+                                    const rows = viewingOrder.paymentHistory.map((payment, index) => {
                                       const amount = parseFloat(payment.amount || 0)
                                       const commission = parseFloat(payment.commission || 0)
                                       const commPercent = amount > 0 ? ((commission / amount) * 100).toFixed(0) + '%' : '-'
 
                                       runningPaid += amount
                                       runningCommission += commission
+                                      // Correctly calculate due as (Order Grand Total) - (all paid cash + all commissions so far)
+                                      const currentDue = Math.max(0, orderGrandTotal - (runningPaid + runningCommission))
 
                                       return (
                                         <tr key={index}>
                                           <td style={{ textAlign: 'center' }}>{payment.date ? new Date(payment.date).toLocaleDateString() : '-'}</td>
-                                          <td style={{ textAlign: 'center' }}>৳{parseFloat(viewingOrder.totalPrice || 0).toFixed(2)}</td>
+                                          <td style={{ textAlign: 'center' }}>৳{totalPrice.toFixed(2)}</td>
+                                          <td style={{ textAlign: 'center', fontWeight: 600, color: '#1e40af' }}>৳{orderGrandTotal.toFixed(2)}</td>
                                           <td style={{ textAlign: 'center', fontWeight: 600 }}>৳{runningPaid.toFixed(2)}</td>
                                           <td style={{ textAlign: 'center', color: '#16a34a', fontWeight: 600 }}>৳{amount.toFixed(2)}</td>
                                           <td style={{ textAlign: 'center' }}>{commPercent}</td>
                                           <td style={{ textAlign: 'center' }}>৳{commission.toFixed(2)}</td>
                                           <td style={{ textAlign: 'center', fontWeight: 600 }}>৳{runningCommission.toFixed(2)}</td>
-                                          <td style={{ textAlign: 'center', color: '#dc2626', fontWeight: 600 }}>৳{parseFloat(payment.due || 0).toFixed(2)}</td>
+                                          <td style={{ textAlign: 'center', color: '#dc2626', fontWeight: 600 }}>৳{currentDue.toFixed(2)}</td>
                                         </tr>
                                       )
                                     })
+
+                                    // Add summary row
+                                    rows.push(
+                                      <tr key="summary" style={{ backgroundColor: '#f8fafc', fontWeight: 700, borderTop: '2px solid #e2e8f0' }}>
+                                        <td colSpan="4" style={{ textAlign: 'right', padding: '0.75rem' }}>{language === 'en' ? 'TOTAL:' : 'মোট:'}</td>
+                                        <td style={{ textAlign: 'center', color: '#16a34a' }}>৳{runningPaid.toFixed(2)}</td>
+                                        <td style={{ textAlign: 'center' }}>-</td>
+                                        <td style={{ textAlign: 'center', color: '#ca8a04' }}>৳{runningCommission.toFixed(2)}</td>
+                                        <td colSpan="2" style={{ textAlign: 'center', backgroundColor: '#eff6ff' }}>
+                                          <div style={{ fontSize: '0.75rem', color: '#1e40af' }}>{language === 'en' ? 'TOTAL COLLECTION' : 'মোট সংগ্রহ'}</div>
+                                          <div style={{ color: '#1e40af', fontSize: '1rem' }}>৳{(runningPaid + runningCommission).toFixed(2)}</div>
+                                        </td>
+                                      </tr>
+                                    )
+                                    rows.push(
+                                      <tr key="final-due" style={{ backgroundColor: '#fef2f2', fontWeight: 800 }}>
+                                        <td colSpan="7" style={{ textAlign: 'right', padding: '0.75rem', color: '#dc2626' }}>
+                                          {language === 'en' ? 'FINAL DUE AMOUNT:' : 'সর্বমোট বকেয়া পরিমাণ:'}
+                                        </td>
+                                        <td colSpan="2" style={{ textAlign: 'center', color: '#dc2626', fontSize: '1.1rem' }}>
+                                          ৳{Math.max(0, orderGrandTotal - (runningPaid + runningCommission)).toFixed(2)}
+                                        </td>
+                                      </tr>
+                                    )
+                                    return rows
                                   })()
                                 ) : (
                                   <tr>
-                                    <td colSpan="8" style={{ textAlign: 'center', padding: '1rem', color: '#6b7280' }}>
+                                    <td colSpan="9" style={{ textAlign: 'center', padding: '1rem', color: '#6b7280' }}>
                                       {language === 'en' ? 'No payment history available' : 'কোনো পেমেন্ট ইতিহাস নেই'}
                                     </td>
                                   </tr>
@@ -13167,12 +13913,18 @@ function AdminPage({ language, toggleLanguage, t }) {
                               (() => {
                                 let runningPaid = 0
                                 let runningCommission = 0
-                                return viewingOrder.paymentHistory.map((payment, index) => {
+                                const totalPrice = parseFloat(viewingOrder.totalPrice || 0)
+                                const discount = viewingOrder.discountEnabled && viewingOrder.discountAmount > 0 ? viewingOrder.discountAmount : 1
+                                const orderGrandTotal = totalPrice * discount
+
+                                const cards = viewingOrder.paymentHistory.map((payment, index) => {
                                   const amount = parseFloat(payment.amount || 0)
                                   const commission = parseFloat(payment.commission || 0)
+                                  const commPercent = amount > 0 ? ((commission / amount) * 100).toFixed(0) + '%' : ''
 
                                   runningPaid += amount
                                   runningCommission += commission
+                                  const currentDue = Math.max(0, orderGrandTotal - (runningPaid + runningCommission))
 
                                   return (
                                     <div key={index} className="mobile-card" style={{ padding: '0.75rem', border: '1px solid #e2e8f0', boxShadow: 'none' }}>
@@ -13181,20 +13933,63 @@ function AdminPage({ language, toggleLanguage, t }) {
                                         <span className="mobile-card-value">{payment.date ? new Date(payment.date).toLocaleDateString() : '-'}</span>
                                       </div>
                                       <div className="mobile-card-row">
+                                        <span className="mobile-card-label">{language === 'en' ? 'Total Price' : 'মোট মূল্য'}</span>
+                                        <span className="mobile-card-value">৳{totalPrice.toFixed(2)}</span>
+                                      </div>
+                                      <div className="mobile-card-row">
+                                        <span className="mobile-card-label">{language === 'en' ? 'Grand Total' : 'সর্বমোট'}</span>
+                                        <span className="mobile-card-value" style={{ fontWeight: 700, color: '#1e40af' }}>৳{orderGrandTotal.toFixed(2)}</span>
+                                      </div>
+                                      <div className="mobile-card-row">
                                         <span className="mobile-card-label">{language === 'en' ? 'Paid Amount' : 'পরিশোধিত'}</span>
                                         <span className="mobile-card-value" style={{ color: '#16a34a', fontWeight: 600 }}>৳{amount.toFixed(2)}</span>
                                       </div>
                                       <div className="mobile-card-row">
-                                        <span className="mobile-card-label">{language === 'en' ? 'Commission' : 'কমিশন'}</span>
+                                        <span className="mobile-card-label">
+                                          {language === 'en' ? 'Commission' : 'কমিশন'}
+                                          {commPercent && <span style={{ fontSize: '0.75rem', color: '#64748b', marginLeft: '0.4rem' }}>({commPercent})</span>}
+                                        </span>
                                         <span className="mobile-card-value">৳{commission.toFixed(2)}</span>
                                       </div>
                                       <div className="mobile-card-row">
                                         <span className="mobile-card-label">{language === 'en' ? 'Due' : 'বাকি'}</span>
-                                        <span className="mobile-card-value" style={{ color: '#dc2626', fontWeight: 600 }}>৳{parseFloat(payment.due || 0).toFixed(2)}</span>
+                                        <span className="mobile-card-value" style={{ color: '#dc2626', fontWeight: 600 }}>৳{currentDue.toFixed(2)}</span>
                                       </div>
                                     </div>
                                   )
                                 })
+
+                                // Add summary card for mobile
+                                cards.push(
+                                  <div key="mobile-summary" className="mobile-card" style={{
+                                    padding: '0.75rem',
+                                    border: '2px solid #e2e8f0',
+                                    backgroundColor: '#f8fafc',
+                                    boxShadow: 'none',
+                                    marginTop: '1rem'
+                                  }}>
+                                    <div className="mobile-card-row" style={{ borderBottom: '1px solid #e2e8f0', paddingBottom: '0.5rem', marginBottom: '0.5rem' }}>
+                                      <span className="mobile-card-label" style={{ fontWeight: 800, color: '#0f172a' }}>{language === 'en' ? 'TOTAL SUMMARY' : 'মোট সারসংক্ষেপ'}</span>
+                                    </div>
+                                    <div className="mobile-card-row">
+                                      <span className="mobile-card-label">{language === 'en' ? 'Total Paid' : 'মোট পরিশোধিত'}</span>
+                                      <span className="mobile-card-value" style={{ color: '#16a34a', fontWeight: 700 }}>৳{runningPaid.toFixed(2)}</span>
+                                    </div>
+                                    <div className="mobile-card-row">
+                                      <span className="mobile-card-label">{language === 'en' ? 'Total Commission' : 'মোট কমিশন'}</span>
+                                      <span className="mobile-card-value" style={{ color: '#ca8a04', fontWeight: 700 }}>৳{runningCommission.toFixed(2)}</span>
+                                    </div>
+                                    <div className="mobile-card-row" style={{ backgroundColor: '#eff6ff', padding: '0.4rem', borderRadius: '0.25rem', marginTop: '0.5rem' }}>
+                                      <span className="mobile-card-label" style={{ color: '#1e40af', fontWeight: 700 }}>{language === 'en' ? 'TOTAL COLLECTION' : 'মোট সংগ্রহ'}</span>
+                                      <span className="mobile-card-value" style={{ color: '#1e40af', fontWeight: 800 }}>৳{(runningPaid + runningCommission).toFixed(2)}</span>
+                                    </div>
+                                    <div className="mobile-card-row" style={{ backgroundColor: '#fef2f2', padding: '0.4rem', borderRadius: '0.25rem', marginTop: '0.5rem' }}>
+                                      <span className="mobile-card-label" style={{ color: '#dc2626', fontWeight: 800 }}>{language === 'en' ? 'FINAL DUE' : 'সর্বমোট বকেয়া'}</span>
+                                      <span className="mobile-card-value" style={{ color: '#dc2626', fontWeight: 900, fontSize: '1.1rem' }}>৳{Math.max(0, orderGrandTotal - (runningPaid + runningCommission)).toFixed(2)}</span>
+                                    </div>
+                                  </div>
+                                )
+                                return cards
                               })()
                             ) : (
                               <div style={{ padding: '1rem', textAlign: 'center', color: '#6b7280', fontSize: '0.875rem', background: '#f9fafb', borderRadius: '0.375rem', border: '1px solid #e5e7eb' }}>
@@ -13281,9 +14076,12 @@ function AdminPage({ language, toggleLanguage, t }) {
                               <button
                                 onClick={() => {
                                   setIsEditingOrderDetails(true)
-                                  const total = parseFloat(viewingOrder.totalPrice || 0)
+                                  const totalVal = parseFloat(viewingOrder.totalPrice || 0)
+                                  const discount = viewingOrder.discountEnabled && viewingOrder.discountAmount > 0 ? viewingOrder.discountAmount : 1
+                                  const grandTotal = viewingOrder.grandTotal || (totalVal * discount)
                                   const paid = parseFloat(viewingOrder.paidAmount || 0)
-                                  const due = Math.max(0, total - paid)
+                                  const comm = (viewingOrder.paymentHistory || []).reduce((sum, p) => sum + (parseFloat(p.commission) || 0), 0)
+                                  const due = Math.max(0, grandTotal - (paid + comm))
                                   const currentStatus = viewingOrder.status || 'Pending'
                                   // For non-admin users, if status is not Shipped, Delivered, or Complete, default to Shipped
                                   let initialStatus = currentStatus
@@ -13440,44 +14238,66 @@ function AdminPage({ language, toggleLanguage, t }) {
           {
             activeTab === 'revenue' && (
               <div className="admin-tab-content">
-                <div className="admin-tab-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <div className="admin-tab-header admin-revenue-header">
                   <h1 className="admin-page-title">{adminContent.revenue}</h1>
-                  <div style={{ position: 'relative', display: 'flex', alignItems: 'center', gap: '0.75rem', flexWrap: 'wrap' }}>
-                    <select
-                      value={revenueFilterType}
-                      onChange={(e) => setRevenueFilterType(e.target.value)}
-                      style={{
-                        padding: '0.5rem',
-                        borderRadius: '0.375rem',
-                        border: '1px solid #cbd5e1',
-                        fontSize: '0.875rem',
-                        backgroundColor: 'white'
-                      }}
-                    >
-                      <option value="all">{language === 'en' ? 'All Time' : 'সব সময়'}</option>
-                      <option value="monthly">{language === 'en' ? 'Monthly' : 'মাসিক'}</option>
-                      <option value="yearly">{language === 'en' ? 'Yearly' : 'বার্ষিক'}</option>
-                    </select>
+                  <div className="admin-revenue-controls">
+                    <div className="revenue-filters">
+                      <select
+                        value={revenueFilterType}
+                        onChange={(e) => setRevenueFilterType(e.target.value)}
+                        style={{
+                          padding: '0.5rem',
+                          borderRadius: '0.375rem',
+                          border: '1px solid #cbd5e1',
+                          fontSize: '0.875rem',
+                          backgroundColor: 'white'
+                        }}
+                      >
+                        <option value="all">{language === 'en' ? 'All Time' : 'সব সময়'}</option>
+                        <option value="monthly">{language === 'en' ? 'Monthly' : 'মাসিক'}</option>
+                        <option value="yearly">{language === 'en' ? 'Yearly' : 'বার্ষিক'}</option>
+                      </select>
 
-                    {revenueFilterType === 'monthly' && (
-                      <div style={{ display: 'flex', gap: '0.5rem' }}>
-                        <select
-                          value={revenueSelectedMonth}
-                          onChange={(e) => setRevenueSelectedMonth(parseInt(e.target.value))}
-                          style={{
-                            padding: '0.5rem',
-                            borderRadius: '0.375rem',
-                            border: '1px solid #cbd5e1',
-                            fontSize: '0.875rem',
-                            backgroundColor: 'white'
-                          }}
-                        >
-                          {Array.from({ length: 12 }, (_, i) => (
-                            <option key={i} value={i}>
-                              {new Date(0, i).toLocaleString(language === 'en' ? 'en-US' : 'en-US', { month: 'long' })}
-                            </option>
-                          ))}
-                        </select>
+                      {revenueFilterType === 'monthly' && (
+                        <div style={{ display: 'flex', gap: '0.5rem' }}>
+                          <select
+                            className="revenue-filter-select"
+                            value={revenueSelectedMonth}
+                            onChange={(e) => setRevenueSelectedMonth(parseInt(e.target.value))}
+                            style={{
+                              padding: '0.5rem',
+                              borderRadius: '0.375rem',
+                              border: '1px solid #cbd5e1',
+                              fontSize: '0.875rem',
+                              backgroundColor: 'white'
+                            }}
+                          >
+                            {Array.from({ length: 12 }, (_, i) => (
+                              <option key={i} value={i}>
+                                {new Date(0, i).toLocaleString(language === 'en' ? 'en-US' : 'en-US', { month: 'long' })}
+                              </option>
+                            ))}
+                          </select>
+                          <select
+                            className="revenue-filter-select"
+                            value={revenueSelectedYear}
+                            onChange={(e) => setRevenueSelectedYear(parseInt(e.target.value))}
+                            style={{
+                              padding: '0.5rem',
+                              borderRadius: '0.375rem',
+                              border: '1px solid #cbd5e1',
+                              fontSize: '0.875rem',
+                              backgroundColor: 'white'
+                            }}
+                          >
+                            {Array.from({ length: 5 }, (_, i) => new Date().getFullYear() - i).map(year => (
+                              <option key={year} value={year}>{year}</option>
+                            ))}
+                          </select>
+                        </div>
+                      )}
+
+                      {revenueFilterType === 'yearly' && (
                         <select
                           value={revenueSelectedYear}
                           onChange={(e) => setRevenueSelectedYear(parseInt(e.target.value))}
@@ -13493,218 +14313,284 @@ function AdminPage({ language, toggleLanguage, t }) {
                             <option key={year} value={year}>{year}</option>
                           ))}
                         </select>
-                      </div>
-                    )}
+                      )}
+                    </div>
 
-                    {revenueFilterType === 'yearly' && (
-                      <select
-                        value={revenueSelectedYear}
-                        onChange={(e) => setRevenueSelectedYear(parseInt(e.target.value))}
+                    <div className="revenue-actions">
+                      <button
+                        onClick={() => setShowManageTarget(true)}
+                        className="revenue-action-btn"
                         style={{
-                          padding: '0.5rem',
+                          backgroundColor: 'rgba(16, 185, 129, 0.9)', // Emerald Green Glass
+                          color: 'white',
+                          border: '1px solid rgba(52, 211, 153, 0.5)',
                           borderRadius: '0.375rem',
-                          border: '1px solid #cbd5e1',
-                          fontSize: '0.875rem',
-                          backgroundColor: 'white'
+                          cursor: 'pointer',
+                          fontWeight: 600,
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: '0.5rem',
+                          backdropFilter: 'blur(8px)',
+                          WebkitBackdropFilter: 'blur(8px)',
+                          boxShadow: '0 4px 6px -1px rgba(16, 185, 129, 0.2), 0 2px 4px -1px rgba(16, 185, 129, 0.1)'
                         }}
                       >
-                        {Array.from({ length: 5 }, (_, i) => new Date().getFullYear() - i).map(year => (
-                          <option key={year} value={year}>{year}</option>
-                        ))}
-                      </select>
-                    )}
-                    <button
-                      onClick={() => setShowManageTarget(true)}
-                      style={{
-                        padding: '0.5rem 1rem',
-                        fontSize: '0.875rem',
-                        backgroundColor: 'rgba(16, 185, 129, 0.9)', // Emerald Green Glass
-                        color: 'white',
-                        border: '1px solid rgba(52, 211, 153, 0.5)',
-                        borderRadius: '0.375rem',
-                        cursor: 'pointer',
-                        fontWeight: 600,
-                        display: 'flex',
-                        alignItems: 'center',
-                        gap: '0.5rem',
-                        backdropFilter: 'blur(8px)',
-                        WebkitBackdropFilter: 'blur(8px)',
-                        boxShadow: '0 4px 6px -1px rgba(16, 185, 129, 0.2), 0 2px 4px -1px rgba(16, 185, 129, 0.1)'
-                      }}
-                    >
-                      <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                        <path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6" />
-                      </svg>
-                      {language === 'en' ? 'Manage Target' : 'লক্ষ্য নির্ধারণ'}
-                    </button>
-                    {/* Debug Log Removed */}
-                    <button
-                      onClick={() => setShowManageCommissions(true)}
-                      style={{
-                        padding: '0.5rem 1rem',
-                        fontSize: '0.875rem',
-                        backgroundColor: '#e0f2fe',
-                        color: '#0369a1',
-                        border: '1px solid #bae6fd',
-                        borderRadius: '0.375rem',
-                        cursor: 'pointer',
-                        fontWeight: 600,
-                        display: 'flex',
-                        alignItems: 'center',
-                        gap: '0.5rem'
-                      }}
-                    >
-                      <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                        <path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.09a2 2 0 0 1-1-1.74v-.47a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"></path>
-                        <circle cx="12" cy="12" r="3"></circle>
-                      </svg>
-                      {language === 'en' ? 'Manage Commissions' : 'কমিশন পরিচালনা'}
-                    </button>
+                        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                          <path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6" />
+                        </svg>
+                        {language === 'en' ? 'Target' : 'লক্ষ্য'}
+                      </button>
+                      {/* Debug Log Removed */}
+                      <button
+                        onClick={() => setShowManageCommissions(true)}
+                        className="revenue-action-btn"
+                        style={{
+                          backgroundColor: '#e0f2fe',
+                          color: '#0369a1',
+                          border: '1px solid #bae6fd',
+                          borderRadius: '0.375rem',
+                          cursor: 'pointer',
+                          fontWeight: 600,
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: '0.5rem'
+                        }}
+                      >
+                        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                          <path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6" />
+                        </svg>
+                        {language === 'en' ? 'Commission' : 'কমিশন'}
+                      </button>
+                      <button
+                        onClick={() => setShowManageDiscount(true)}
+                        className="revenue-action-btn"
+                        style={{
+                          backgroundColor: '#fef2f2',
+                          color: '#dc2626',
+                          border: '1px solid #fecaca',
+                          borderRadius: '0.375rem',
+                          cursor: 'pointer',
+                          fontWeight: 600,
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: '0.5rem'
+                        }}
+                      >
+                        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                          <circle cx="9" cy="21" r="1" />
+                          <circle cx="20" cy="21" r="1" />
+                          <path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6" />
+                          <path d="M12 6l-3 3 3 3" />
+                        </svg>
+                        {language === 'en' ? `Discount${discountEnabled ? ` (৳${discountAmount})` : ''}` : `ডিসকাউন্ট${discountEnabled ? ` (৳${discountAmount})` : ''}`}
+                      </button>
+                    </div>
+                  </div>
 
-                    {showManageTarget && (
-                      <div style={{
-                        position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
-                        backgroundColor: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 9999
-                      }}>
-                        <div style={{ backgroundColor: 'white', padding: '1.5rem', borderRadius: '0.5rem', width: '400px', boxShadow: '0 10px 15px -3px rgba(0, 0, 0, 0.1)' }}>
-                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
-                            <h3 style={{ margin: 0, color: '#1e293b' }}>{language === 'en' ? 'Set Sales Target' : 'বিক্রয় লক্ষ্য নির্ধারণ করুন'}</h3>
-                            <button onClick={() => setShowManageTarget(false)} style={{ background: 'none', border: 'none', fontSize: '1.25rem', cursor: 'pointer', color: '#64748b' }}>×</button>
+                  {showManageTarget && (
+                    <div style={{
+                      position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
+                      backgroundColor: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 9999
+                    }}>
+                      <div style={{ backgroundColor: 'white', padding: '1.5rem', borderRadius: '0.5rem', width: '400px', boxShadow: '0 10px 15px -3px rgba(0, 0, 0, 0.1)' }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
+                          <h3 style={{ margin: 0, color: '#1e293b' }}>{language === 'en' ? 'Set Sales Target' : 'বিক্রয় লক্ষ্য নির্ধারণ করুন'}</h3>
+                          <button onClick={() => setShowManageTarget(false)} style={{ background: 'none', border: 'none', fontSize: '1.25rem', cursor: 'pointer', color: '#64748b' }}>×</button>
+                        </div>
+
+                        <div style={{ marginBottom: '1rem', display: 'flex', gap: '0.5rem' }}>
+                          <button
+                            onClick={() => setTargetMode('half-yearly')}
+                            style={{
+                              flex: 1, padding: '0.5rem', borderRadius: '0.375rem', border: '1px solid #e2e8f0',
+                              backgroundColor: targetMode === 'half-yearly' ? '#0ea5e9' : 'white',
+                              color: targetMode === 'half-yearly' ? 'white' : '#64748b'
+                            }}
+                          >
+                            {language === 'en' ? 'Half Yearly' : 'অর্ধ বার্ষিক'}
+                          </button>
+                          <button
+                            onClick={() => setTargetMode('monthly')}
+                            style={{
+                              flex: 1, padding: '0.5rem', borderRadius: '0.375rem', border: '1px solid #e2e8f0',
+                              backgroundColor: targetMode === 'monthly' ? '#0ea5e9' : 'white',
+                              color: targetMode === 'monthly' ? 'white' : '#64748b'
+                            }}
+                          >
+                            {language === 'en' ? 'Monthly' : 'মাসিক'}
+                          </button>
+                        </div>
+
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+                          <div>
+                            <label style={{ display: 'block', marginBottom: '0.25rem', fontSize: '0.875rem' }}>Year</label>
+                            <select value={targetYear} onChange={(e) => setTargetYear(parseInt(e.target.value))} style={{ width: '100%', padding: '0.5rem', borderRadius: '0.375rem', border: '1px solid #e2e8f0' }}>
+                              {Array.from({ length: 5 }, (_, i) => new Date().getFullYear() - i + 2).map(year => (
+                                <option key={year} value={year}>{year}</option>
+                              ))}
+                            </select>
                           </div>
 
-                          <div style={{ marginBottom: '1rem', display: 'flex', gap: '0.5rem' }}>
-                            <button
-                              onClick={() => setTargetMode('half-yearly')}
-                              style={{
-                                flex: 1, padding: '0.5rem', borderRadius: '0.375rem', border: '1px solid #e2e8f0',
-                                backgroundColor: targetMode === 'half-yearly' ? '#0ea5e9' : 'white',
-                                color: targetMode === 'half-yearly' ? 'white' : '#64748b'
-                              }}
-                            >
-                              {language === 'en' ? 'Half Yearly' : 'অর্ধ বার্ষিক'}
-                            </button>
-                            <button
-                              onClick={() => setTargetMode('monthly')}
-                              style={{
-                                flex: 1, padding: '0.5rem', borderRadius: '0.375rem', border: '1px solid #e2e8f0',
-                                backgroundColor: targetMode === 'monthly' ? '#0ea5e9' : 'white',
-                                color: targetMode === 'monthly' ? 'white' : '#64748b'
-                              }}
-                            >
-                              {language === 'en' ? 'Monthly' : 'মাসিক'}
-                            </button>
-                          </div>
-
-                          <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+                          {targetMode === 'half-yearly' ? (
                             <div>
-                              <label style={{ display: 'block', marginBottom: '0.25rem', fontSize: '0.875rem' }}>Year</label>
-                              <select value={targetYear} onChange={(e) => setTargetYear(parseInt(e.target.value))} style={{ width: '100%', padding: '0.5rem', borderRadius: '0.375rem', border: '1px solid #e2e8f0' }}>
-                                {Array.from({ length: 5 }, (_, i) => new Date().getFullYear() - i + 2).map(year => (
-                                  <option key={year} value={year}>{year}</option>
+                              <label style={{ display: 'block', marginBottom: '0.25rem', fontSize: '0.875rem' }}>Period</label>
+                              <select value={targetPeriod} onChange={(e) => setTargetPeriod(e.target.value)} style={{ width: '100%', padding: '0.5rem', borderRadius: '0.375rem', border: '1px solid #e2e8f0' }}>
+                                <option value="H1">Jan - Jun (1st Half)</option>
+                                <option value="H2">Jul - Dec (2nd Half)</option>
+                              </select>
+                            </div>
+                          ) : (
+                            <div>
+                              <label style={{ display: 'block', marginBottom: '0.25rem', fontSize: '0.875rem' }}>Month</label>
+                              <select value={targetMonth} onChange={(e) => setTargetMonth(parseInt(e.target.value))} style={{ width: '100%', padding: '0.5rem', borderRadius: '0.375rem', border: '1px solid #e2e8f0' }}>
+                                {Array.from({ length: 12 }, (_, i) => (
+                                  <option key={i} value={i}>
+                                    {new Date(0, i).toLocaleString('en-US', { month: 'long' })}
+                                  </option>
                                 ))}
                               </select>
                             </div>
+                          )}
 
-                            {targetMode === 'half-yearly' ? (
-                              <div>
-                                <label style={{ display: 'block', marginBottom: '0.25rem', fontSize: '0.875rem' }}>Period</label>
-                                <select value={targetPeriod} onChange={(e) => setTargetPeriod(e.target.value)} style={{ width: '100%', padding: '0.5rem', borderRadius: '0.375rem', border: '1px solid #e2e8f0' }}>
-                                  <option value="H1">Jan - Jun (1st Half)</option>
-                                  <option value="H2">Jul - Dec (2nd Half)</option>
-                                </select>
-                              </div>
-                            ) : (
-                              <div>
-                                <label style={{ display: 'block', marginBottom: '0.25rem', fontSize: '0.875rem' }}>Month</label>
-                                <select value={targetMonth} onChange={(e) => setTargetMonth(parseInt(e.target.value))} style={{ width: '100%', padding: '0.5rem', borderRadius: '0.375rem', border: '1px solid #e2e8f0' }}>
-                                  {Array.from({ length: 12 }, (_, i) => (
-                                    <option key={i} value={i}>
-                                      {new Date(0, i).toLocaleString('en-US', { month: 'long' })}
-                                    </option>
-                                  ))}
-                                </select>
-                              </div>
-                            )}
-
-                            <div>
-                              <label style={{ display: 'block', marginBottom: '0.25rem', fontSize: '0.875rem' }}>Target Amount (Tk)</label>
-                              <input
-                                type="number"
-                                value={targetAmount}
-                                onChange={(e) => setTargetAmount(e.target.value)}
-                                placeholder="Enter amount"
-                                style={{ width: '100%', padding: '0.5rem', borderRadius: '0.375rem', border: '1px solid #e2e8f0' }}
-                              />
-                              {targetMode === 'half-yearly' && targetAmount && (
-                                <p style={{ fontSize: '0.75rem', color: '#64748b', marginTop: '0.25rem' }}>
-                                  ~ ৳{Math.round(targetAmount / 6).toLocaleString()} per month
-                                </p>
-                              )}
-                            </div>
-
-                            <button
-                              onClick={handleSaveTarget}
-                              disabled={savingTarget}
-                              style={{
-                                padding: '0.75rem', backgroundColor: '#10b981', color: 'white', border: 'none', borderRadius: '0.375rem',
-                                marginTop: '0.5rem', cursor: savingTarget ? 'not-allowed' : 'pointer', fontWeight: 600
-                              }}
-                            >
-                              {savingTarget ? 'Saving...' : 'Save Target'}
-                            </button>
-                          </div>
-                        </div>
-                      </div>
-                    )}
-
-                    {showManageCommissions && (
-                      <div style={{
-                        position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
-                        backgroundColor: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 9999
-                      }}>
-                        <div style={{ backgroundColor: 'white', padding: '1.5rem', borderRadius: '0.5rem', width: '320px', boxShadow: '0 10px 15px -3px rgba(0, 0, 0, 0.1)' }}>
-                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
-                            <h3 style={{ margin: 0, color: '#1e293b' }}>{language === 'en' ? 'Manage Rates' : 'রেট পরিচালনা'}</h3>
-                            <button onClick={() => setShowManageCommissions(false)} style={{ background: 'none', border: 'none', fontSize: '1.25rem', cursor: 'pointer', color: '#64748b' }}>×</button>
-                          </div>
-
-                          <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '1rem' }}>
+                          <div>
+                            <label style={{ display: 'block', marginBottom: '0.25rem', fontSize: '0.875rem' }}>Target Amount (Tk)</label>
                             <input
-                              type="text"
-                              placeholder="e.g. 12%"
-                              value={newCommissionRate}
-                              onChange={(e) => setNewCommissionRate(e.target.value)}
-                              style={{ flex: 1, padding: '0.5rem', border: '1px solid #cbd5e1', borderRadius: '0.375rem' }}
+                              type="number"
+                              value={targetAmount}
+                              onChange={(e) => setTargetAmount(e.target.value)}
+                              placeholder="Enter amount"
+                              style={{ width: '100%', padding: '0.5rem', borderRadius: '0.375rem', border: '1px solid #e2e8f0' }}
                             />
-                            <button
-                              onClick={handleAddCommissionRate}
-                              style={{ padding: '0.5rem 1rem', backgroundColor: '#3b82f6', color: 'white', border: 'none', borderRadius: '0.375rem', cursor: 'pointer', fontWeight: 600 }}
-                            >
-                              {language === 'en' ? 'Add' : 'যোগ'}
-                            </button>
+                            {targetMode === 'half-yearly' && targetAmount && (
+                              <p style={{ fontSize: '0.75rem', color: '#64748b', marginTop: '0.25rem' }}>
+                                ~ ৳{Math.round(targetAmount / 6).toLocaleString()} per month
+                              </p>
+                            )}
                           </div>
 
-                          <div style={{ maxHeight: '250px', overflowY: 'auto', border: '1px solid #e2e8f0', borderRadius: '0.375rem', WebkitOverflowScrolling: 'touch' }}>
-                            <ul style={{ listStyle: 'none', padding: 0, margin: 0 }}>
-                              {commissionRates.map((rate, index) => (
-                                <li key={index} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '0.75rem', borderBottom: index === commissionRates.length - 1 ? 'none' : '1px solid #f1f5f9' }}>
-                                  <span style={{ fontWeight: 500, color: '#334155' }}>{rate}</span>
-                                  <button
-                                    onClick={() => handleRemoveCommissionRate(rate)}
-                                    style={{ color: '#ef4444', background: 'none', border: 'none', cursor: 'pointer', padding: '0.25rem' }}
-                                    title="Remove"
-                                  >
-                                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>
-                                  </button>
-                                </li>
-                              ))}
-                            </ul>
-                          </div>
+                          <button
+                            onClick={handleSaveTarget}
+                            disabled={savingTarget}
+                            style={{
+                              padding: '0.75rem', backgroundColor: '#10b981', color: 'white', border: 'none', borderRadius: '0.375rem',
+                              marginTop: '0.5rem', cursor: savingTarget ? 'not-allowed' : 'pointer', fontWeight: 600
+                            }}
+                          >
+                            {savingTarget ? 'Saving...' : 'Save Target'}
+                          </button>
                         </div>
                       </div>
-                    )}
-                  </div>
+                    </div>
+                  )}
+
+                  {showManageCommissions && (
+                    <div style={{
+                      position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
+                      backgroundColor: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 9999
+                    }}>
+                      <div style={{ backgroundColor: 'white', padding: '1.5rem', borderRadius: '0.5rem', width: '320px', boxShadow: '0 10px 15px -3px rgba(0, 0, 0, 0.1)' }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
+                          <h3 style={{ margin: 0, color: '#1e293b' }}>{language === 'en' ? 'Manage Rates' : 'রেট পরিচালনা'}</h3>
+                          <button onClick={() => setShowManageCommissions(false)} style={{ background: 'none', border: 'none', fontSize: '1.25rem', cursor: 'pointer', color: '#64748b' }}>×</button>
+                        </div>
+
+                        <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '1rem' }}>
+                          <input
+                            type="text"
+                            placeholder="e.g. 12%"
+                            value={newCommissionRate}
+                            onChange={(e) => setNewCommissionRate(e.target.value)}
+                            style={{ flex: 1, padding: '0.5rem', border: '1px solid #cbd5e1', borderRadius: '0.375rem' }}
+                          />
+                          <button
+                            onClick={handleAddCommissionRate}
+                            style={{ padding: '0.5rem 1rem', backgroundColor: '#3b82f6', color: 'white', border: 'none', borderRadius: '0.375rem', cursor: 'pointer', fontWeight: 600 }}
+                          >
+                            {language === 'en' ? 'Add' : 'যোগ'}
+                          </button>
+                        </div>
+
+                        <div style={{ maxHeight: '250px', overflowY: 'auto', border: '1px solid #e2e8f0', borderRadius: '0.375rem', WebkitOverflowScrolling: 'touch' }}>
+                          <ul style={{ listStyle: 'none', padding: 0, margin: 0 }}>
+                            {commissionRates.map((rate, index) => (
+                              <li key={index} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '0.75rem', borderBottom: index === commissionRates.length - 1 ? 'none' : '1px solid #f1f5f9' }}>
+                                <span style={{ fontWeight: 500, color: '#334155' }}>{rate}</span>
+                                <button
+                                  onClick={() => handleRemoveCommissionRate(rate)}
+                                  style={{ color: '#ef4444', background: 'none', border: 'none', cursor: 'pointer', padding: '0.25rem' }}
+                                  title="Remove"
+                                >
+                                  <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>
+                                </button>
+                              </li>
+                            ))}
+                          </ul>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
+                  {showManageDiscount && (
+                    <div style={{
+                      position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
+                      backgroundColor: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 9999
+                    }}>
+                      <div style={{ backgroundColor: 'white', padding: '1.5rem', borderRadius: '0.5rem', width: '400px', boxShadow: '0 10px 15px -3px rgba(0, 0, 0, 0.1)' }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
+                          <h3 style={{ margin: 0, color: '#1e293b' }}>{language === 'en' ? 'Manage Discount' : 'ডিসকাউন্ট ব্যবস্থাপনা'}</h3>
+                          <button onClick={() => setShowManageDiscount(false)} style={{ background: 'none', border: 'none', fontSize: '1.25rem', cursor: 'pointer', color: '#64748b' }}>×</button>
+                        </div>
+
+                        <div style={{ marginBottom: '1rem' }}>
+                          <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: 500, color: '#334155' }}>
+                            {language === 'en' ? 'Discount Amount' : 'ডিসকাউন্ট পরিমাণ'}
+                          </label>
+                          <input
+                            type="number"
+                            min="0"
+                            step="0.01"
+                            value={discountAmount}
+                            onChange={(e) => setDiscountAmount(e.target.value)}
+                            style={{ width: '100%', padding: '0.5rem', border: '1px solid #cbd5e1', borderRadius: '0.375rem' }}
+                            placeholder="e.g. 0.8"
+                          />
+                        </div>
+
+                        <div style={{ marginBottom: '1.5rem', display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+                          <input
+                            type="checkbox"
+                            id="discountEnabled"
+                            checked={discountEnabled}
+                            onChange={(e) => setDiscountEnabled(e.target.checked)}
+                            style={{ width: '18px', height: '18px', cursor: 'pointer' }}
+                          />
+                          <label htmlFor="discountEnabled" style={{ cursor: 'pointer', fontWeight: 500, color: '#334155' }}>
+                            {language === 'en' ? 'Enable Discount' : 'ডিসকাউন্ট সক্রিয় করুন'}
+                          </label>
+                        </div>
+
+                        <button
+                          onClick={handleSaveDiscount}
+                          disabled={savingDiscount}
+                          style={{
+                            width: '100%',
+                            padding: '0.75rem',
+                            backgroundColor: savingDiscount ? '#94a3b8' : '#dc2626',
+                            color: 'white',
+                            border: 'none',
+                            borderRadius: '0.375rem',
+                            cursor: savingDiscount ? 'not-allowed' : 'pointer',
+                            fontWeight: 600,
+                            fontSize: '0.875rem'
+                          }}
+                        >
+                          {savingDiscount ? (language === 'en' ? 'Saving...' : 'সংরক্ষণ করা হচ্ছে...') : (language === 'en' ? 'Save Discount' : 'ডিসকাউন্ট সংরক্ষণ করুন')}
+                        </button>
+                      </div>
+                    </div>
+                  )}
                 </div>
+
                 <div className="admin-stats-grid">
                   <div className="admin-stat-card">
                     <div className="admin-stat-icon">
@@ -13782,9 +14668,11 @@ function AdminPage({ language, toggleLanguage, t }) {
                               return sum
                             }
 
-                            // Count approved orders
+                            // Count approved orders with discount
                             if (order.approvalStatus === 'Approved') {
-                              return sum + (parseFloat(order.totalPrice) || 0)
+                              const total = parseFloat(order.totalPrice) || 0
+                              const discount = order.discountEnabled && order.discountAmount > 0 ? order.discountAmount : 1
+                              return sum + (total * discount)
                             }
                             return sum
                           }, 0)
@@ -13818,29 +14706,7 @@ function AdminPage({ language, toggleLanguage, t }) {
                       <p>৳{Number(revenueStats.totalDue || 0).toLocaleString()}</p>
                     </div>
                   </div>
-                  <div className="admin-stat-card">
-                    <div className="admin-stat-icon">
-                      <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                        <path d="M12 1v22M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-                      </svg>
-                    </div>
-                    <div className="admin-stat-info">
-                      <h3>{language === 'en' ? 'Total Commission Paid' : 'মোট কমিশন প্রদান'}</h3>
-                      <p>৳{Number(revenueStats.totalCommission || 0).toLocaleString()}</p>
-                    </div>
-                  </div>
-                  <div className="admin-stat-card">
-                    <div className="admin-stat-icon">
-                      <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                        <line x1="12" y1="1" x2="12" y2="23" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-                        <path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-                      </svg>
-                    </div>
-                    <div className="admin-stat-info">
-                      <h3>{language === 'en' ? 'Cash Collection' : 'নগদ সংগ্রহ'}</h3>
-                      <p>৳{Number(revenueStats.cashCollection || 0).toLocaleString()}</p>
-                    </div>
-                  </div>
+
                 </div>
                 <div className="admin-settings-section" style={{ marginTop: '2rem' }}>
                   <div className="admin-settings-card">
@@ -13850,7 +14716,7 @@ function AdminPage({ language, toggleLanguage, t }) {
                     </div>
                   </div>
                 </div>
-              </div>
+              </div >
             )
           }
 
@@ -13975,10 +14841,173 @@ function AdminPage({ language, toggleLanguage, t }) {
             )
           }
         </div >
+        {
+          printingOrder && (
+            <OrderInvoice
+              order={printingOrder}
+              dealers={dealers}
+              products={products}
+              language={language}
+            />
+          )
+        }
       </main >
     </div >
   )
 }
+
+const OrderInvoice = ({ order, dealers, products, language }) => {
+  if (!order) return null;
+  const dealer = dealers.find(d => d._id === (order.dealer?._id || order.dealer)) || order.dealer;
+
+  // Calculate totals
+  const totalValue = (order.items || []).reduce((sum, item) => {
+    const total = parseFloat(item.totalPrice || 0);
+    const discount = order.discountEnabled && order.discountAmount > 0 ? order.discountAmount : 1;
+    return sum + (total * discount);
+  }, 0);
+
+  const totalCartoons = (order.items || []).reduce((sum, item) => {
+    const itemQty = parseFloat(item.quantity) || 0;
+    let freeQty = 0;
+    const itemProduct = products.find(p => p._id === (item.product?._id || item.product));
+    if (itemProduct && itemProduct.hasOffer && itemProduct.buyQuantity && itemProduct.freeQuantity) {
+      const buyQty = parseFloat(itemProduct.buyQuantity) || 0;
+      const offerFreeQty = parseFloat(itemProduct.freeQuantity) || 0;
+      if (buyQty > 0) {
+        const eligibleOffers = Math.floor(itemQty / buyQty);
+        freeQty = eligibleOffers * offerFreeQty;
+      }
+    }
+    return sum + Math.floor(itemQty + freeQty);
+  }, 0);
+
+  const totalItems = (order.items || []).reduce((sum, item) => {
+    const itemQty = parseFloat(item.quantity) || 0;
+    let freeQty = 0;
+    const itemProduct = products.find(p => p._id === (item.product?._id || item.product));
+    if (itemProduct && itemProduct.hasOffer && itemProduct.buyQuantity && itemProduct.freeQuantity) {
+      const buyQty = parseFloat(itemProduct.buyQuantity) || 0;
+      const offerFreeQty = parseFloat(itemProduct.freeQuantity) || 0;
+      if (buyQty > 0) {
+        const eligibleOffers = Math.floor(itemQty / buyQty);
+        freeQty = eligibleOffers * offerFreeQty;
+      }
+    }
+    const cSize = item.variant?.cartoonSize || 1;
+    const totalQty = itemQty + freeQty;
+    return sum + Math.round((totalQty % 1) * cSize);
+  }, 0);
+
+  return (
+    <div className="invoice-print-wrapper">
+      <div className="invoice-print-container">
+        <div className="invoice-top-header">
+          <div>Ref.</div>
+          <div>Date: {new Date(order.createdAt).toLocaleDateString()}</div>
+        </div>
+        <h1 className="invoice-title">INVOICE NO. {new Date(order.createdAt).getFullYear()} {order.orderId}</h1>
+        <div className="invoice-customer-info">
+          <div>
+            <div className="info-row">
+              <div className="info-label">Customer Name</div>
+              <div className="info-value">: {dealer?.shopName || order.dealerName} {dealer?.name || ''}</div>
+            </div>
+            <div className="info-row">
+              <div className="info-label">Address</div>
+              <div className="info-value">: {dealer?.address || ''}</div>
+            </div>
+          </div>
+          <div>
+            <div className="info-row">
+              <div className="info-label">Mobile No.</div>
+              <div className="info-value">: {dealer?.phone || ''}</div>
+            </div>
+            <div className="info-row">
+              <div className="info-label">Customer Code</div>
+              <div className="info-value">: {dealer?.dealerId || order.dealerId || ''}</div>
+            </div>
+          </div>
+        </div>
+        <table className="invoice-table">
+          <thead>
+            <tr>
+              <th rowSpan="2">CODE</th>
+              <th rowSpan="2">Product Name</th>
+              <th rowSpan="2">Pack Size</th>
+              <th rowSpan="2">Cartoon Size</th>
+              <th colSpan="2">Price</th>
+              <th colSpan="2">Quantity</th>
+              <th rowSpan="2">Value</th>
+              <th rowSpan="2">Cartoon No.</th>
+            </tr>
+            <tr>
+              <th>Cartoon</th>
+              <th>Bottle/Packet</th>
+              <th>Cartoon</th>
+              <th>Bottle/Packet</th>
+            </tr>
+          </thead>
+          <tbody>
+            {(order.items || []).map((item, idx) => {
+              const cSize = item.variant?.cartoonSize || 1;
+              const cartoonPrice = parseFloat(item.unitPrice || 0);
+              const bottlePrice = cartoonPrice / cSize;
+
+              const itemQty = parseFloat(item.quantity) || 0;
+              let freeQty = 0;
+              const itemProduct = products.find(p => p._id === (item.product?._id || item.product));
+              if (itemProduct && itemProduct.hasOffer && itemProduct.buyQuantity && itemProduct.freeQuantity) {
+                const buyQty = parseFloat(itemProduct.buyQuantity) || 0;
+                const offerFreeQty = parseFloat(itemProduct.freeQuantity) || 0;
+                if (buyQty > 0) {
+                  const eligibleOffers = Math.floor(itemQty / buyQty);
+                  freeQty = eligibleOffers * offerFreeQty;
+                }
+              }
+
+              const totalQty = itemQty + freeQty;
+              const cartoons = Math.floor(totalQty);
+              const looseItems = Math.round((totalQty % 1) * cSize);
+
+              const discount = order.discountEnabled && order.discountAmount > 0 ? order.discountAmount : 1;
+              const value = ((parseFloat(item.totalPrice) || 0) * discount).toFixed(2);
+
+              return (
+                <tr key={idx}>
+                  <td>{item.variant?.productCode}</td>
+                  <td>{item.productName}</td>
+                  <td>{item.variant?.packSize} {item.variant?.packUnit}</td>
+                  <td>{cSize} {item.variant?.cartoonUnit || 'Pcs'}</td>
+                  <td>{Math.round(cartoonPrice)}</td>
+                  <td>{Math.round(bottlePrice)}</td>
+                  <td>{cartoons || '-'}</td>
+                  <td>{looseItems || '-'}</td>
+                  <td>{Math.round(parseFloat(value))}</td>
+                  <td></td>
+                </tr>
+              );
+            })}
+          </tbody>
+          <tfoot>
+            <tr>
+              <td colSpan="6" style={{ textAlign: 'center' }}>Total</td>
+              <td>{totalCartoons || '-'}</td>
+              <td>{totalItems || '-'}</td>
+              <td>{Math.round(totalValue)}</td>
+              <td></td>
+            </tr>
+          </tfoot>
+        </table>
+        <div className="invoice-footer-message">Invoiced Items are Not Returnable</div>
+        <div className="invoice-signatures">
+          <div className="signature">Signature of Customer</div>
+          <div className="signature">Authorized Signature</div>
+        </div>
+      </div>
+    </div>
+  );
+};
 
 export default AdminPage
 

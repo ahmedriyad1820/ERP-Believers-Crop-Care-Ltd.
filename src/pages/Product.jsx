@@ -73,16 +73,16 @@ function ProductPage({ language, toggleLanguage, t, editedContent = {} }) {
       }
       loadProducts()
     }
-    
+
     window.addEventListener('storage', handleStorageChange)
     window.addEventListener('contentUpdated', handleContentUpdate)
-    
+
     return () => {
       window.removeEventListener('storage', handleStorageChange)
       window.removeEventListener('contentUpdated', handleContentUpdate)
     }
   }, [])
-  
+
   const pageImages = useMemo(() => {
     const pageImagesStr = localStorage.getItem('pageImages')
     return pageImagesStr ? JSON.parse(pageImagesStr) : {}
@@ -90,26 +90,26 @@ function ProductPage({ language, toggleLanguage, t, editedContent = {} }) {
 
   const baseHeroContent = language === 'bn'
     ? {
-        title: 'আমাদের পণ্য',
-        subtitle: 'কৃষকদের ভাল ফলন অর্জনে সাহায্য করার জন্য ডিজাইন করা কার্যকর এবং নির্ভরযোগ্য ফসল সুরক্ষা পণ্যের আমাদের পরিসর আবিষ্কার করুন।',
-        allCategories: 'সব ক্যাটাগরি',
-        filterBy: 'ক্যাটাগরি',
-        searchPlaceholder: 'পণ্য খুঁজুন...'
-      }
+      title: 'আমাদের পণ্য',
+      subtitle: 'কৃষকদের ভাল ফলন অর্জনে সাহায্য করার জন্য ডিজাইন করা কার্যকর এবং নির্ভরযোগ্য ফসল সুরক্ষা পণ্যের আমাদের পরিসর আবিষ্কার করুন।',
+      allCategories: 'সব ক্যাটাগরি',
+      filterBy: 'ক্যাটাগরি',
+      searchPlaceholder: 'পণ্য খুঁজুন...'
+    }
     : {
-        title: 'Our Products',
-        subtitle: 'Discover our range of effective and reliable crop protection products designed to help farmers achieve better yields.',
-        allCategories: 'All Categories',
-        filterBy: 'Category',
-        searchPlaceholder: 'Search products...'
-      }
-  
+      title: 'Our Products',
+      subtitle: 'Discover our range of effective and reliable crop protection products designed to help farmers achieve better yields.',
+      allCategories: 'All Categories',
+      filterBy: 'Category',
+      searchPlaceholder: 'Search products...'
+    }
+
   // Merge with edited content
   const heroContent = {
     ...baseHeroContent,
     title: editedContent.products?.pageHeading || baseHeroContent.title,
     subtitle: editedContent.products?.pageSubtitle || baseHeroContent.subtitle
-      }
+  }
 
   // Use API products, fallback to static products
   const displayProducts = products.length > 0 ? products : (t.products.items || [])
@@ -132,7 +132,7 @@ function ProductPage({ language, toggleLanguage, t, editedContent = {} }) {
     // Filter by search query
     if (searchQuery.trim()) {
       const query = searchQuery.toLowerCase().trim()
-      filtered = filtered.filter(product => 
+      filtered = filtered.filter(product =>
         (product.name || '').toLowerCase().includes(query) ||
         (product.genericName || '').toLowerCase().includes(query) ||
         (product.description || '').toLowerCase().includes(query) ||
@@ -172,12 +172,12 @@ function ProductPage({ language, toggleLanguage, t, editedContent = {} }) {
   useEffect(() => {
     const fromProductPage = sessionStorage.getItem('productDetailsFrom')
     const productIndex = sessionStorage.getItem('productDetailsIndex')
-    
+
     if (fromProductPage === 'product-page' && productIndex) {
       // Clear the session storage
       sessionStorage.removeItem('productDetailsFrom')
       sessionStorage.removeItem('productDetailsIndex')
-      
+
       // Wait for products to render, then scroll to the card
       const scrollToCard = () => {
         const productCard = document.getElementById(`product-card-${productIndex}`)
@@ -194,7 +194,7 @@ function ProductPage({ language, toggleLanguage, t, editedContent = {} }) {
         }
         return false
       }
-      
+
       // Try immediately, then retry after a short delay if not found
       if (!scrollToCard()) {
         setTimeout(() => {
@@ -222,9 +222,9 @@ function ProductPage({ language, toggleLanguage, t, editedContent = {} }) {
       <SiteHeader language={language} toggleLanguage={toggleLanguage} t={t} />
       <main className="product-page-main">
         <section className="product-hero-banner fade-section">
-          <div 
-            className="product-hero-banner-content" 
-            style={{ 
+          <div
+            className="product-hero-banner-content"
+            style={{
               fontWeight: 700,
               background: `linear-gradient(135deg, rgba(9, 17, 31, 0.40), rgba(19, 56, 98, 0.40)), url(${pageImages.productHero || '/hero-image.jpg'}) center 40% / cover no-repeat`
             }}
@@ -241,14 +241,14 @@ function ProductPage({ language, toggleLanguage, t, editedContent = {} }) {
               {/* Search Field */}
               <div className="product-search-wrapper">
                 <div className="product-search-input-wrapper">
-                  <svg 
-                    className="search-icon" 
-                    viewBox="0 0 24 24" 
-                    fill="none" 
+                  <svg
+                    className="search-icon"
+                    viewBox="0 0 24 24"
+                    fill="none"
                     xmlns="http://www.w3.org/2000/svg"
                   >
-                    <circle cx="11" cy="11" r="8" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-                    <path d="m21 21-4.35-4.35" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                    <circle cx="11" cy="11" r="8" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+                    <path d="m21 21-4.35-4.35" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
                   </svg>
                   <input
                     type="text"
@@ -264,8 +264,8 @@ function ProductPage({ language, toggleLanguage, t, editedContent = {} }) {
                       aria-label="Clear search"
                     >
                       <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                        <circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="2"/>
-                        <path d="m15 9-6 6M9 9l6 6" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
+                        <circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="2" />
+                        <path d="m15 9-6 6M9 9l6 6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
                       </svg>
                     </button>
                   )}
@@ -280,13 +280,13 @@ function ProductPage({ language, toggleLanguage, t, editedContent = {} }) {
                   aria-expanded={isFilterDropdownOpen}
                 >
                   <span>{heroContent.filterBy}: {selectedCategory === 'All' ? heroContent.allCategories : selectedCategory}</span>
-                  <svg 
-                    viewBox="0 0 24 24" 
-                    fill="none" 
+                  <svg
+                    viewBox="0 0 24 24"
+                    fill="none"
                     xmlns="http://www.w3.org/2000/svg"
                     className={`filter-dropdown-icon ${isFilterDropdownOpen ? 'open' : ''}`}
                   >
-                    <path d="M6 9L12 15L18 9" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                    <path d="M6 9L12 15L18 9" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
                   </svg>
                 </button>
                 {isFilterDropdownOpen && (
@@ -321,46 +321,46 @@ function ProductPage({ language, toggleLanguage, t, editedContent = {} }) {
                 filteredProducts.map((product, productIndex) => {
                   const productId = product._id || productIndex
                   const productImage = product.image || '/product-bottle.png'
-                
-                return (
+
+                  return (
                     <div key={productId} id={`product-card-${productId}`} className="product-grid-card">
-                    <div className="product-grid-image-wrapper">
-                      <div className="product-grid-image">
-                        <img 
-                            src={productImage} 
-                          alt={product.name}
-                          loading="lazy"
-                          onError={(e) => {
-                            console.error('Product image failed to load:', e.target.src)
+                      <div className="product-grid-image-wrapper">
+                        <div className="product-grid-image">
+                          <img
+                            src={productImage}
+                            alt={product.name}
+                            loading="lazy"
+                            onError={(e) => {
+                              console.error('Product image failed to load:', e.target.src)
                               e.target.src = '/product-bottle.png'
-                          }}
-                        />
+                            }}
+                          />
+                        </div>
                       </div>
-                    </div>
-                    <div className="product-grid-content">
-                      <h3 className="product-grid-name">{product.name}</h3>
-                      <p className="product-grid-generic-name">{product.genericName}</p>
-                      <p className="product-grid-category">{product.category}</p>
-                      <p className="product-grid-description-text">{product.description}</p>
-                      <p className="product-grid-usage">{product.usage}</p>
-                      <div className="product-grid-actions">
-                        <button 
-                          className="product-grid-details-btn"
-                          onClick={() => {
+                      <div className="product-grid-content">
+                        <h3 className="product-grid-name">{product.name}</h3>
+                        <p className="product-grid-generic-name">{product.genericName}</p>
+                        <p className="product-grid-category">{product.category}</p>
+                        <p className="product-grid-description-text">{product.description}</p>
+                        <p className="product-grid-usage">{product.usage}</p>
+                        <div className="product-grid-actions">
+                          <button
+                            className="product-grid-details-btn"
+                            onClick={() => {
                               // Store the product ID in sessionStorage
-                            sessionStorage.setItem('productDetailsFrom', 'product-page')
+                              sessionStorage.setItem('productDetailsFrom', 'product-page')
                               sessionStorage.setItem('productId', product._id || productId.toString())
                               // Use _id if available, otherwise use index
                               const navId = product._id || productIndex.toString()
                               navigate(`/product/${navId}`)
-                          }}
-                        >
-                          {t.products.details}
-                        </button>
+                            }}
+                          >
+                            {t.products.details}
+                          </button>
+                        </div>
                       </div>
                     </div>
-                  </div>
-                )
+                  )
                 })
               )}
             </div>
@@ -370,9 +370,9 @@ function ProductPage({ language, toggleLanguage, t, editedContent = {} }) {
       <footer className="footer">
         <div className="footer-content">
           <div className="footer-logo">
-            <img 
-              src={logoImage} 
-              alt="Believers Crop Care Ltd." 
+            <img
+              src={logoImage}
+              alt="Believers Crop Care Ltd."
               className="footer-logo-image"
             />
           </div>

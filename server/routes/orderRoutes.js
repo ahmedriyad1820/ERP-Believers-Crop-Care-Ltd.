@@ -31,18 +31,21 @@ const generateOrderId = async () => {
 }
 
 // Helper to build items and totals
-const buildOrderItems = async (dealerId, rawItems = []) => {
+const buildOrderItems = async (dealerId, rawItems = [], rawDiscountAmount = 0, rawDiscountEnabled = false) => {
   const dealerDoc = await Dealer.findById(dealerId)
   if (!dealerDoc) {
     throw new Error('Dealer not found')
   }
 
   if (!Array.isArray(rawItems) || rawItems.length === 0) {
-    return { dealerDoc, items: [], total: 0 }
+    return { dealerDoc, items: [], total: 0, grandTotal: 0 }
   }
 
   const items = []
   let total = 0
+  let grandTotal = 0
+  const discountAmount = parseFloat(rawDiscountAmount) || 1
+  const discountEnabled = !!rawDiscountEnabled
 
   for (const raw of rawItems) {
     if (!raw?.product || !raw?.quantity) {
@@ -56,29 +59,37 @@ const buildOrderItems = async (dealerId, rawItems = []) => {
 
     let unitPrice = productDoc.price || 0
     let variant = null
-    if (raw.variant && raw.variant.value && productDoc.priceCategory === 'per_variant') {
+    if (raw.variant && raw.variant.productCode && productDoc.priceCategory === 'per_variant') {
       const selectedVariant = productDoc.variants?.find(
-        v => v.value === raw.variant.value || (v.name === raw.variant.name && v.value === raw.variant.value)
+        v => v.productCode === raw.variant.productCode
       )
       if (selectedVariant) {
         unitPrice = selectedVariant.price || 0
         variant = {
-          name: clean(selectedVariant.name || raw.variant.name || ''),
-          value: clean(selectedVariant.value || raw.variant.value || ''),
+          productCode: clean(selectedVariant.productCode),
+          packSize: clean(selectedVariant.packSize || ''),
+          packUnit: clean(selectedVariant.packUnit || 'ml'),
+          cartoonSize: typeof selectedVariant.cartoonSize === 'number' ? selectedVariant.cartoonSize : (parseInt(selectedVariant.cartoonSize, 10) || 1),
+          cartoonUnit: clean(selectedVariant.cartoonUnit || 'Pcs'),
           price: unitPrice
         }
       }
-    } else if (raw.variant && raw.variant.value) {
+    } else if (raw.variant && raw.variant.productCode) {
       variant = {
-        name: clean(raw.variant.name || ''),
-        value: clean(raw.variant.value),
+        productCode: clean(raw.variant.productCode),
+        packSize: clean(raw.variant.packSize || ''),
+        packUnit: clean(raw.variant.packUnit || 'ml'),
+        cartoonSize: typeof raw.variant.cartoonSize === 'number' ? raw.variant.cartoonSize : (parseInt(raw.variant.cartoonSize, 10) || 1),
+        cartoonUnit: clean(raw.variant.cartoonUnit || 'Pcs'),
         price: unitPrice
       }
     }
 
     const qty = parseFloat(raw.quantity) || 1
     const itemTotal = unitPrice * qty
+    const itemGrandTotal = discountEnabled && discountAmount > 0 ? Math.round(itemTotal * discountAmount) : itemTotal
     total += itemTotal
+    grandTotal += itemGrandTotal
 
     items.push({
       product: productDoc._id,
@@ -88,11 +99,12 @@ const buildOrderItems = async (dealerId, rawItems = []) => {
       quantity: qty,
       unitPrice,
       totalPrice: itemTotal,
+      grandTotal: itemGrandTotal,
       notes: clean(raw.notes || '')
     })
   }
 
-  return { dealerDoc, items, total }
+  return { dealerDoc, items, total, grandTotal }
 }
 
 // Create order (supports multi-item cart)
@@ -109,7 +121,9 @@ router.post('/', async (req, res) => {
       requestedByName,
       requestedByRole,
       items: cartItems,
-      paidAmount
+      paidAmount,
+      discountAmount,
+      discountEnabled
     } = req.body
 
     if (!dealer) {
@@ -123,13 +137,13 @@ router.post('/', async (req, res) => {
     const orderId = await generateOrderId()
 
     if (useCart) {
-      const { dealerDoc, items, total } = await buildOrderItems(dealer, cartItems)
+      const { dealerDoc, items, total, grandTotal } = await buildOrderItems(dealer, cartItems, discountAmount, discountEnabled)
       if (!items.length) {
         return res.status(400).json({ message: 'Cart items are invalid' })
       }
       const first = items[0]
       const paid = parseFloat(paidAmount) || 0
-      const due = Math.max(0, total - paid)
+      const due = Math.max(0, grandTotal - paid)
       const orderData = {
         orderId,
         dealer: dealerDoc._id,
@@ -142,6 +156,9 @@ router.post('/', async (req, res) => {
         quantity: first.quantity || 1,
         unitPrice: first.unitPrice || 0,
         totalPrice: total,
+        grandTotal: grandTotal,
+        discountAmount: parseFloat(discountAmount) || 0,
+        discountEnabled: !!discountEnabled,
         paidAmount: paid,
         dueAmount: due,
         items,
@@ -185,10 +202,9 @@ router.post('/', async (req, res) => {
             const assignedEmployee = await Employee.findById(assignedToId)
 
             if (assignedEmployee) {
-              // Get order total from items
-              const orderTotal = total
-
-              console.log(`[Admin Order Cart] Found assigned employee: ${assignedEmployee.employeeId} (${assignedEmployee.name}), order total: ${orderTotal}`)
+              // Get order total - use grandTotal which includes discount
+              const orderTotal = grandTotal
+              console.log(`[Admin Order Cart] Found assigned employee: ${assignedEmployee.employeeId} (${assignedEmployee.name}), order grandTotal: ${orderTotal}`)
 
               if (orderTotal > 0) {
                 // Check if this order is already in sales history to avoid duplicates
@@ -263,9 +279,9 @@ router.post('/', async (req, res) => {
     }
 
     let unitPrice = productDoc.price || 0
-    if (variant && variant.value && productDoc.priceCategory === 'per_variant') {
+    if (variant && variant.productCode && productDoc.priceCategory === 'per_variant') {
       const selectedVariant = productDoc.variants?.find(
-        v => v.value === variant.value || (v.name === variant.name && v.value === variant.value)
+        v => v.productCode === variant.productCode
       )
       if (selectedVariant) {
         unitPrice = selectedVariant.price || 0
@@ -274,8 +290,9 @@ router.post('/', async (req, res) => {
 
     const qty = parseFloat(quantity) || 1
     const totalPrice = unitPrice * qty
+    const grandTotal = discountEnabled && discountAmount > 0 ? Math.round(totalPrice * parseFloat(discountAmount)) : totalPrice
     const paid = parseFloat(paidAmount) || 0
-    const due = Math.max(0, totalPrice - paid)
+    const due = Math.max(0, grandTotal - paid)
 
     const orderData = {
       orderId,
@@ -289,14 +306,20 @@ router.post('/', async (req, res) => {
       requestedBy: requestedBy || null,
       requestedByName: requestedByName || '',
       requestedByRole: requestedByRole || '',
-      variant: variant && variant.value ? {
-        name: clean(variant.name || ''),
-        value: clean(variant.value),
+      variant: variant && variant.productCode ? {
+        productCode: clean(variant.productCode),
+        packSize: clean(variant.packSize || ''),
+        packUnit: clean(variant.packUnit || 'ml'),
+        cartoonSize: typeof variant.cartoonSize === 'number' ? variant.cartoonSize : (parseInt(variant.cartoonSize, 10) || 1),
+        cartoonUnit: clean(variant.cartoonUnit || 'Pcs'),
         price: unitPrice
       } : undefined,
       quantity: qty,
       unitPrice,
       totalPrice,
+      grandTotal,
+      discountAmount: parseFloat(discountAmount) || 0,
+      discountEnabled: !!discountEnabled,
       paidAmount: paid,
       dueAmount: due,
       status: approvalStatus === 'Pending' ? 'Pending' : (status || 'Processing'),
@@ -470,16 +493,10 @@ router.put('/:id', async (req, res) => {
       requestedByRole,
       paidAmount,
       commission,
-      newPayment
-    } = req.body
-
-    console.log('[Order Update] Received update request:', {
-      orderId: req.params.id,
-      paidAmount,
-      commission,
       newPayment,
-      status
-    })
+      discountAmount,
+      discountEnabled
+    } = req.body
 
     const order = await Order.findById(req.params.id)
     if (!order) {
@@ -508,26 +525,29 @@ router.put('/:id', async (req, res) => {
 
       // Recalculate price if product or variant changed
       let unitPrice = productDoc.price || 0
-      if (variant && variant.value && productDoc.priceCategory === 'per_variant') {
+      if (variant && variant.productCode && productDoc.priceCategory === 'per_variant') {
         const selectedVariant = productDoc.variants?.find(
-          v => v.value === variant.value || (v.name === variant.name && v.value === variant.value)
+          v => v.productCode === variant.productCode
         )
         if (selectedVariant) {
           unitPrice = selectedVariant.price || 0
         }
       }
       order.unitPrice = unitPrice
-      if (variant && variant.value) {
+      if (variant && variant.productCode) {
         order.variant = {
-          name: clean(variant.name || ''),
-          value: clean(variant.value),
+          productCode: clean(variant.productCode),
+          packSize: clean(variant.packSize || ''),
+          packUnit: clean(variant.packUnit || 'ml'),
+          cartoonSize: typeof variant.cartoonSize === 'number' ? variant.cartoonSize : (parseInt(variant.cartoonSize, 10) || 1),
+          cartoonUnit: clean(variant.cartoonUnit || 'Pcs'),
           price: unitPrice
         }
       }
     }
 
     if (req.body.items && Array.isArray(req.body.items) && req.body.items.length > 0) {
-      const { dealerDoc, items, total } = await buildOrderItems(order.dealer, req.body.items)
+      const { dealerDoc, items, total, grandTotal } = await buildOrderItems(order.dealer, req.body.items, discountAmount !== undefined ? discountAmount : order.discountAmount, discountEnabled !== undefined ? discountEnabled : order.discountEnabled)
       if (!items.length) {
         return res.status(400).json({ message: 'Cart items are invalid' })
       }
@@ -540,20 +560,35 @@ router.put('/:id', async (req, res) => {
       order.quantity = first.quantity || 1
       order.unitPrice = first.unitPrice || 0
       order.totalPrice = total
+      order.grandTotal = grandTotal
       order.dealerName = dealerDoc.name || order.dealerName
       order.dealerId = dealerDoc.dealerId || order.dealerId || ''
-    } else if (quantity !== undefined) {
-      const qty = parseFloat(quantity) || 1
-      order.quantity = qty
-      order.totalPrice = order.unitPrice * qty
+      // Update discount settings if provided
+      if (discountAmount !== undefined) order.discountAmount = parseFloat(discountAmount) || 0
+      if (discountEnabled !== undefined) order.discountEnabled = !!discountEnabled
+    } else {
+      // If items not provided, we might still be updating discount settings
+      if (discountAmount !== undefined) order.discountAmount = parseFloat(discountAmount) || 0
+      if (discountEnabled !== undefined) order.discountEnabled = !!discountEnabled
+
+      // Recalculate grandTotal based on existing totalPrice
+      order.grandTotal = order.discountEnabled && order.discountAmount > 0
+        ? Math.round(order.totalPrice * order.discountAmount)
+        : order.totalPrice
     }
 
     // Update paidAmount and recalculate dueAmount
     if (paidAmount !== undefined) {
       order.paidAmount = parseFloat(paidAmount) || 0
     }
-    // Recalculate dueAmount based on current totalPrice and paidAmount
-    order.dueAmount = Math.max(0, order.totalPrice - (order.paidAmount || 0))
+
+    // Calculate total commission from existing history and new payment
+    const existingCommission = (order.paymentHistory || []).reduce((sum, p) => sum + (parseFloat(p.commission) || 0), 0)
+    const newCommValue = newPayment ? (parseFloat(newPayment.commission) || 0) : 0
+    const totalComm = existingCommission + newCommValue
+
+    // Recalculate dueAmount based on current grandTotal, paidAmount AND total commission
+    order.dueAmount = Math.max(0, order.grandTotal - ((order.paidAmount || 0) + totalComm))
 
     if (commission !== undefined) {
       order.commission = commission
@@ -629,12 +664,19 @@ router.put('/:id', async (req, res) => {
           if (employee) {
             // Get order total - use items array total if available, otherwise use totalPrice
             let orderTotal = 0
-            if (order.items && Array.isArray(order.items) && order.items.length > 0) {
-              orderTotal = order.items.reduce((sum, item) => sum + (parseFloat(item.totalPrice) || 0), 0)
-              console.log('[Order Approval] Calculated total from items:', orderTotal)
+            if (order.grandTotal !== undefined) {
+              orderTotal = parseFloat(order.grandTotal) || 0
+              console.log('[Order Approval] Using order grandTotal:', orderTotal)
+            } else if (order.items && Array.isArray(order.items) && order.items.length > 0) {
+              const baseTotal = order.items.reduce((sum, item) => sum + (parseFloat(item.totalPrice) || 0), 0)
+              const discount = order.discountEnabled && order.discountAmount > 0 ? order.discountAmount : 1
+              orderTotal = baseTotal * discount
+              console.log('[Order Approval] Calculated grand total from items and discount:', orderTotal)
             } else {
-              orderTotal = parseFloat(order.totalPrice) || 0
-              console.log('[Order Approval] Using order totalPrice:', orderTotal)
+              const baseTotal = parseFloat(order.totalPrice) || 0
+              const discount = order.discountEnabled && order.discountAmount > 0 ? order.discountAmount : 1
+              orderTotal = baseTotal * discount
+              console.log('[Order Approval] Using order totalPrice and discount:', orderTotal)
             }
 
             if (orderTotal > 0) {
@@ -690,11 +732,7 @@ router.put('/:id', async (req, res) => {
             if (assignedEmployee) {
               // Get order total
               let orderTotal = 0
-              if (order.items && Array.isArray(order.items) && order.items.length > 0) {
-                orderTotal = order.items.reduce((sum, item) => sum + (parseFloat(item.totalPrice) || 0), 0)
-              } else {
-                orderTotal = parseFloat(order.totalPrice) || 0
-              }
+              orderTotal = parseFloat(order.grandTotal || 0) || (parseFloat(order.totalPrice || 0) * (order.discountEnabled && order.discountAmount > 0 ? order.discountAmount : 1))
 
               if (orderTotal > 0) {
                 // Check if this order is already in sales history to avoid duplicates
@@ -754,10 +792,16 @@ router.put('/:id', async (req, res) => {
           if (employee) {
             // Get order total
             let orderTotal = 0
-            if (order.items && Array.isArray(order.items) && order.items.length > 0) {
-              orderTotal = order.items.reduce((sum, item) => sum + (item.totalPrice || 0), 0)
+            if (order.grandTotal !== undefined) {
+              orderTotal = parseFloat(order.grandTotal) || 0
+            } else if (order.items && Array.isArray(order.items) && order.items.length > 0) {
+              const baseTotal = order.items.reduce((sum, item) => sum + (parseFloat(item.totalPrice) || 0), 0)
+              const discount = order.discountEnabled && order.discountAmount > 0 ? order.discountAmount : 1
+              orderTotal = baseTotal * discount
             } else {
-              orderTotal = order.totalPrice || 0
+              const baseTotal = parseFloat(order.totalPrice) || 0
+              const discount = order.discountEnabled && order.discountAmount > 0 ? order.discountAmount : 1
+              orderTotal = baseTotal * discount
             }
 
             if (orderTotal > 0) {
@@ -788,10 +832,16 @@ router.put('/:id', async (req, res) => {
             if (assignedEmployee) {
               // Get order total
               let orderTotal = 0
-              if (order.items && Array.isArray(order.items) && order.items.length > 0) {
-                orderTotal = order.items.reduce((sum, item) => sum + (item.totalPrice || 0), 0)
+              if (order.grandTotal !== undefined) {
+                orderTotal = parseFloat(order.grandTotal) || 0
+              } else if (order.items && Array.isArray(order.items) && order.items.length > 0) {
+                const baseTotal = order.items.reduce((sum, item) => sum + (parseFloat(item.totalPrice) || 0), 0)
+                const discount = order.discountEnabled && order.discountAmount > 0 ? order.discountAmount : 1
+                orderTotal = baseTotal * discount
               } else {
-                orderTotal = order.totalPrice || 0
+                const baseTotal = parseFloat(order.totalPrice) || 0
+                const discount = order.discountEnabled && order.discountAmount > 0 ? order.discountAmount : 1
+                orderTotal = baseTotal * discount
               }
 
               if (orderTotal > 0) {
@@ -839,11 +889,7 @@ router.put('/:id', async (req, res) => {
           if (employee) {
             // Get order total
             let orderTotal = 0
-            if (order.items && Array.isArray(order.items) && order.items.length > 0) {
-              orderTotal = order.items.reduce((sum, item) => sum + (parseFloat(item.totalPrice) || 0), 0)
-            } else {
-              orderTotal = parseFloat(order.totalPrice) || 0
-            }
+            orderTotal = parseFloat(order.grandTotal || 0) || (parseFloat(order.totalPrice || 0) * (order.discountEnabled && order.discountAmount > 0 ? order.discountAmount : 1))
 
             if (orderTotal > 0) {
               employee.achievedTarget = Math.max(0, (employee.achievedTarget || 0) - orderTotal)
@@ -889,11 +935,7 @@ router.put('/:id', async (req, res) => {
             if (assignedEmployee) {
               // Get order total
               let orderTotal = 0
-              if (order.items && Array.isArray(order.items) && order.items.length > 0) {
-                orderTotal = order.items.reduce((sum, item) => sum + (parseFloat(item.totalPrice) || 0), 0)
-              } else {
-                orderTotal = parseFloat(order.totalPrice) || 0
-              }
+              orderTotal = parseFloat(order.grandTotal || 0) || (parseFloat(order.totalPrice || 0) * (order.discountEnabled && order.discountAmount > 0 ? order.discountAmount : 1))
 
               if (orderTotal > 0) {
                 assignedEmployee.achievedTarget = Math.max(0, (assignedEmployee.achievedTarget || 0) - orderTotal)
@@ -932,10 +974,10 @@ router.put('/:id', async (req, res) => {
 
     res.json({ success: true, data: updated })
   } catch (err) {
-    console.error('[Order] Update error:', err)
+    console.error('[Order Update] Error:', err)
     res.status(500).json({
       message: 'Failed to update order',
-      error: process.env.NODE_ENV === 'development' ? err.message : undefined
+      error: err.message
     })
   }
 })
@@ -959,11 +1001,7 @@ router.delete('/:id', async (req, res) => {
         if (employee) {
           // Get order total
           let orderTotal = 0
-          if (order.items && Array.isArray(order.items) && order.items.length > 0) {
-            orderTotal = order.items.reduce((sum, item) => sum + (parseFloat(item.totalPrice) || 0), 0)
-          } else {
-            orderTotal = parseFloat(order.totalPrice) || 0
-          }
+          orderTotal = parseFloat(order.grandTotal || 0) || (parseFloat(order.totalPrice || 0) * (order.discountEnabled && order.discountAmount > 0 ? order.discountAmount : 1))
 
           if (orderTotal > 0) {
             employee.achievedTarget = Math.max(0, (employee.achievedTarget || 0) - orderTotal)
@@ -1009,11 +1047,7 @@ router.delete('/:id', async (req, res) => {
           if (assignedEmployee) {
             // Get order total
             let orderTotal = 0
-            if (order.items && Array.isArray(order.items) && order.items.length > 0) {
-              orderTotal = order.items.reduce((sum, item) => sum + (parseFloat(item.totalPrice) || 0), 0)
-            } else {
-              orderTotal = parseFloat(order.totalPrice) || 0
-            }
+            orderTotal = parseFloat(order.grandTotal || 0) || (parseFloat(order.totalPrice || 0) * (order.discountEnabled && order.discountAmount > 0 ? order.discountAmount : 1))
 
             if (orderTotal > 0) {
               assignedEmployee.achievedTarget = Math.max(0, (assignedEmployee.achievedTarget || 0) - orderTotal)
@@ -1049,4 +1083,3 @@ router.delete('/:id', async (req, res) => {
 })
 
 export default router
-

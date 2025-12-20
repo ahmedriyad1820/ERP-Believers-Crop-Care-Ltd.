@@ -30,13 +30,13 @@ function ProductDetails({ language, toggleLanguage, t }) {
       try {
         setLoading(true)
         setProduct(null) // Reset product
-        
+
         console.log('Loading product with ID/index:', productIndex)
-        
+
         // Check if productIndex is an ID (MongoDB ObjectId format) or a number
         const isObjectId = /^[0-9a-fA-F]{24}$/.test(productIndex)
         console.log('Is ObjectId?', isObjectId)
-        
+
         if (isObjectId) {
           // Try fetching by ID from API first
           try {
@@ -57,7 +57,7 @@ function ProductDetails({ language, toggleLanguage, t }) {
             console.error('API fetch by ID failed:', apiErr)
           }
         }
-        
+
         // Try fetching all products and finding by ID or index
         try {
           console.log('Fetching all products from API')
@@ -66,21 +66,21 @@ function ProductDetails({ language, toggleLanguage, t }) {
             const allData = await allRes.json()
             const apiProducts = (allData.data || []).filter(p => p.isActive !== false)
             console.log('All products fetched:', apiProducts.length)
-            
+
             // Try to find by ID first
             let foundProduct = apiProducts.find(p => p._id === productIndex)
             console.log('Found by ID?', !!foundProduct)
-            
+
             // If not found by ID, try by index
             if (!foundProduct) {
-  const productIndexNum = parseInt(productIndex, 10)
+              const productIndexNum = parseInt(productIndex, 10)
               console.log('Trying to find by index:', productIndexNum)
               if (!isNaN(productIndexNum) && apiProducts[productIndexNum]) {
                 foundProduct = apiProducts[productIndexNum]
                 console.log('Found by index:', !!foundProduct)
               }
             }
-            
+
             if (foundProduct) {
               console.log('Product found, setting:', foundProduct.name)
               setProduct(foundProduct)
@@ -93,7 +93,7 @@ function ProductDetails({ language, toggleLanguage, t }) {
         } catch (apiErr) {
           console.error('API fetch all products failed:', apiErr)
         }
-        
+
         // Fallback to static products by index
         const productIndexNum = parseInt(productIndex, 10)
         console.log('Trying static products, index:', productIndexNum)
@@ -115,7 +115,7 @@ function ProductDetails({ language, toggleLanguage, t }) {
         console.log('Loading complete, product:', product ? product.name : 'null')
       }
     }
-    
+
     if (productIndex) {
       loadProduct()
     } else {
@@ -129,10 +129,10 @@ function ProductDetails({ language, toggleLanguage, t }) {
     if (!loading && !product && productIndex) {
       // Small delay to ensure all loading attempts have completed
       const timer = setTimeout(() => {
-    if (!product) {
+        if (!product) {
           console.warn('Product not found, redirecting to product page')
-      navigate('/product')
-    }
+          navigate('/product')
+        }
       }, 500)
       return () => clearTimeout(timer)
     }
@@ -180,25 +180,25 @@ function ProductDetails({ language, toggleLanguage, t }) {
 
   const heroContent = language === 'bn'
     ? {
-        backButton: 'পিছনে যান',
-        category: 'ক্যাটাগরি',
-        genericName: 'জেনেরিক নাম',
-        description: 'বিবরণ',
-        usage: 'ব্যবহার',
-        benefits: 'সুবিধা',
-        application: 'আবেদন',
-        safety: 'নিরাপত্তা',
-      }
+      backButton: 'পিছনে যান',
+      category: 'ক্যাটাগরি',
+      genericName: 'জেনেরিক নাম',
+      description: 'বিবরণ',
+      usage: 'ব্যবহার',
+      benefits: 'সুবিধা',
+      application: 'আবেদন',
+      safety: 'নিরাপত্তা',
+    }
     : {
-        backButton: 'Back to Products',
-        category: 'Category',
-        genericName: 'Generic Name',
-        description: 'Description',
-        usage: 'Usage',
-        benefits: 'Benefits',
-        application: 'Application',
-        safety: 'Safety',
-      }
+      backButton: 'Back to Products',
+      category: 'Category',
+      genericName: 'Generic Name',
+      description: 'Description',
+      usage: 'Usage',
+      benefits: 'Benefits',
+      application: 'Application',
+      safety: 'Safety',
+    }
 
   return (
     <div className="app product-details-page">
@@ -206,7 +206,7 @@ function ProductDetails({ language, toggleLanguage, t }) {
       <main className="product-details-main">
         {/* Back Button */}
         <div className="product-details-back">
-          <button 
+          <button
             className="back-to-products-btn"
             onClick={() => {
               // Check if we came from product page
@@ -223,7 +223,7 @@ function ProductDetails({ language, toggleLanguage, t }) {
             }}
           >
             <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-              <path d="M19 12H5M12 19l-7-7 7-7" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+              <path d="M19 12H5M12 19l-7-7 7-7" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
             </svg>
             <span>{heroContent.backButton}</span>
           </button>
@@ -234,8 +234,8 @@ function ProductDetails({ language, toggleLanguage, t }) {
           <div className="product-details-hero-content">
             <div className="product-details-image-section">
               <div className="product-details-image-wrapper">
-                <img 
-                  src={product.image || '/product-bottle.png'} 
+                <img
+                  src={product.image || '/product-bottle.png'}
                   alt={product.name}
                   className="product-details-image"
                   loading="lazy"
@@ -267,7 +267,7 @@ function ProductDetails({ language, toggleLanguage, t }) {
                 <div className="product-details-card-header">
                   <div className="product-details-icon">
                     <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                      <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                      <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
                     </svg>
                   </div>
                   <h2>{heroContent.usage}</h2>
@@ -282,8 +282,8 @@ function ProductDetails({ language, toggleLanguage, t }) {
                 <div className="product-details-card-header">
                   <div className="product-details-icon">
                     <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                      <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-                      <polyline points="22 4 12 14.01 9 11.01" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                      <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+                      <polyline points="22 4 12 14.01 9 11.01" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
                     </svg>
                   </div>
                   <h2>{heroContent.benefits}</h2>
@@ -292,13 +292,13 @@ function ProductDetails({ language, toggleLanguage, t }) {
                   {product.benefits ? (
                     <div style={{ whiteSpace: 'pre-line' }}>{product.benefits}</div>
                   ) : (
-                  <ul className="product-details-list">
-                    <li>Effective and reliable crop protection</li>
-                    <li>Safe for use in various crop types</li>
-                    <li>Environmentally responsible formulation</li>
-                    <li>Proven results in field conditions</li>
-                    <li>Cost-effective solution for farmers</li>
-                  </ul>
+                    <ul className="product-details-list">
+                      <li>Effective and reliable crop protection</li>
+                      <li>Safe for use in various crop types</li>
+                      <li>Environmentally responsible formulation</li>
+                      <li>Proven results in field conditions</li>
+                      <li>Cost-effective solution for farmers</li>
+                    </ul>
                   )}
                 </div>
               </div>
@@ -308,9 +308,9 @@ function ProductDetails({ language, toggleLanguage, t }) {
                 <div className="product-details-card-header">
                   <div className="product-details-icon">
                     <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                      <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-                      <polyline points="3.27 6.96 12 12.01 20.73 6.96" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-                      <line x1="12" y1="22.08" x2="12" y2="12" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                      <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+                      <polyline points="3.27 6.96 12 12.01 20.73 6.96" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+                      <line x1="12" y1="22.08" x2="12" y2="12" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
                     </svg>
                   </div>
                   <h2>{heroContent.application}</h2>
@@ -319,7 +319,7 @@ function ProductDetails({ language, toggleLanguage, t }) {
                   {product.application ? (
                     <div style={{ whiteSpace: 'pre-line' }}>{product.application}</div>
                   ) : (
-                  <p>Apply as directed on the product label. Follow recommended dosage and application timing for optimal results. Consult with agricultural experts for specific crop requirements.</p>
+                    <p>Apply as directed on the product label. Follow recommended dosage and application timing for optimal results. Consult with agricultural experts for specific crop requirements.</p>
                   )}
                 </div>
               </div>
@@ -329,8 +329,8 @@ function ProductDetails({ language, toggleLanguage, t }) {
                 <div className="product-details-card-header">
                   <div className="product-details-icon">
                     <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                      <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-                      <path d="M9 12l2 2 4-4" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                      <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+                      <path d="M9 12l2 2 4-4" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
                     </svg>
                   </div>
                   <h2>{heroContent.safety}</h2>
@@ -339,13 +339,13 @@ function ProductDetails({ language, toggleLanguage, t }) {
                   {product.safety ? (
                     <div style={{ whiteSpace: 'pre-line' }}>{product.safety}</div>
                   ) : (
-                  <ul className="product-details-list">
-                    <li>Read and follow all label instructions carefully</li>
-                    <li>Wear appropriate protective equipment during application</li>
-                    <li>Store in a cool, dry place away from children and pets</li>
-                    <li>Do not contaminate water sources</li>
-                    <li>Follow recommended safety intervals before harvest</li>
-                  </ul>
+                    <ul className="product-details-list">
+                      <li>Read and follow all label instructions carefully</li>
+                      <li>Wear appropriate protective equipment during application</li>
+                      <li>Store in a cool, dry place away from children and pets</li>
+                      <li>Do not contaminate water sources</li>
+                      <li>Follow recommended safety intervals before harvest</li>
+                    </ul>
                   )}
                 </div>
               </div>
@@ -353,7 +353,7 @@ function ProductDetails({ language, toggleLanguage, t }) {
 
             {/* Back Button at Bottom */}
             <div className="product-details-back-bottom">
-              <button 
+              <button
                 className="back-to-products-btn"
                 onClick={() => {
                   // Check if we came from product page
@@ -370,7 +370,7 @@ function ProductDetails({ language, toggleLanguage, t }) {
                 }}
               >
                 <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                  <path d="M19 12H5M12 19l-7-7 7-7" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                  <path d="M19 12H5M12 19l-7-7 7-7" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
                 </svg>
                 <span>{heroContent.backButton}</span>
               </button>
@@ -381,9 +381,9 @@ function ProductDetails({ language, toggleLanguage, t }) {
       <footer className="footer">
         <div className="footer-content">
           <div className="footer-logo">
-            <img 
-              src={logoImage} 
-              alt="Believers Crop Care Ltd." 
+            <img
+              src={logoImage}
+              alt="Believers Crop Care Ltd."
               className="footer-logo-image"
             />
           </div>

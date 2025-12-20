@@ -65,18 +65,12 @@ const orderSchema = new mongoose.Schema({
     trim: true
   },
   variant: {
-    name: {
-      type: String,
-      trim: true
-    },
-    value: {
-      type: String,
-      trim: true
-    },
-    price: {
-      type: Number,
-      default: 0
-    }
+    productCode: { type: String, trim: true },
+    packSize: { type: String, trim: true },
+    packUnit: { type: String, trim: true, default: 'ml' },
+    cartoonSize: { type: Number, default: 1 },
+    cartoonUnit: { type: String, default: 'Pcs' },
+    price: { type: Number, default: 0 }
   },
   quantity: {
     type: Number,
@@ -92,6 +86,19 @@ const orderSchema = new mongoose.Schema({
     type: Number,
     required: true,
     default: 0
+  },
+  grandTotal: {
+    type: Number,
+    required: true,
+    default: 0
+  },
+  discountAmount: {
+    type: Number,
+    default: 0
+  },
+  discountEnabled: {
+    type: Boolean,
+    default: false
   },
   paidAmount: {
     type: Number,
@@ -115,18 +122,12 @@ const orderSchema = new mongoose.Schema({
       trim: true
     },
     variant: {
-      name: {
-        type: String,
-        trim: true
-      },
-      value: {
-        type: String,
-        trim: true
-      },
-      price: {
-        type: Number,
-        default: 0
-      }
+      productCode: { type: String, trim: true },
+      packSize: { type: String, trim: true },
+      packUnit: { type: String, trim: true, default: 'ml' },
+      cartoonSize: { type: Number, default: 1 },
+      cartoonUnit: { type: String, default: 'Pcs' },
+      price: { type: Number, default: 0 }
     },
     quantity: {
       type: Number,
@@ -138,6 +139,10 @@ const orderSchema = new mongoose.Schema({
       default: 0
     },
     totalPrice: {
+      type: Number,
+      default: 0
+    },
+    grandTotal: {
       type: Number,
       default: 0
     },

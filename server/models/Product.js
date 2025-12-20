@@ -7,18 +7,12 @@ const productSchema = new mongoose.Schema({
     trim: true
   },
   variants: [{
-    name: {
-      type: String,
-      trim: true
-    },
-    value: {
-      type: String,
-      trim: true
-    },
-    price: {
-      type: Number,
-      default: 0
-    }
+    productCode: { type: String, trim: true },
+    packSize: { type: String, trim: true },
+    packUnit: { type: String, enum: ['gm', 'kg', 'ml', 'Ltr'], default: 'ml' },
+    cartoonSize: { type: Number, default: 1 },
+    cartoonUnit: { type: String, enum: ['Packets', 'Bottles', 'Pcs'], default: 'Pcs' },
+    price: { type: Number, default: 0 } // This represents Cartoon Price
   }],
   price: {
     type: Number,
