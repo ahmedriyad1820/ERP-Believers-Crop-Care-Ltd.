@@ -11322,25 +11322,9 @@ function AdminPage({ language, toggleLanguage, t }) {
                             >
                               <option value="">{language === 'en' ? 'Select Customer' : 'কাস্টমার নির্বাচন করুন'}</option>
                               {filteredDealers.map((dealer) => {
-                                // Get assigned employee name - handle both populated and unpopulated cases
-                                let assignedEmployeeName = ''
-                                if (dealer.assignedTo) {
-                                  if (typeof dealer.assignedTo === 'object' && dealer.assignedTo.name) {
-                                    assignedEmployeeName = dealer.assignedTo.name
-                                  } else if (typeof dealer.assignedTo === 'object' && dealer.assignedTo.employeeId) {
-                                    assignedEmployeeName = dealer.assignedTo.employeeId
-                                  } else {
-                                    // If assignedTo is just an ID, find the employee
-                                    const assignedEmployee = (employees || []).find(emp =>
-                                      String(emp._id) === String(dealer.assignedTo?._id || dealer.assignedTo)
-                                    )
-                                    assignedEmployeeName = assignedEmployee?.name || assignedEmployee?.employeeId || ''
-                                  }
-                                }
-                                const assignedEmployeeText = assignedEmployeeName ? ` - Assigned: ${assignedEmployeeName}` : ''
                                 return (
                                   <option key={dealer._id} value={dealer._id}>
-                                    {dealer.shopName ? `${dealer.shopName}, ` : ''}{dealer.name} {dealer.dealerId ? `(${dealer.dealerId})` : ''}{assignedEmployeeText}
+                                    {dealer.shopName ? `${dealer.shopName}, ` : ''}{dealer.name} {dealer.dealerId ? `(${dealer.dealerId})` : ''}
                                   </option>
                                 )
                               })}
