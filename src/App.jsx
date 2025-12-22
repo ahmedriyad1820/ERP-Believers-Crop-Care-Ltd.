@@ -780,10 +780,10 @@ function HomePage({ language, toggleLanguage, t, heroImage = '/hero-image.jpg' }
     const handleContentUpdate = () => {
       setContentUpdate(prev => prev + 1)
     }
-    
+
     window.addEventListener('storage', handleStorageChange)
     window.addEventListener('contentUpdated', handleContentUpdate)
-    
+
     return () => {
       window.removeEventListener('storage', handleStorageChange)
       window.removeEventListener('contentUpdated', handleContentUpdate)
@@ -798,7 +798,7 @@ function HomePage({ language, toggleLanguage, t, heroImage = '/hero-image.jpg' }
   // Preload hero images for smoother transitions
   useEffect(() => {
     if (heroMedia.mediaType === 'video') return
-    
+
     heroMedia.images.forEach((imageUrl) => {
       const img = new Image()
       img.src = imageUrl
@@ -810,7 +810,7 @@ function HomePage({ language, toggleLanguage, t, heroImage = '/hero-image.jpg' }
     if (heroMedia.mediaType === 'video' || heroMedia.images.length <= 1) return
 
     const interval = setInterval(() => {
-      setCurrentHeroImageIndex((prev) => 
+      setCurrentHeroImageIndex((prev) =>
         prev === heroMedia.images.length - 1 ? 0 : prev + 1
       )
     }, 10000) // 10 seconds
@@ -819,9 +819,9 @@ function HomePage({ language, toggleLanguage, t, heroImage = '/hero-image.jpg' }
   }, [heroMedia.mediaType, heroMedia.images.length])
   // Only show first 5 products + see all button
   const displayedProducts = t.products.items.slice(0, 5)
-  
+
   // Calculate max slides based on mode
-  const maxSlides = isMobile 
+  const maxSlides = isMobile
     ? displayedProducts.length  // One product per slide in mobile (5 products + 1 see all = 6 slides, index 0-5)
     : Math.max(0, displayedProducts.length - 3)  // One product per slide in desktop, but show 3 at once
 
@@ -914,7 +914,7 @@ function HomePage({ language, toggleLanguage, t, heroImage = '/hero-image.jpg' }
     if (!isMobile || !t.testimonials?.cards?.length) return
 
     const interval = setInterval(() => {
-      setCurrentTestimonialIndex((prev) => 
+      setCurrentTestimonialIndex((prev) =>
         prev === t.testimonials.cards.length - 1 ? 0 : prev + 1
       )
     }, 5000) // 5 seconds
@@ -954,20 +954,20 @@ function HomePage({ language, toggleLanguage, t, heroImage = '/hero-image.jpg' }
       <main className="hero-section fade-section">
         <div className="hero-background">
           {heroMedia.mediaType === 'video' && heroMedia.video ? (
-            <video 
-              src={heroMedia.video} 
-              autoPlay 
-              loop 
-              muted 
+            <video
+              src={heroMedia.video}
+              autoPlay
+              loop
+              muted
               playsInline
               className="hero-background-video"
             />
           ) : (
             heroMedia.images.map((image, index) => (
-              <img 
+              <img
                 key={index}
-                src={image} 
-                alt={`Hero slide ${index + 1}`} 
+                src={image}
+                alt={`Hero slide ${index + 1}`}
                 className="hero-background-image"
                 style={{
                   opacity: index === currentHeroImageIndex ? 1 : 0,
@@ -978,7 +978,7 @@ function HomePage({ language, toggleLanguage, t, heroImage = '/hero-image.jpg' }
           )}
           <div className="hero-overlay"></div>
         </div>
-        
+
         <div className="hero-content">
           <div className="hero-left">
             <h1 className="hero-title">{t.hero.title}</h1>
@@ -986,7 +986,7 @@ function HomePage({ language, toggleLanguage, t, heroImage = '/hero-image.jpg' }
               {t.hero.description}
             </p>
             <div className="hero-actions-wrapper">
-              <button 
+              <button
                 className="learn-more-btn"
                 onClick={() => {
                   const productsSection = document.getElementById('products-section')
@@ -999,48 +999,48 @@ function HomePage({ language, toggleLanguage, t, heroImage = '/hero-image.jpg' }
               </button>
             </div>
           </div>
-          
+
           <div className="hero-right">
             {/* Customer Review Section */}
             <div className="review-box">
-          <div className="review-rating">
-            <span className="rating-number">{t.review.rating}</span>
-            <div className="rating-stars">
-              <span className="star filled">★</span>
-              <span className="star filled">★</span>
-              <span className="star filled">★</span>
-              <span className="star filled">★</span>
-              <span className="star half">★</span>
-            </div>
-          </div>
-          <p className="review-count">{t.review.customersReview}</p>
-          <div className="review-profiles">
-            <div className="profile-pic">
-              <img 
-                src={t.testimonials.cards[0]?.photo || '/hero-image.jpg'} 
-                alt="Reviewer" 
-                loading="lazy"
-                onError={(e) => { e.currentTarget.src = '/hero-image.jpg' }}
-              />
-            </div>
-            <div className="profile-pic">
-              <img 
-                src={t.testimonials.cards[1]?.photo || '/hero-image.jpg'} 
-                alt="Reviewer" 
-                loading="lazy"
-                onError={(e) => { e.currentTarget.src = '/hero-image.jpg' }}
-              />
-            </div>
-            <div className="profile-pic">
-              <img 
-                src={t.testimonials.cards[2]?.photo || '/hero-image.jpg'} 
-                alt="Reviewer" 
-                loading="lazy"
-                onError={(e) => { e.currentTarget.src = '/hero-image.jpg' }}
-              />
-            </div>
-          </div>
+              <div className="review-rating">
+                <span className="rating-number">{t.review.rating}</span>
+                <div className="rating-stars">
+                  <span className="star filled">★</span>
+                  <span className="star filled">★</span>
+                  <span className="star filled">★</span>
+                  <span className="star filled">★</span>
+                  <span className="star half">★</span>
+                </div>
               </div>
+              <p className="review-count">{t.review.customersReview}</p>
+              <div className="review-profiles">
+                <div className="profile-pic">
+                  <img
+                    src={t.testimonials.cards[0]?.photo || '/hero-image.jpg'}
+                    alt="Reviewer"
+                    loading="lazy"
+                    onError={(e) => { e.currentTarget.src = '/hero-image.jpg' }}
+                  />
+                </div>
+                <div className="profile-pic">
+                  <img
+                    src={t.testimonials.cards[1]?.photo || '/hero-image.jpg'}
+                    alt="Reviewer"
+                    loading="lazy"
+                    onError={(e) => { e.currentTarget.src = '/hero-image.jpg' }}
+                  />
+                </div>
+                <div className="profile-pic">
+                  <img
+                    src={t.testimonials.cards[2]?.photo || '/hero-image.jpg'}
+                    alt="Reviewer"
+                    loading="lazy"
+                    onError={(e) => { e.currentTarget.src = '/hero-image.jpg' }}
+                  />
+                </div>
+              </div>
+            </div>
           </div>
         </div>
       </main>
@@ -1052,16 +1052,16 @@ function HomePage({ language, toggleLanguage, t, heroImage = '/hero-image.jpg' }
         <div className="why-choose-us-decorative-leaf">
           <svg viewBox="0 0 300 400" fill="none" xmlns="http://www.w3.org/2000/svg">
             {/* Main Monstera Leaf */}
-            <path d="M50 50C80 30 120 40 160 70C200 100 220 140 230 180C235 200 235 220 230 240C225 260 215 280 200 300C185 320 165 340 140 360C120 375 100 385 80 390C60 395 40 398 20 400L15 380C30 375 45 370 60 365C75 360 90 355 105 350C120 345 135 340 150 335C165 330 180 325 190 315C200 305 205 290 200 275C195 260 180 250 165 245C150 240 135 240 120 245C105 250 90 260 80 275C70 290 65 310 70 330C75 350 90 365 110 375C130 385 155 390 180 390C205 390 230 380 250 365C270 350 285 330 295 305C300 290 300 275 295 260C290 245 280 230 265 220C250 210 230 205 210 205C190 205 170 210 155 220C140 230 130 245 130 260C130 275 140 285 155 290C170 295 190 295 210 290C230 285 245 275 255 260C265 245 270 225 265 205C260 185 245 170 225 160C205 150 180 145 155 150C130 155 110 170 100 190C90 210 95 235 110 255C125 275 150 285 180 285C210 285 235 270 250 250C265 230 270 205 260 180C250 155 230 135 205 125C180 115 150 120 130 140C110 160 105 190 120 215C135 240 160 255 190 255C220 255 245 240 255 220C265 200 260 175 245 160C230 145 210 140 190 145C170 150 155 165 150 185C145 205 155 225 175 235C195 245 220 245 240 235C260 225 270 205 265 185C260 165 245 150 225 145C205 140 185 145 170 155C155 165 145 180 145 195C145 210 155 220 170 225C185 230 205 230 220 225C235 220 245 210 250 195C255 180 250 165 240 155C230 145 215 140 200 140C185 140 170 145 160 155C150 165 145 180 150 195C155 210 170 220 190 220C210 220 225 210 230 195C235 180 230 165 220 160C210 155 195 155 185 165C175 175 175 190 185 200C195 210 210 210 225 205C240 200 250 190 250 175C250 160 240 150 225 150C210 150 200 160 200 175C200 190 210 200 225 200C240 200 250 190 250 175L50 50Z" fill="#22c55e" opacity="0.12"/>
+            <path d="M50 50C80 30 120 40 160 70C200 100 220 140 230 180C235 200 235 220 230 240C225 260 215 280 200 300C185 320 165 340 140 360C120 375 100 385 80 390C60 395 40 398 20 400L15 380C30 375 45 370 60 365C75 360 90 355 105 350C120 345 135 340 150 335C165 330 180 325 190 315C200 305 205 290 200 275C195 260 180 250 165 245C150 240 135 240 120 245C105 250 90 260 80 275C70 290 65 310 70 330C75 350 90 365 110 375C130 385 155 390 180 390C205 390 230 380 250 365C270 350 285 330 295 305C300 290 300 275 295 260C290 245 280 230 265 220C250 210 230 205 210 205C190 205 170 210 155 220C140 230 130 245 130 260C130 275 140 285 155 290C170 295 190 295 210 290C230 285 245 275 255 260C265 245 270 225 265 205C260 185 245 170 225 160C205 150 180 145 155 150C130 155 110 170 100 190C90 210 95 235 110 255C125 275 150 285 180 285C210 285 235 270 250 250C265 230 270 205 260 180C250 155 230 135 205 125C180 115 150 120 130 140C110 160 105 190 120 215C135 240 160 255 190 255C220 255 245 240 255 220C265 200 260 175 245 160C230 145 210 140 190 145C170 150 155 165 150 185C145 205 155 225 175 235C195 245 220 245 240 235C260 225 270 205 265 185C260 165 245 150 225 145C205 140 185 145 170 155C155 165 145 180 145 195C145 210 155 220 170 225C185 230 205 230 220 225C235 220 245 210 250 195C255 180 250 165 240 155C230 145 215 140 200 140C185 140 170 145 160 155C150 165 145 180 150 195C155 210 170 220 190 220C210 220 225 210 230 195C235 180 230 165 220 160C210 155 195 155 185 165C175 175 175 190 185 200C195 210 210 210 225 205C240 200 250 190 250 175C250 160 240 150 225 150C210 150 200 160 200 175C200 190 210 200 225 200C240 200 250 190 250 175L50 50Z" fill="#22c55e" opacity="0.12" />
             {/* Leaf Fenestrations (holes) */}
-            <ellipse cx="180" cy="200" rx="25" ry="35" fill="#f9fafb"/>
-            <ellipse cx="220" cy="250" rx="20" ry="30" fill="#f9fafb"/>
-            <ellipse cx="200" cy="300" rx="18" ry="25" fill="#f9fafb"/>
-            <ellipse cx="160" cy="280" rx="15" ry="20" fill="#f9fafb"/>
-            <ellipse cx="140" cy="240" rx="12" ry="18" fill="#f9fafb"/>
+            <ellipse cx="180" cy="200" rx="25" ry="35" fill="#f9fafb" />
+            <ellipse cx="220" cy="250" rx="20" ry="30" fill="#f9fafb" />
+            <ellipse cx="200" cy="300" rx="18" ry="25" fill="#f9fafb" />
+            <ellipse cx="160" cy="280" rx="15" ry="20" fill="#f9fafb" />
+            <ellipse cx="140" cy="240" rx="12" ry="18" fill="#f9fafb" />
             {/* Leaf outline */}
-            <path d="M50 50C80 30 120 40 160 70C200 100 220 140 230 180C235 200 235 220 230 240C225 260 215 280 200 300C185 320 165 340 140 360C120 375 100 385 80 390C60 395 40 398 20 400" stroke="#22c55e" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" opacity="0.3" fill="none"/>
-            <path d="M20 400L15 380C30 375 45 370 60 365C75 360 90 355 105 350C120 345 135 340 150 335C165 330 180 325 190 315C200 305 205 290 200 275" stroke="#22c55e" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" opacity="0.3" fill="none"/>
+            <path d="M50 50C80 30 120 40 160 70C200 100 220 140 230 180C235 200 235 220 230 240C225 260 215 280 200 300C185 320 165 340 140 360C120 375 100 385 80 390C60 395 40 398 20 400" stroke="#22c55e" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" opacity="0.3" fill="none" />
+            <path d="M20 400L15 380C30 375 45 370 60 365C75 360 90 355 105 350C120 345 135 340 150 335C165 330 180 325 190 315C200 305 205 290 200 275" stroke="#22c55e" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" opacity="0.3" fill="none" />
           </svg>
         </div>
         <div className="why-choose-us-container">
@@ -1131,13 +1131,13 @@ function HomePage({ language, toggleLanguage, t, heroImage = '/hero-image.jpg' }
           <div className="products-slider-wrapper">
             <button className="slider-btn slider-btn-prev" onClick={handlePrevSlide} aria-label="Previous">
               <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                <path d="M15 18L9 12L15 6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                <path d="M15 18L9 12L15 6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
               </svg>
             </button>
             <div className="products-slider-container">
-              <div 
+              <div
                 ref={productsSliderRef}
-                className="products-slider" 
+                className="products-slider"
                 style={{ transform: isMobile ? `translateX(-${currentSlide * 100}%)` : `translateX(-${currentSlide * (100 / 3)}%)` }}
                 onTouchStart={onTouchStart}
                 onTouchMove={onTouchMove}
@@ -1154,8 +1154,8 @@ function HomePage({ language, toggleLanguage, t, heroImage = '/hero-image.jpg' }
                             <div className="product-card">
                               <div className="product-image-wrapper">
                                 <div className="product-image">
-                                  <img 
-                                    src="/product-bottle.png" 
+                                  <img
+                                    src="/product-bottle.png"
                                     alt={product.name}
                                     onError={(e) => {
                                       console.error('Product image failed to load:', e.target.src);
@@ -1185,7 +1185,7 @@ function HomePage({ language, toggleLanguage, t, heroImage = '/hero-image.jpg' }
                       <div className="product-slide">
                         <div className="product-card product-see-all-card">
                           <div className="product-see-all-content">
-                            <button 
+                            <button
                               className="products-see-all-btn"
                               onClick={() => navigate('/product')}
                             >
@@ -1207,8 +1207,8 @@ function HomePage({ language, toggleLanguage, t, heroImage = '/hero-image.jpg' }
                             <div className="product-card">
                               <div className="product-image-wrapper">
                                 <div className="product-image">
-                                  <img 
-                                    src="/product-bottle.png" 
+                                  <img
+                                    src="/product-bottle.png"
                                     alt={product.name}
                                     onError={(e) => {
                                       console.error('Product image failed to load:', e.target.src);
@@ -1232,16 +1232,16 @@ function HomePage({ language, toggleLanguage, t, heroImage = '/hero-image.jpg' }
                 )}
               </div>
             </div>
-            <button 
-              className={`slider-btn slider-btn-next ${isAtEnd ? 'slider-btn-see-all' : ''}`} 
-              onClick={handleNextSlide} 
+            <button
+              className={`slider-btn slider-btn-next ${isAtEnd ? 'slider-btn-see-all' : ''}`}
+              onClick={handleNextSlide}
               aria-label={isAtEnd ? 'See All Products' : 'Next'}
             >
               {isAtEnd ? (
                 <span className="slider-btn-see-all-text">{t.products.seeAll}</span>
               ) : (
                 <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                  <path d="M9 18L15 12L9 6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                  <path d="M9 18L15 12L9 6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
                 </svg>
               )}
             </button>
@@ -1260,8 +1260,8 @@ function HomePage({ language, toggleLanguage, t, heroImage = '/hero-image.jpg' }
             <div className="areas-covered-map-column">
               <div className="bangladesh-map-wrapper">
                 <div className="bangladesh-map-3d">
-                  <img 
-                    src="/bangladesh.svg" 
+                  <img
+                    src="/bangladesh.svg"
                     alt={t.areasCovered.mapAlt}
                     className="bangladesh-map-svg"
                     loading="lazy"
@@ -1285,8 +1285,8 @@ function HomePage({ language, toggleLanguage, t, heroImage = '/hero-image.jpg' }
                   <div key={index} className="areas-covered-highlight">
                     <span className="highlight-icon" aria-hidden="true">
                       <svg viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg">
-                        <circle cx="10" cy="10" r="9" stroke="#16a34a" strokeWidth="2"/>
-                        <path d="M6 10.2l2.2 2.2L14 7" stroke="#16a34a" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                        <circle cx="10" cy="10" r="9" stroke="#16a34a" strokeWidth="2" />
+                        <path d="M6 10.2l2.2 2.2L14 7" stroke="#16a34a" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
                       </svg>
                     </span>
                     <p>{point}</p>
@@ -1309,8 +1309,8 @@ function HomePage({ language, toggleLanguage, t, heroImage = '/hero-image.jpg' }
           </div>
           <div className={`testimonial-grid ${isMobile ? 'testimonial-slider' : ''}`}>
             {t.testimonials.cards.map((card, index) => (
-              <div 
-                key={index} 
+              <div
+                key={index}
                 className={`testimonial-card ${isMobile && index !== currentTestimonialIndex ? 'testimonial-card-hidden' : ''}`}
                 style={{ backgroundImage: `url(${card.photo})` }}
               >
@@ -1320,7 +1320,7 @@ function HomePage({ language, toggleLanguage, t, heroImage = '/hero-image.jpg' }
                   <p className="testimonial-quote">"{card.quote}"</p>
                   <div className="testimonial-footer">
                     <div className="testimonial-avatar">
-                      <img 
+                      <img
                         src={card.photo}
                         alt={card.name}
                         loading="lazy"
@@ -1480,9 +1480,9 @@ function HomePage({ language, toggleLanguage, t, heroImage = '/hero-image.jpg' }
       <footer className="footer">
         <div className="footer-content">
           <div className="footer-logo">
-            <img 
-              src={logoImage} 
-              alt="Believers Crop Care Ltd." 
+            <img
+              src={logoImage}
+              alt="Believers Crop Care Ltd."
               className="footer-logo-image"
             />
           </div>
@@ -1510,7 +1510,7 @@ function ScrollToTop() {
 function App() {
   const [language, setLanguage] = useState('en')
   const [contentUpdate, setContentUpdate] = useState(0)
-  
+
   // Get edited content from localStorage
   const editedContent = useMemo(() => {
     try {
@@ -1520,15 +1520,14 @@ function App() {
       return {}
     }
   }, [contentUpdate])
-  
+
   // Get hero image from localStorage
   const heroImage = useMemo(() => {
     const pageImagesStr = localStorage.getItem('pageImages')
     const pageImages = pageImagesStr ? JSON.parse(pageImagesStr) : {}
     return pageImages.homeHero || localStorage.getItem('heroImage') || '/hero-image.jpg'
   }, [contentUpdate])
-  
-  // Listen for storage changes to update content
+
   useEffect(() => {
     const handleStorageChange = () => {
       setContentUpdate(prev => prev + 1)
@@ -1536,28 +1535,40 @@ function App() {
     window.addEventListener('storage', handleStorageChange)
     // Also listen for custom event from admin page
     window.addEventListener('contentUpdated', handleStorageChange)
+
+    // Global scroll-based input change prevention
+    const handleWheel = (e) => {
+      if (document.activeElement &&
+        document.activeElement.type === 'number' &&
+        e.target === document.activeElement) {
+        e.preventDefault()
+      }
+    }
+    document.addEventListener('wheel', handleWheel, { passive: false })
+
     return () => {
       window.removeEventListener('storage', handleStorageChange)
       window.removeEventListener('contentUpdated', handleStorageChange)
+      document.removeEventListener('wheel', handleWheel)
     }
   }, [])
-  
+
   // Merge translations with edited content
   const t = useMemo(() => {
     const baseTranslations = translations[language]
     if (!editedContent || Object.keys(editedContent).length === 0) {
       return baseTranslations
     }
-    
+
     // Deep merge edited content with base translations
     const merged = JSON.parse(JSON.stringify(baseTranslations))
-    
+
     if (editedContent.hero) {
       if (editedContent.hero.title) merged.hero.title = editedContent.hero.title
       if (editedContent.hero.description) merged.hero.description = editedContent.hero.description
       if (editedContent.hero.viewProducts) merged.hero.viewProducts = editedContent.hero.viewProducts
     }
-    
+
     if (editedContent.about) {
       if (editedContent.about.heroTitle) merged.about.heroTitle = editedContent.about.heroTitle
       if (editedContent.about.heroSubtitle) merged.about.heroSubtitle = editedContent.about.heroSubtitle
@@ -1566,7 +1577,7 @@ function App() {
       if (editedContent.about.title) merged.about.title = editedContent.about.title
       if (editedContent.about.visionButton) merged.about.visionButton = editedContent.about.visionButton
       if (editedContent.about.missionButton) merged.about.missionButton = editedContent.about.missionButton
-      
+
       // Handle about details paragraphs
       if (editedContent.about.details && Array.isArray(editedContent.about.details)) {
         const originalDetails = merged.about.details.split('\n\n')
@@ -1577,7 +1588,7 @@ function App() {
         })
         merged.about.details = originalDetails.join('\n\n')
       }
-      
+
       if (editedContent.about.vision) {
         if (editedContent.about.vision.title) merged.about.vision.title = editedContent.about.vision.title
         if (editedContent.about.vision.content) {
@@ -1597,12 +1608,12 @@ function App() {
         }
       }
     }
-    
+
     if (editedContent.review) {
       if (editedContent.review.rating) merged.review.rating = editedContent.review.rating
       if (editedContent.review.customersReview) merged.review.customersReview = editedContent.review.customersReview
     }
-    
+
     if (editedContent.products) {
       // Products page header content
       if (editedContent.products.pageHeading) {
@@ -1615,7 +1626,7 @@ function App() {
       if (editedContent.products.tagline) merged.products.tagline = editedContent.products.tagline
       if (editedContent.products.title) merged.products.title = editedContent.products.title
       if (editedContent.products.description) merged.products.description = editedContent.products.description
-      
+
       // Product items (array format)
       if (Array.isArray(editedContent.products)) {
         editedContent.products.forEach((product, index) => {
@@ -1625,7 +1636,7 @@ function App() {
           }
         })
       }
-      
+
       // Product items (object.items format)
       if (editedContent.products.items && Array.isArray(editedContent.products.items)) {
         editedContent.products.items.forEach((product, index) => {
@@ -1639,7 +1650,7 @@ function App() {
         })
       }
     }
-    
+
     if (editedContent.whyChooseUs) {
       if (editedContent.whyChooseUs.title) merged.whyChooseUs.title = editedContent.whyChooseUs.title
       if (editedContent.whyChooseUs.features && Array.isArray(editedContent.whyChooseUs.features)) {
@@ -1651,7 +1662,7 @@ function App() {
         })
       }
     }
-    
+
     if (editedContent.testimonials) {
       if (editedContent.testimonials.tagline) merged.testimonials.tagline = editedContent.testimonials.tagline
       if (editedContent.testimonials.title) merged.testimonials.title = editedContent.testimonials.title
@@ -1665,7 +1676,7 @@ function App() {
         })
       }
     }
-    
+
     if (editedContent.blog) {
       if (editedContent.blog.tagline) merged.blog.tagline = editedContent.blog.tagline
       if (editedContent.blog.title) merged.blog.title = editedContent.blog.title
@@ -1678,7 +1689,7 @@ function App() {
         })
       }
     }
-    
+
     if (editedContent.contact) {
       if (editedContent.contact.title) merged.contact.title = editedContent.contact.title
       if (editedContent.contact.description) merged.contact.description = editedContent.contact.description
@@ -1686,7 +1697,7 @@ function App() {
       if (editedContent.contact.email) merged.contact.email = editedContent.contact.email
       if (editedContent.contact.address) merged.contact.address = editedContent.contact.address
     }
-    
+
     if (editedContent.areasCovered) {
       if (editedContent.areasCovered.tagline) merged.areasCovered.tagline = editedContent.areasCovered.tagline
       if (editedContent.areasCovered.title) merged.areasCovered.title = editedContent.areasCovered.title
@@ -1702,19 +1713,19 @@ function App() {
         })
       }
     }
-    
+
     if (editedContent.team) {
       if (editedContent.team.tagline) merged.team.tagline = editedContent.team.tagline
       if (editedContent.team.title) merged.team.title = editedContent.team.title
       if (editedContent.team.description) merged.team.description = editedContent.team.description
     }
-    
+
     // Note: aboutStats is handled dynamically in About.jsx since it's not in base translations
-    
+
     if (editedContent.footer) {
       if (editedContent.footer.copyright) merged.footer.copyright = editedContent.footer.copyright
     }
-    
+
     return merged
   }, [language, editedContent])
 

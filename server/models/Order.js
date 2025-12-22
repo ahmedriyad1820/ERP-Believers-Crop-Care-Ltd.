@@ -100,6 +100,17 @@ const orderSchema = new mongoose.Schema({
     type: Boolean,
     default: false
   },
+  hasOffer: {
+    type: Boolean
+  },
+  buyQuantity: {
+    type: Number,
+    default: null
+  },
+  freeQuantity: {
+    type: Number,
+    default: null
+  },
   paidAmount: {
     type: Number,
     default: 0
@@ -150,6 +161,17 @@ const orderSchema = new mongoose.Schema({
       type: String,
       trim: true,
       default: ''
+    },
+    hasOffer: {
+      type: Boolean
+    },
+    buyQuantity: {
+      type: Number,
+      default: null
+    },
+    freeQuantity: {
+      type: Number,
+      default: null
     }
   }],
   commission: {

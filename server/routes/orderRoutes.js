@@ -100,7 +100,10 @@ const buildOrderItems = async (dealerId, rawItems = [], rawDiscountAmount = 0, r
       unitPrice,
       totalPrice: itemTotal,
       grandTotal: itemGrandTotal,
-      notes: clean(raw.notes || '')
+      notes: clean(raw.notes || ''),
+      hasOffer: productDoc.hasOffer || false,
+      buyQuantity: productDoc.buyQuantity || null,
+      freeQuantity: productDoc.freeQuantity || null
     })
   }
 
@@ -167,7 +170,10 @@ router.post('/', async (req, res) => {
         requestedByName: requestedByName || '',
         requestedByRole: requestedByRole || '',
         status: approvalStatus === 'Pending' ? 'Pending' : (status || 'Processing'),
-        notes: clean(notes || '')
+        notes: clean(notes || ''),
+        hasOffer: first.hasOffer || false,
+        buyQuantity: first.buyQuantity || null,
+        freeQuantity: first.freeQuantity || null
       }
 
       const created = await Order.create(orderData)
@@ -323,7 +329,10 @@ router.post('/', async (req, res) => {
       paidAmount: paid,
       dueAmount: due,
       status: approvalStatus === 'Pending' ? 'Pending' : (status || 'Processing'),
-      notes: clean(notes || '')
+      notes: clean(notes || ''),
+      hasOffer: productDoc.hasOffer || false,
+      buyQuantity: productDoc.buyQuantity || null,
+      freeQuantity: productDoc.freeQuantity || null
     }
 
     const created = await Order.create(orderData)

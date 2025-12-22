@@ -1402,9 +1402,9 @@ function AdminPage({ language, toggleLanguage, t }) {
           'Variant': (order.variant?.productCode && order.variant?.packSize) ? `${order.variant.productCode} (${order.variant.packSize} ${order.variant.packUnit || 'ml'})` : '-',
           'Quantity': order.quantity || 0,
           'Created By': order.requestedByName || order.requestedByRole || '-',
-          'Total Price': totalPrice.toFixed(2),
-          'Paid Amount': paidWithCommission.toFixed(2),
-          'Due Amount': dueAmount.toFixed(2),
+          'Total Price': Math.round(totalPrice),
+          'Paid Amount': Math.round(paidWithCommission),
+          'Due Amount': Math.round(dueAmount),
           'Status': order.status || 'Pending',
           'Approval Status': order.approvalStatus || '-'
         }
@@ -5022,7 +5022,6 @@ function AdminPage({ language, toggleLanguage, t }) {
                               <label>{language === 'en' ? 'Price' : 'মূল্য'}</label>
                               <input
                                 type="number"
-                                step="0.01"
                                 min="0"
                                 value={productForm.price || ''}
                                 onChange={(e) => setProductForm({ ...productForm, price: e.target.value })}
@@ -5137,7 +5136,6 @@ function AdminPage({ language, toggleLanguage, t }) {
                                     <>
                                       <input
                                         type="number"
-                                        step="0.01"
                                         min="0"
                                         value={variant.price || ''}
                                         onChange={(e) => updateVariant(index, 'price', parseFloat(e.target.value) || 0)}
@@ -5145,7 +5143,7 @@ function AdminPage({ language, toggleLanguage, t }) {
                                         style={{ width: '110px', padding: '0.5rem', border: '1px solid #d1d5db', borderRadius: '0.375rem' }}
                                       />
                                       <div style={{ fontSize: '0.75rem', color: '#6b7280', minWidth: '80px' }}>
-                                        {language === 'en' ? 'Unit:' : 'ইউনিট:'} ৳{((variant.price || 0) / (variant.cartoonSize || 1)).toFixed(2)}
+                                        {language === 'en' ? 'Unit:' : 'ইউনিট:'} ৳{Math.round(((variant.price || 0) / (variant.cartoonSize || 1)))}
                                       </div>
                                     </>
                                   )}
@@ -5447,7 +5445,7 @@ function AdminPage({ language, toggleLanguage, t }) {
                               </select>
                             ) : (
                               <span style={{ fontWeight: 600, color: '#16a34a' }}>
-                                ৳{displayPrice.toFixed(2)}
+                                ৳{Math.round(displayPrice)}
                               </span>
                             )}
                           </td>
@@ -5542,7 +5540,7 @@ function AdminPage({ language, toggleLanguage, t }) {
                                   ) : (
                                     <span style={{ fontWeight: 600, color: '#16a34a' }}>
                                       {language === 'en' ? 'Fixed Price: ' : 'নির্দিষ্ট মূল্য: '}
-                                      ৳{displayPrice.toFixed(2)}
+                                      ৳{Math.round(displayPrice)}
                                     </span>
                                   )}
                                 </span>
@@ -5724,7 +5722,7 @@ function AdminPage({ language, toggleLanguage, t }) {
                             {language === 'en' ? 'Price' : 'মূল্য'}
                           </label>
                           <p style={{ margin: '0.5rem 0 0 0', fontSize: '1rem', fontWeight: 600, color: '#16a34a' }}>
-                            ৳{parseFloat(viewingProduct.price || 0).toFixed(2)}
+                            ৳{Math.round(parseFloat(viewingProduct.price || 0))}
                           </p>
                         </div>
                       )}
@@ -5807,10 +5805,10 @@ function AdminPage({ language, toggleLanguage, t }) {
                                       {variant.cartoonSize || 1} {variant.cartoonUnit || 'Pcs'}
                                     </td>
                                     <td style={{ padding: '0.75rem', fontSize: '0.875rem', color: '#111827', fontWeight: 600, textAlign: 'right' }}>
-                                      ৳{parseFloat(variant.price || 0).toFixed(2)}
+                                      ৳{Math.round(parseFloat(variant.price || 0))}
                                     </td>
                                     <td style={{ padding: '0.75rem', fontSize: '0.875rem', color: '#16a34a', fontWeight: 600, textAlign: 'right' }}>
-                                      ৳{((variant.price || 0) / (variant.cartoonSize || 1)).toFixed(2)}
+                                      ৳{Math.round(((variant.price || 0) / (variant.cartoonSize || 1)))}
                                     </td>
                                   </tr>
                                 ))}
@@ -5836,11 +5834,11 @@ function AdminPage({ language, toggleLanguage, t }) {
                                 </div>
                                 <div className="mobile-card-row">
                                   <span className="mobile-card-label">{language === 'en' ? 'CTN Price' : 'কার্টুন মূল্য'}</span>
-                                  <span className="mobile-card-value" style={{ fontWeight: 700, color: '#111827' }}>৳{parseFloat(variant.price || 0).toFixed(2)}</span>
+                                  <span className="mobile-card-value" style={{ fontWeight: 700, color: '#111827' }}>৳{Math.round(parseFloat(variant.price || 0))}</span>
                                 </div>
                                 <div className="mobile-card-row">
                                   <span className="mobile-card-label">{language === 'en' ? 'Unit Price' : 'ইউনিট মূল্য'}</span>
-                                  <span className="mobile-card-value" style={{ fontWeight: 700, color: '#16a34a' }}>৳{((variant.price || 0) / (variant.cartoonSize || 1)).toFixed(2)}</span>
+                                  <span className="mobile-card-value" style={{ fontWeight: 700, color: '#16a34a' }}>৳{Math.round(((variant.price || 0) / (variant.cartoonSize || 1)))}</span>
                                 </div>
                               </div>
                             ))}
@@ -7693,10 +7691,10 @@ function AdminPage({ language, toggleLanguage, t }) {
                               color: '#0f172a'
                             }}
                           >
-                            {viewingDealer.name || (language === 'en' ? 'Customer' : 'কাস্টমার')}
+                            {viewingDealer.shopName || (language === 'en' ? 'Shop' : 'শপ')}
                           </h2>
                           <p style={{ margin: '0.25rem 0 0 0', color: '#475569', fontWeight: 700 }}>
-                            {viewingDealer.shopName || '-'}
+                            {viewingDealer.name || '-'}
                           </p>
                           <p style={{ margin: '0.1rem 0 0 0', color: '#64748b', fontSize: '0.9rem', fontWeight: 600 }}>
                             {viewingDealer.dealerId || 'N/A'}
@@ -7976,7 +7974,6 @@ function AdminPage({ language, toggleLanguage, t }) {
                                               </select>
                                               <input
                                                 type="number"
-                                                step="0.01"
                                                 min="0"
                                                 value={addCollectionAmount}
                                                 onChange={(e) => setAddCollectionAmount(e.target.value)}
@@ -8042,7 +8039,7 @@ function AdminPage({ language, toggleLanguage, t }) {
                                       sortedHistory.forEach(payment => {
                                         const payAmount = parseFloat(payment.amount) || 0
                                         const commAmount = parseFloat(payment.commission) || 0
-                                        const commPercent = payAmount > 0 ? ((commAmount / payAmount) * 100).toFixed(0) + '%' : '-'
+                                        const commPercent = payAmount > 0 ? Math.round(((commAmount / payAmount) * 100)) + '%' : '-'
 
                                         runningPaid += payAmount
                                         runningCommission += commAmount
@@ -8186,33 +8183,30 @@ function AdminPage({ language, toggleLanguage, t }) {
                                     )
                                   })()}
 
-                                  <div className="admin-table-container" style={{ width: '100%', overflowX: 'auto' }}>
+                                  <div className="admin-table-container" style={{ width: '100%', overflowX: 'auto', marginTop: '2rem' }}>
                                     <div style={{ padding: '0 0.5rem 1rem 0.5rem', fontWeight: 700, fontSize: '1.1rem', color: '#1e293b' }}>
                                       {language === 'en' ? 'Dealer Orders' : 'ডিলারের অর্ডার'}
                                     </div>
                                     <table className="admin-table" style={{ width: '100%', fontSize: '0.875rem' }}>
                                       <thead>
                                         <tr>
-                                          <th style={{ padding: '0.5rem', whiteSpace: 'nowrap' }}>{language === 'en' ? 'Date' : 'তারিখ'}</th>
-                                          <th style={{ padding: '0.5rem', whiteSpace: 'nowrap' }}>{language === 'en' ? 'Order ID' : 'অর্ডার আইডি'}</th>
-                                          <th style={{ padding: '0.5rem', whiteSpace: 'nowrap' }}>{language === 'en' ? 'Product' : 'পণ্য'}</th>
-                                          <th style={{ padding: '0.5rem', whiteSpace: 'nowrap' }}>{language === 'en' ? 'Variant' : 'ভ্যারিয়েন্ট'}</th>
-                                          <th style={{ padding: '0.5rem', whiteSpace: 'nowrap' }}>{language === 'en' ? 'Qty' : 'পরিমাণ'}</th>
-                                          <th style={{ padding: '0.5rem', whiteSpace: 'nowrap' }}>{language === 'en' ? 'free Qty' : 'ফ্রি পরিমাণ'}</th>
-                                          <th style={{ padding: '0.5rem', whiteSpace: 'nowrap' }}>{language === 'en' ? 'total Qty' : 'মোট পরিমাণ'}</th>
-                                          <th style={{ padding: '0.5rem', whiteSpace: 'nowrap' }}>{language === 'en' ? 'Status' : 'স্ট্যাটাস'}</th>
-                                          <th style={{ padding: '0.5rem', whiteSpace: 'nowrap' }}>{language === 'en' ? 'Total' : 'মোট'}</th>
-                                          <th style={{ padding: '0.5rem', whiteSpace: 'nowrap' }}>{language === 'en' ? 'Grand total' : 'সর্বমোট'}</th>
-                                          <th style={{ padding: '0.5rem', whiteSpace: 'nowrap' }}>{language === 'en' ? 'Paid Amount' : 'পরিশোধিত পরিমাণ'}</th>
-                                          <th style={{ padding: '0.5rem', whiteSpace: 'nowrap' }}>{language === 'en' ? 'Due Amount' : 'বাকি পরিমাণ'}</th>
+                                          <th style={{ padding: '0.5rem', whiteSpace: 'nowrap', textAlign: 'center' }}>{language === 'en' ? 'Date' : 'তারিখ'}</th>
+                                          <th style={{ padding: '0.5rem', whiteSpace: 'nowrap', textAlign: 'center' }}>{language === 'en' ? 'Order ID' : 'অর্ডার আইডি'}</th>
+                                          <th style={{ padding: '0.5rem', whiteSpace: 'nowrap', textAlign: 'center' }}>{language === 'en' ? 'Product' : 'পণ্য'}</th>
+                                          <th style={{ padding: '0.5rem', whiteSpace: 'nowrap', textAlign: 'center' }}>{language === 'en' ? 'Variant' : 'ভ্যারিয়েন্ট'}</th>
+                                          <th style={{ padding: '0.5rem', whiteSpace: 'nowrap', textAlign: 'center' }}>{language === 'en' ? 'Quantity' : 'পরিমাণ'}</th>
+                                          <th style={{ padding: '0.5rem', whiteSpace: 'nowrap', textAlign: 'center' }}>{language === 'en' ? 'Status' : 'স্ট্যাটাস'}</th>
+                                          <th style={{ padding: '0.5rem', whiteSpace: 'nowrap', textAlign: 'center' }}>{language === 'en' ? 'Grand total' : 'সর্বমোট'}</th>
+                                          <th style={{ padding: '0.5rem', whiteSpace: 'nowrap', textAlign: 'center' }}>{language === 'en' ? 'Paid Amount' : 'পরিশোধিত পরিমাণ'}</th>
+                                          <th style={{ padding: '0.5rem', whiteSpace: 'nowrap', textAlign: 'center' }}>{language === 'en' ? 'Due Amount' : 'বাকি পরিমাণ'}</th>
                                         </tr>
                                       </thead>
                                       <tbody>
                                         {dealerOrders.map((order) => (
                                           <tr key={order._id}>
-                                            <td style={{ padding: '0.5rem', whiteSpace: 'nowrap' }}>{order.createdAt ? new Date(order.createdAt).toLocaleDateString() : '-'}</td>
-                                            <td style={{ padding: '0.5rem', whiteSpace: 'nowrap' }}>{order.orderId || '-'}</td>
-                                            <td style={{ padding: '0.5rem', whiteSpace: 'nowrap' }}>
+                                            <td style={{ padding: '0.5rem', whiteSpace: 'nowrap', textAlign: 'center' }}>{order.createdAt ? new Date(order.createdAt).toLocaleDateString() : '-'}</td>
+                                            <td style={{ padding: '0.5rem', whiteSpace: 'nowrap', textAlign: 'center' }}>{order.orderId || '-'}</td>
+                                            <td style={{ padding: '0.5rem', whiteSpace: 'nowrap', textAlign: 'center' }}>
                                               {order.items && order.items.length > 0 ? (
                                                 <div style={{ display: 'flex', flexDirection: 'column', gap: '0.25rem' }}>
                                                   {order.items.map((item, idx) => (
@@ -8225,69 +8219,17 @@ function AdminPage({ language, toggleLanguage, t }) {
                                                 order.productName || order.product?.name || '-'
                                               )}
                                             </td>
-                                            <td style={{ padding: '0.5rem', whiteSpace: 'nowrap' }}>
-                                              {order.items && order.items.length > 0 ? (
-                                                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.25rem' }}>
-                                                  {order.items.map((item, idx) => (
-                                                    <div key={idx} style={{ borderBottom: idx < order.items.length - 1 ? '1px solid #f1f5f9' : 'none', paddingBottom: '2px', minHeight: '1.2em' }}>
-                                                      {item.variant?.productCode ? `${item.variant.productCode} (${item.variant.packSize} ${item.variant.packUnit || 'ml'})` : '-'}
-                                                    </div>
-                                                  ))}
-                                                </div>
-                                              ) : (
-                                                order.variant?.productCode ? `${order.variant.productCode} (${order.variant.packSize} ${order.variant.packUnit || 'ml'})` : '-'
-                                              )}
-                                            </td>
                                             <td style={{ padding: '0.5rem', whiteSpace: 'nowrap', textAlign: 'center' }}>
                                               {order.items && order.items.length > 0 ? (
                                                 <div style={{ display: 'flex', flexDirection: 'column', gap: '0.25rem' }}>
                                                   {order.items.map((item, idx) => (
                                                     <div key={idx} style={{ borderBottom: idx < order.items.length - 1 ? '1px solid #f1f5f9' : 'none', paddingBottom: '2px', minHeight: '1.2em' }}>
-                                                      {parseFloat(item.quantity) || 0}
+                                                      {item.variant?.productCode ? `${item.variant.productCode} (${item.variant.packSize} ${item.variant.packUnit || 'ml'}) [${item.variant.cartoonSize || 1} ${item.variant.cartoonUnit || 'Pcs'}]` : '-'}
                                                     </div>
                                                   ))}
                                                 </div>
                                               ) : (
-                                                parseFloat(order.quantity) || 0
-                                              )}
-                                            </td>
-                                            <td style={{ padding: '0.5rem', whiteSpace: 'nowrap', textAlign: 'center', color: '#16a34a' }}>
-                                              {order.items && order.items.length > 0 ? (
-                                                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.25rem' }}>
-                                                  {order.items.map((item, idx) => {
-                                                    const itemQty = parseFloat(item.quantity) || 0
-                                                    let freeQty = 0
-                                                    const itemProduct = (products || []).find(p => p._id === (item.product?._id || item.product))
-                                                    if (itemProduct && itemProduct.hasOffer && itemProduct.buyQuantity && itemProduct.freeQuantity) {
-                                                      const buyQty = parseFloat(itemProduct.buyQuantity) || 0
-                                                      const offerFreeQty = parseFloat(itemProduct.freeQuantity) || 0
-                                                      if (buyQty > 0) {
-                                                        const eligibleOffers = Math.floor(itemQty / buyQty)
-                                                        freeQty = eligibleOffers * offerFreeQty
-                                                      }
-                                                    }
-                                                    return (
-                                                      <div key={idx} style={{ borderBottom: idx < order.items.length - 1 ? '1px solid #f1f5f9' : 'none', paddingBottom: '2px', minHeight: '1.2em' }}>
-                                                        {freeQty}
-                                                      </div>
-                                                    )
-                                                  })}
-                                                </div>
-                                              ) : (
-                                                (() => {
-                                                  const totalPurchasedQty = parseFloat(order.quantity) || 0
-                                                  let totalFreeQty = 0
-                                                  const orderProduct = (products || []).find(p => p._id === (order.product?._id || order.product))
-                                                  if (orderProduct && orderProduct.hasOffer && orderProduct.buyQuantity && orderProduct.freeQuantity) {
-                                                    const buyQty = parseFloat(orderProduct.buyQuantity) || 0
-                                                    const freeQty = parseFloat(orderProduct.freeQuantity) || 0
-                                                    if (buyQty > 0) {
-                                                      const eligibleOffers = Math.floor(totalPurchasedQty / buyQty)
-                                                      totalFreeQty = eligibleOffers * freeQty
-                                                    }
-                                                  }
-                                                  return totalFreeQty
-                                                })()
+                                                order.variant?.productCode ? `${order.variant.productCode} (${order.variant.packSize} ${order.variant.packUnit || 'ml'}) [${order.variant.cartoonSize || 1} ${order.variant.cartoonUnit || 'Pcs'}]` : '-'
                                               )}
                                             </td>
                                             <td style={{ padding: '0.5rem', whiteSpace: 'nowrap', textAlign: 'center', fontWeight: 600 }}>
@@ -8307,7 +8249,7 @@ function AdminPage({ language, toggleLanguage, t }) {
                                                     }
                                                     return (
                                                       <div key={idx} style={{ borderBottom: idx < order.items.length - 1 ? '1px solid #f1f5f9' : 'none', paddingBottom: '2px', minHeight: '1.2em' }}>
-                                                        {itemQty + freeQty}
+                                                        {freeQty > 0 ? `${itemQty + freeQty} (${freeQty})` : itemQty}
                                                       </div>
                                                     )
                                                   })}
@@ -8325,28 +8267,27 @@ function AdminPage({ language, toggleLanguage, t }) {
                                                       totalFreeQty = eligibleOffers * freeQty
                                                     }
                                                   }
-                                                  return totalPurchasedQty + totalFreeQty
+                                                  return totalFreeQty > 0 ? `${totalPurchasedQty + totalFreeQty} (${totalFreeQty})` : totalPurchasedQty
                                                 })()
                                               )}
                                             </td>
-                                            <td style={{ padding: '0.5rem', whiteSpace: 'nowrap' }}>{order.status || 'Pending'}</td>
-                                            <td style={{ padding: '0.5rem', whiteSpace: 'nowrap' }}>৳{parseFloat(order.totalPrice || 0).toFixed(2)}</td>
-                                            <td style={{ padding: '0.5rem', whiteSpace: 'nowrap', fontWeight: 700 }}>
+                                            <td style={{ padding: '0.5rem', whiteSpace: 'nowrap', textAlign: 'center' }}>{order.status || 'Pending'}</td>
+                                            <td style={{ padding: '0.5rem', whiteSpace: 'nowrap', fontWeight: 700, textAlign: 'center' }}>
                                               ৳{(() => {
                                                 const price = parseFloat(order.totalPrice || 0)
                                                 const discount = order.discountEnabled && order.discountAmount > 0 ? order.discountAmount : 1
-                                                return (price * discount).toFixed(2)
+                                                return Math.round((price * discount))
                                               })()}
                                             </td>
-                                            <td style={{ padding: '0.5rem', whiteSpace: 'nowrap', fontWeight: 600, color: '#16a34a' }}>
+                                            <td style={{ padding: '0.5rem', whiteSpace: 'nowrap', fontWeight: 600, color: '#16a34a', textAlign: 'center' }}>
                                               ৳{(() => {
                                                 const paid = order.paidAmount ? parseFloat(order.paidAmount) || 0 : 0
                                                 const commission = (order.paymentHistory || []).reduce((cSum, p) => cSum + (parseFloat(p.commission) || 0), 0)
-                                                return (paid + commission).toFixed(2)
+                                                return Math.round((paid + commission))
                                               })()}
                                             </td>
                                             <td style={{
-                                              padding: '0.5rem', whiteSpace: 'nowrap', fontWeight: 600, color: (() => {
+                                              padding: '0.5rem', whiteSpace: 'nowrap', fontWeight: 600, textAlign: 'center', color: (() => {
                                                 const price = parseFloat(order.totalPrice || 0)
                                                 const discount = order.discountEnabled && order.discountAmount > 0 ? order.discountAmount : 1
                                                 const grandTotal = price * discount
@@ -8363,7 +8304,7 @@ function AdminPage({ language, toggleLanguage, t }) {
                                                 const paid = order.paidAmount ? parseFloat(order.paidAmount) || 0 : 0
                                                 const commission = (order.paymentHistory || []).reduce((cSum, p) => cSum + (parseFloat(p.commission) || 0), 0)
                                                 const due = Math.max(0, grandTotal - (paid + commission))
-                                                return due.toFixed(2)
+                                                return Math.round(due)
                                               })()}
                                             </td>
                                           </tr>
@@ -8426,33 +8367,10 @@ function AdminPage({ language, toggleLanguage, t }) {
                                               </div>
                                               <div className="mobile-card-row">
                                                 <span className="mobile-card-label">{language === 'en' ? 'Variant' : 'ভ্যারিয়েন্ট'}</span>
-                                                <span className="mobile-card-value">{order.variant?.productCode ? `${order.variant.productCode} (${order.variant.packSize} ${order.variant.packUnit || 'ml'})` : '-'}</span>
+                                                <span className="mobile-card-value">{order.variant?.productCode ? `${order.variant.productCode} (${order.variant.packSize} ${order.variant.packUnit || 'ml'}) [${order.variant.cartoonSize || 1} ${order.variant.cartoonUnit || 'Pcs'}]` : '-'}</span>
                                               </div>
                                               <div className="mobile-card-row">
                                                 <span className="mobile-card-label">{language === 'en' ? 'Quantity' : 'পরিমাণ'}</span>
-                                                <span className="mobile-card-value">{order.quantity || 0}</span>
-                                              </div>
-                                              <div className="mobile-card-row">
-                                                <span className="mobile-card-label">{language === 'en' ? 'free Qty' : 'ফ্রি পরিমাণ'}</span>
-                                                <span className="mobile-card-value" style={{ color: '#16a34a' }}>
-                                                  {(() => {
-                                                    const totalPurchasedQty = parseFloat(order.quantity) || 0
-                                                    let totalFreeQty = 0
-                                                    const orderProduct = (products || []).find(p => p._id === (order.product?._id || order.product))
-                                                    if (orderProduct && orderProduct.hasOffer && orderProduct.buyQuantity && orderProduct.freeQuantity) {
-                                                      const buyQty = parseFloat(orderProduct.buyQuantity) || 0
-                                                      const freeQty = parseFloat(orderProduct.freeQuantity) || 0
-                                                      if (buyQty > 0) {
-                                                        const eligibleOffers = Math.floor(totalPurchasedQty / buyQty)
-                                                        totalFreeQty = eligibleOffers * freeQty
-                                                      }
-                                                    }
-                                                    return totalFreeQty
-                                                  })()}
-                                                </span>
-                                              </div>
-                                              <div className="mobile-card-row">
-                                                <span className="mobile-card-label">{language === 'en' ? 'total Qty' : 'মোট পরিমাণ'}</span>
                                                 <span className="mobile-card-value" style={{ fontWeight: 600 }}>
                                                   {(() => {
                                                     const totalPurchasedQty = parseFloat(order.quantity) || 0
@@ -8466,30 +8384,26 @@ function AdminPage({ language, toggleLanguage, t }) {
                                                         totalFreeQty = eligibleOffers * freeQty
                                                       }
                                                     }
-                                                    return totalPurchasedQty + totalFreeQty
+                                                    return totalFreeQty > 0 ? `${totalPurchasedQty + totalFreeQty} (${totalFreeQty})` : totalPurchasedQty
                                                   })()}
                                                 </span>
                                               </div>
                                               <div className="mobile-card-row">
-                                                <span className="mobile-card-label">{language === 'en' ? 'Total' : 'মোট'}</span>
-                                                <span className="mobile-card-value">৳{parseFloat(order.totalPrice || 0).toFixed(2)}</span>
-                                              </div>
-                                              <div className="mobile-card-row">
                                                 <span className="mobile-card-label">{language === 'en' ? 'Grand total' : 'সর্বমোট'}</span>
                                                 <span className="mobile-card-value" style={{ fontWeight: 700 }}>
-                                                  ৳{grandTotal.toFixed(2)}
+                                                  ৳{Math.round(grandTotal)}
                                                 </span>
                                               </div>
                                               <div className="mobile-card-row">
                                                 <span className="mobile-card-label">{language === 'en' ? 'Paid' : 'পরিশোধিত'}</span>
                                                 <span className="mobile-card-value" style={{ color: '#16a34a' }}>
-                                                  ৳{(paid + commission).toFixed(2)}
+                                                  ৳{Math.round((paid + commission))}
                                                 </span>
                                               </div>
                                               <div className="mobile-card-row">
                                                 <span className="mobile-card-label">{language === 'en' ? 'Due' : 'বাকি'}</span>
                                                 <span className="mobile-card-value" style={{ color: due > 0 ? '#dc2626' : '#16a34a', fontWeight: 700 }}>
-                                                  ৳{due.toFixed(2)}
+                                                  ৳{Math.round(due)}
                                                 </span>
                                               </div>
                                             </div>
@@ -9038,11 +8952,11 @@ function AdminPage({ language, toggleLanguage, t }) {
                           </div>
                           <div className="admin-form-group">
                             <label>{language === 'en' ? 'Salary' : 'বেতন'}</label>
-                            <input type="number" value={newEmployee.salary} onChange={(e) => setNewEmployee({ ...newEmployee, salary: e.target.value })} step="0.01" min="0" />
+                            <input type="number" value={newEmployee.salary} onChange={(e) => setNewEmployee({ ...newEmployee, salary: e.target.value })} min="0" />
                           </div>
                           <div className="admin-form-group">
                             <label>{language === 'en' ? 'Sales Target' : 'বিক্রয় লক্ষ্য'}</label>
-                            <input type="number" value={newEmployee.salesTarget} onChange={(e) => setNewEmployee({ ...newEmployee, salesTarget: e.target.value })} step="0.01" min="0" />
+                            <input type="number" value={newEmployee.salesTarget} onChange={(e) => setNewEmployee({ ...newEmployee, salesTarget: e.target.value })} min="0" />
                           </div>
                           <div className="admin-form-group">
                             <label>{language === 'en' ? 'Bank Name' : 'ব্যাংকের নাম'}</label>
@@ -10478,7 +10392,6 @@ function AdminPage({ language, toggleLanguage, t }) {
                                 type="number"
                                 value={editingEmployeeData?.salary || ''}
                                 onChange={(e) => setEditingEmployeeData({ ...editingEmployeeData, salary: e.target.value })}
-                                step="0.01"
                                 min="0"
                                 style={{
                                   marginTop: '0.5rem',
@@ -10506,7 +10419,6 @@ function AdminPage({ language, toggleLanguage, t }) {
                                 type="number"
                                 value={editingEmployeeData?.salesTarget || ''}
                                 onChange={(e) => setEditingEmployeeData({ ...editingEmployeeData, salesTarget: e.target.value })}
-                                step="0.01"
                                 min="0"
                                 disabled={(viewingEmployee?.role || '').toLowerCase() === 'rsm'}
                                 style={{
@@ -10666,7 +10578,7 @@ function AdminPage({ language, toggleLanguage, t }) {
                               return calculatedTarget > 0 ? (
                                 <p style={{ margin: '0.25rem 0 0 0', fontSize: '0.875rem', color: '#6b7280' }}>
                                   {(() => {
-                                    const progress = ((Number(achievedTarget || 0) / Number(calculatedTarget || 1)) * 100).toFixed(1)
+                                    const progress = Math.round(((Number(achievedTarget || 0) / Number(calculatedTarget || 1)) * 100))
                                     return `${language === 'en' ? 'Progress' : 'অগ্রগতি'}: ${progress}%`
                                   })()}
                                 </p>
@@ -11428,7 +11340,7 @@ function AdminPage({ language, toggleLanguage, t }) {
                                 const assignedEmployeeText = assignedEmployeeName ? ` - Assigned: ${assignedEmployeeName}` : ''
                                 return (
                                   <option key={dealer._id} value={dealer._id}>
-                                    {dealer.name} {dealer.dealerId ? `(${dealer.dealerId})` : ''}{assignedEmployeeText}
+                                    {dealer.shopName ? `${dealer.shopName}, ` : ''}{dealer.name} {dealer.dealerId ? `(${dealer.dealerId})` : ''}{assignedEmployeeText}
                                   </option>
                                 )
                               })}
@@ -11490,7 +11402,7 @@ function AdminPage({ language, toggleLanguage, t }) {
                                 <option value="">{language === 'en' ? 'Select Variant' : 'ভ্যারিয়েন্ট নির্বাচন করুন'}</option>
                                 {selectedProductVariants.map((variant, index) => (
                                   <option key={index} value={variant.productCode}>
-                                    {variant.productCode} ({variant.packSize} {variant.packUnit || 'ml'}) - ৳{variant.price || 0}
+                                    {variant.productCode} ({variant.packSize} {variant.packUnit || 'ml'}) [{variant.cartoonSize || 1} {variant.cartoonUnit || 'Pcs'}] - ৳{variant.price || 0}
                                   </option>
                                 ))}
                               </select>
@@ -11520,10 +11432,10 @@ function AdminPage({ language, toggleLanguage, t }) {
                                       })()}
                                     </div>
                                     <div style={{ fontSize: '0.875rem', color: '#16a34a' }}>
-                                      {language === 'en' ? 'Unit Price:' : 'ইউনিট মূল্য:'} ৳{((orderForm.variant?.price || (() => {
+                                      {language === 'en' ? 'Unit Price:' : 'ইউনিট মূল্য:'} ৳{Math.round(((orderForm.variant?.price || (() => {
                                         const p = products.find(prod => prod._id === orderForm.product)
                                         return p ? p.price : 0
-                                      })()) / (orderForm.variant?.cartoonSize || 1)).toFixed(2)}
+                                      })()) / (orderForm.variant?.cartoonSize || 1)))}
                                     </div>
                                   </div>
                                 </div>
@@ -11623,7 +11535,6 @@ function AdminPage({ language, toggleLanguage, t }) {
                                 <input
                                   type="number"
                                   min="0"
-                                  step="0.01"
                                   value={orderForm.paidAmount || 0}
                                   onChange={(e) => setOrderForm({ ...orderForm, paidAmount: parseFloat(e.target.value) || 0 })}
                                   style={{
@@ -11716,7 +11627,7 @@ function AdminPage({ language, toggleLanguage, t }) {
                               </span>
                             </div>
                             <div style={{ marginBottom: '0.75rem', color: '#475569', fontWeight: 600 }}>
-                              {language === 'en' ? 'Customer:' : 'কাস্টমার:'} {filteredDealers.find(d => d._id === orderForm.dealer)?.name || '-'}
+                              {language === 'en' ? 'Customer:' : 'কাস্টমার:'} {(() => { const d = filteredDealers.find(d => d._id === orderForm.dealer); return d ? (d.shopName ? `${d.shopName}, ${d.name}` : d.name) : '-'; })()}
                             </div>
                             <div className="admin-table-container" style={{ marginBottom: '1rem', background: '#fff', borderRadius: '0.5rem', border: '1px solid #e2e8f0' }}>
                               <table className="admin-table">
@@ -11768,7 +11679,7 @@ function AdminPage({ language, toggleLanguage, t }) {
                                           ) : '-'}
                                         </td>
                                         <td style={{ textAlign: 'center', fontWeight: 700, color: '#0f172a' }}>{totalQty}</td>
-                                        <td style={{ fontWeight: 700, color: '#0f172a' }}>৳{getCartItemTotal(item).toFixed(2)}</td>
+                                        <td style={{ fontWeight: 700, color: '#0f172a' }}>৳{Math.round(getCartItemTotal(item))}</td>
                                         <td style={{ fontWeight: 800, color: '#16a34a', fontSize: '1.05rem' }}>
                                           ৳{(discountEnabled && discountAmount > 0 ? Math.round(getCartItemTotal(item) * parseFloat(discountAmount)) : Math.round(getCartItemTotal(item)))}
                                         </td>
@@ -11807,7 +11718,7 @@ function AdminPage({ language, toggleLanguage, t }) {
                                       {language === 'en' ? 'Cart Total:' : 'কার্ট মোট:'}
                                     </td>
                                     <td style={{ fontWeight: 800, fontSize: '1.1rem', color: '#0f172a', padding: '0.75rem' }}>
-                                      ৳{getOrderCartTotal().toFixed(2)}
+                                      ৳{Math.round(getOrderCartTotal())}
                                     </td>
                                     <td style={{ fontWeight: 900, fontSize: '1.25rem', color: '#16a34a', padding: '0.75rem' }}>
                                       ৳{(discountEnabled && discountAmount > 0 ? Math.round(getOrderCartTotal() * parseFloat(discountAmount)) : Math.round(getOrderCartTotal()))}
@@ -11853,7 +11764,7 @@ function AdminPage({ language, toggleLanguage, t }) {
                                       </div>
                                       <div className="mobile-card-row">
                                         <span className="mobile-card-label">{language === 'en' ? 'Price' : 'মূল্য'}</span>
-                                        <span className="mobile-card-value" style={{ fontWeight: 700 }}>৳{getCartItemTotal(item).toFixed(2)}</span>
+                                        <span className="mobile-card-value" style={{ fontWeight: 700 }}>৳{Math.round(getCartItemTotal(item))}</span>
                                       </div>
                                       <div className="mobile-card-row">
                                         <span className="mobile-card-label" style={{ fontWeight: 700 }}>{language === 'en' ? 'Grand Total' : 'সর্বমোট'}</span>
@@ -11892,11 +11803,11 @@ function AdminPage({ language, toggleLanguage, t }) {
                                     <>
                                       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontWeight: 600, fontSize: '0.95rem', color: '#475569', marginBottom: '0.5rem' }}>
                                         <span>{language === 'en' ? 'Subtotal:' : 'উপ-মোট:'}</span>
-                                        <span>৳{getOrderCartTotal().toFixed(2)}</span>
+                                        <span>৳{Math.round(getOrderCartTotal())}</span>
                                       </div>
                                       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontWeight: 600, fontSize: '0.95rem', color: '#dc2626', marginBottom: '0.5rem' }}>
                                         <span>{language === 'en' ? 'Discount:' : 'ডিসকাউন্ট:'}</span>
-                                        <span>{((1 - parseFloat(discountAmount)) * 100).toFixed(0)}%</span>
+                                        <span>{Math.round(((1 - parseFloat(discountAmount)) * 100))}%</span>
                                       </div>
                                     </>
                                   )}
@@ -12303,7 +12214,7 @@ function AdminPage({ language, toggleLanguage, t }) {
                                             ৳{(() => {
                                               const total = parseFloat(order.totalPrice || 0)
                                               const discount = order.discountEnabled && order.discountAmount > 0 ? order.discountAmount : 1
-                                              return (total * discount).toFixed(2)
+                                              return Math.round((total * discount))
                                             })()}
                                           </div>
                                         </div>
@@ -12346,13 +12257,13 @@ function AdminPage({ language, toggleLanguage, t }) {
                                                       <div className="mobile-card-row">
                                                         <span className="mobile-card-label" style={{ fontSize: '0.8rem' }}>{language === 'en' ? 'Price' : 'দাম'}</span>
                                                         <span className="mobile-card-value" style={{ fontSize: '0.8rem' }}>
-                                                          {orderQty} x ৳{item.unitPrice !== undefined ? (item.unitPrice || 0).toFixed(2) : (item.variant?.price || item.variant?.price === 0 ? item.variant.price : (item.product?.price || 0))}
+                                                          {orderQty} x ৳{item.unitPrice !== undefined ? Math.round((item.unitPrice || 0)) : (item.variant?.price || item.variant?.price === 0 ? item.variant.price : (item.product?.price || 0))}
                                                         </span>
                                                       </div>
                                                       <div className="mobile-card-row">
                                                         <span className="mobile-card-label" style={{ fontSize: '0.8rem' }}>{language === 'en' ? 'Total' : 'মোট'}</span>
                                                         <span className="mobile-card-value" style={{ fontWeight: 600 }}>
-                                                          ৳{item.totalPrice !== undefined ? (item.totalPrice || 0).toFixed(2) : ((parseFloat(item.quantity) || 0) * parseFloat(item.variant?.price || item.variant?.price === 0 ? item.variant.price : (item.product?.price || 0))).toFixed(2)}
+                                                          ৳{item.totalPrice !== undefined ? Math.round((item.totalPrice || 0)) : Math.round(((parseFloat(item.quantity) || 0) * parseFloat(item.variant?.price || item.variant?.price === 0 ? item.variant.price : (item.product?.price || 0))))}
                                                         </span>
                                                       </div>
                                                       <div className="mobile-card-row">
@@ -12361,7 +12272,7 @@ function AdminPage({ language, toggleLanguage, t }) {
                                                           ৳{(() => {
                                                             const itemTotal = item.totalPrice !== undefined ? (item.totalPrice || 0) : ((parseFloat(item.quantity) || 0) * parseFloat(item.variant?.price || item.variant?.price === 0 ? item.variant.price : (item.product?.price || 0)))
                                                             const discount = order.discountEnabled && order.discountAmount > 0 ? order.discountAmount : 1
-                                                            return (itemTotal * discount).toFixed(2)
+                                                            return Math.round((itemTotal * discount))
                                                           })()}
                                                         </span>
                                                       </div>
@@ -12374,7 +12285,7 @@ function AdminPage({ language, toggleLanguage, t }) {
                                                     ৳{(() => {
                                                       const total = parseFloat(order.totalPrice || 0)
                                                       const discount = order.discountEnabled && order.discountAmount > 0 ? order.discountAmount : 1
-                                                      return (total * discount).toFixed(2)
+                                                      return Math.round((total * discount))
                                                     })()}
                                                   </span>
                                                 </div>
@@ -12795,21 +12706,21 @@ function AdminPage({ language, toggleLanguage, t }) {
                                     )}
                                   </td>
                                   <td style={{ textAlign: 'center' }}>{order.requestedByName || order.requestedByRole || '-'}</td>
-                                  <td style={{ textAlign: 'center' }}>৳{(order.totalPrice || 0).toFixed(2)}</td>
+                                  <td style={{ textAlign: 'center' }}>৳{Math.round((order.totalPrice || 0))}</td>
                                   <td style={{ textAlign: 'center', fontWeight: 700, color: '#16a34a' }}>
-                                    ৳{grandTotal.toFixed(2)}
+                                    ৳{Math.round(grandTotal)}
                                   </td>
                                   <td style={{ fontWeight: 600, color: '#16a34a', textAlign: 'center' }}>
                                     ৳{(() => {
                                       const paid = parseFloat(order.paidAmount) || 0
                                       const commission = (order.paymentHistory || []).reduce((cSum, p) => cSum + (parseFloat(p.commission) || 0), 0)
-                                      return (paid + commission).toFixed(2)
+                                      return Math.round((paid + commission))
                                     })()}
                                   </td>
                                   <td style={{ fontWeight: 600, color: '#111827', textAlign: 'center' }}>
                                     ৳{(() => {
                                       const commission = (order.paymentHistory || []).reduce((cSum, p) => cSum + (parseFloat(p.commission) || 0), 0)
-                                      return commission.toFixed(2)
+                                      return Math.round(commission)
                                     })()}
                                   </td>
                                   <td style={{
@@ -12824,7 +12735,7 @@ function AdminPage({ language, toggleLanguage, t }) {
                                       const paid = parseFloat(order.paidAmount || 0)
                                       const commission = (order.paymentHistory || []).reduce((sum, p) => sum + (parseFloat(p.commission) || 0), 0)
                                       const due = Math.max(0, grandTotal - (paid + commission))
-                                      return due.toFixed(2)
+                                      return Math.round(due)
                                     })()}
                                   </td>
                                   <td style={{ textAlign: 'center' }}>
@@ -13045,7 +12956,7 @@ function AdminPage({ language, toggleLanguage, t }) {
                                         {order.createdAt ? new Date(order.createdAt).toLocaleDateString() : '-'}
                                       </div>
                                       <div style={{ fontSize: '0.9rem', fontWeight: 700, color: '#475569' }}>
-                                        ৳{grandTotalOrderPrice.toFixed(2)}
+                                        ৳{Math.round(grandTotalOrderPrice)}
                                       </div>
                                     </div>
                                   </div>
@@ -13096,13 +13007,13 @@ function AdminPage({ language, toggleLanguage, t }) {
                                                 <div className="mobile-card-row">
                                                   <span className="mobile-card-label" style={{ fontSize: '0.8rem' }}>{language === 'en' ? 'Price' : 'দাম'}</span>
                                                   <span className="mobile-card-value" style={{ fontSize: '0.8rem' }}>
-                                                    {orderQty} x ৳{item.unitPrice !== undefined ? (item.unitPrice || 0).toFixed(2) : (item.variant?.price || item.variant?.price === 0 ? item.variant.price : (item.product?.price || 0))}
+                                                    {orderQty} x ৳{item.unitPrice !== undefined ? Math.round((item.unitPrice || 0)) : (item.variant?.price || item.variant?.price === 0 ? item.variant.price : (item.product?.price || 0))}
                                                   </span>
                                                 </div>
                                                 <div className="mobile-card-row">
                                                   <span className="mobile-card-label" style={{ fontSize: '0.8rem' }}>{language === 'en' ? 'Total' : 'মোট'}</span>
                                                   <span className="mobile-card-value" style={{ fontWeight: 600 }}>
-                                                    ৳{item.totalPrice !== undefined ? (item.totalPrice || 0).toFixed(2) : ((parseFloat(item.quantity) || 0) * parseFloat(item.variant?.price || item.variant?.price === 0 ? item.variant.price : (item.product?.price || 0))).toFixed(2)}
+                                                    ৳{item.totalPrice !== undefined ? Math.round((item.totalPrice || 0)) : Math.round(((parseFloat(item.quantity) || 0) * parseFloat(item.variant?.price || item.variant?.price === 0 ? item.variant.price : (item.product?.price || 0))))}
                                                   </span>
                                                 </div>
                                                 <div className="mobile-card-row">
@@ -13110,7 +13021,7 @@ function AdminPage({ language, toggleLanguage, t }) {
                                                   <span className="mobile-card-value" style={{ fontWeight: 700, color: '#16a34a' }}>
                                                     ৳{(() => {
                                                       const itemTotal = item.totalPrice !== undefined ? (item.totalPrice || 0) : ((parseFloat(item.quantity) || 0) * parseFloat(item.variant?.price || item.variant?.price === 0 ? item.variant.price : (item.product?.price || 0)))
-                                                      return (itemTotal * discount).toFixed(2)
+                                                      return Math.round((itemTotal * discount))
                                                     })()}
                                                   </span>
                                                 </div>
@@ -13142,19 +13053,19 @@ function AdminPage({ language, toggleLanguage, t }) {
                                         {discount < 1 && (
                                           <div className="mobile-card-row">
                                             <span className="mobile-card-label">{language === 'en' ? 'Subtotal' : 'উপ-মোট'}</span>
-                                            <span className="mobile-card-value">৳{parseFloat(order.totalPrice || 0).toFixed(2)}</span>
+                                            <span className="mobile-card-value">৳{Math.round(parseFloat(order.totalPrice || 0))}</span>
                                           </div>
                                         )}
                                         {discount < 1 && (
                                           <div className="mobile-card-row">
                                             <span className="mobile-card-label">{language === 'en' ? 'Discount' : 'ডিসকাউন্ট'}</span>
-                                            <span className="mobile-card-value" style={{ color: '#dc2626' }}>{((1 - discount) * 100).toFixed(0)}%</span>
+                                            <span className="mobile-card-value" style={{ color: '#dc2626' }}>{Math.round(((1 - discount) * 100))}%</span>
                                           </div>
                                         )}
                                         <div className="mobile-card-row" style={{ marginBottom: '0.5rem' }}>
                                           <span className="mobile-card-label" style={{ fontWeight: 700 }}>{language === 'en' ? 'Grand Total' : 'সর্বমোট'}</span>
                                           <span className="mobile-card-value" style={{ fontWeight: 700, color: '#0f172a', fontSize: '1.1rem' }}>
-                                            ৳{grandTotalOrderPrice.toFixed(2)}
+                                            ৳{Math.round(grandTotalOrderPrice)}
                                           </span>
                                         </div>
                                       </div>
@@ -13164,26 +13075,26 @@ function AdminPage({ language, toggleLanguage, t }) {
                                         <div className="mobile-card-row">
                                           <span className="mobile-card-label">{language === 'en' ? 'Paid Amount' : 'পরিশোধিত পরিমাণ'}</span>
                                           <span className="mobile-card-value" style={{ color: '#16a34a' }}>
-                                            ৳{paid.toFixed(2)}
+                                            ৳{Math.round(paid)}
                                           </span>
                                         </div>
                                         <div className="mobile-card-row">
                                           <span className="mobile-card-label">{language === 'en' ? 'Commission' : 'কমিশন'}</span>
                                           <span className="mobile-card-value" style={{ color: '#ca8a04' }}>
-                                            ৳{commission.toFixed(2)}
+                                            ৳{Math.round(commission)}
                                           </span>
                                         </div>
                                         <div className="mobile-card-row">
                                           <span className="mobile-card-label">{language === 'en' ? 'Total Paid Amount' : 'সর্বমোট পরিশোধিত'}</span>
                                           <span className="mobile-card-value" style={{ color: '#16a34a', fontWeight: 600 }}>
-                                            ৳{(paid + commission).toFixed(2)}
+                                            ৳{Math.round((paid + commission))}
                                           </span>
                                         </div>
 
                                         <div className="mobile-card-row">
                                           <span className="mobile-card-label">{language === 'en' ? 'Due Amount' : 'বাকি পরিমাণ'}</span>
                                           <span className="mobile-card-value" style={{ color: due > 0 ? '#dc2626' : '#166534', fontWeight: 600 }}>
-                                            ৳{due.toFixed(2)}
+                                            ৳{Math.round(due)}
                                           </span>
                                         </div>
                                       </div>
@@ -13395,7 +13306,7 @@ function AdminPage({ language, toggleLanguage, t }) {
                                   const rate = parseFloat(rateStr.replace('%', '')) || 0
                                   const currentComm = (payInput * rate) / 100
                                   const histComm = (viewingOrder.paymentHistory || []).reduce((sum, p) => sum + (parseFloat(p.commission) || 0), 0)
-                                  return (cashPaid + histComm + currentComm).toFixed(2)
+                                  return Math.round((cashPaid + histComm + currentComm))
                                 })()}
                               </div>
                             ) : (
@@ -13404,7 +13315,7 @@ function AdminPage({ language, toggleLanguage, t }) {
                                   // Paid Amount in UI should show total credit (Paid + Commissions)
                                   const paid = viewingOrder.paidAmount ? parseFloat(viewingOrder.paidAmount) || 0 : 0
                                   const comm = (viewingOrder.paymentHistory || []).reduce((sum, p) => sum + (parseFloat(p.commission) || 0), 0)
-                                  return (paid + comm).toFixed(2)
+                                  return Math.round((paid + comm))
                                 })()}
                               </p>
                             )}
@@ -13419,7 +13330,6 @@ function AdminPage({ language, toggleLanguage, t }) {
                               <input
                                 type="number"
                                 min="0"
-                                step="0.01"
                                 value={editingOrderDetails?.payInput || ''}
                                 onChange={(e) => {
                                   const pay = parseFloat(e.target.value) || 0
@@ -13564,7 +13474,7 @@ function AdminPage({ language, toggleLanguage, t }) {
                                   const comm = (viewingOrder.paymentHistory || []).reduce((sum, p) => sum + (parseFloat(p.commission) || 0), 0)
                                   due = Math.max(0, grandTotalVal - (paid + comm))
                                 }
-                                return due.toFixed(2)
+                                return Math.round(due)
                               })()}
                             </p>
                           </div>
@@ -13748,8 +13658,8 @@ function AdminPage({ language, toggleLanguage, t }) {
                                               ) : '-'}
                                             </td>
                                             <td style={{ textAlign: 'center', fontWeight: 700, color: '#0f172a' }}>{totalQty}</td>
-                                            <td style={{ textAlign: 'center' }}>৳{item.unitPrice !== undefined ? (item.unitPrice || 0).toFixed(2) : '-'}</td>
-                                            <td style={{ textAlign: 'center', fontWeight: 700, color: '#0f172a' }}>৳{item.totalPrice !== undefined ? (item.totalPrice || 0).toFixed(2) : '-'}</td>
+                                            <td style={{ textAlign: 'center' }}>৳{item.unitPrice !== undefined ? Math.round((item.unitPrice || 0)) : '-'}</td>
+                                            <td style={{ textAlign: 'center', fontWeight: 700, color: '#0f172a' }}>৳{item.totalPrice !== undefined ? Math.round((item.totalPrice || 0)) : '-'}</td>
                                             <td style={{ textAlign: 'center', fontWeight: 900, color: '#16a34a', fontSize: '1rem' }}>
                                               ৳{(() => {
                                                 const itemTotal = parseFloat(item.totalPrice || 0)
@@ -13818,186 +13728,188 @@ function AdminPage({ language, toggleLanguage, t }) {
                         </div>
 
                         {/* Payment History */}
-                        <div className="admin-order-detail-full-width" style={{ gridColumn: '1 / -1', padding: '1rem', backgroundColor: '#f9fafb', borderRadius: '0.375rem', marginTop: '1rem', marginBottom: '1.5rem' }}>
-                          <label style={{ fontSize: '0.875rem', color: '#6b7280', fontWeight: 600, marginBottom: '0.75rem', display: 'block' }}>
-                            {language === 'en' ? 'Payment History' : 'পেমেন্ট ইতিহাস'}
-                          </label>
-                          <div className="admin-table-container" style={{ background: '#fff', borderRadius: '0.5rem', border: '1px solid #e2e8f0', overflowX: 'auto' }}>
-                            <table className="admin-table" style={{ width: '100%', minWidth: '800px' }}>
-                              <thead>
-                                <tr>
-                                  <th style={{ textAlign: 'center', whiteSpace: 'nowrap', padding: '0.75rem' }}>{language === 'en' ? 'Date' : 'তারিখ'}</th>
-                                  <th style={{ textAlign: 'center', whiteSpace: 'nowrap', padding: '0.75rem' }}>{language === 'en' ? 'Total Price' : 'মোট মূল্য'}</th>
-                                  <th style={{ textAlign: 'center', whiteSpace: 'nowrap', padding: '0.75rem' }}>{language === 'en' ? 'Grand Total' : 'সর্বমোট'}</th>
-                                  <th style={{ textAlign: 'center', whiteSpace: 'nowrap', padding: '0.75rem' }}>{language === 'en' ? 'Total Paid Amount' : 'মোট পরিশোধিত'}</th>
-                                  <th style={{ textAlign: 'center', whiteSpace: 'nowrap', padding: '0.75rem' }}>{language === 'en' ? 'Pay Amount' : 'পরিশোধের পরিমাণ'}</th>
-                                  <th style={{ textAlign: 'center', whiteSpace: 'nowrap', padding: '0.75rem' }}>{language === 'en' ? 'Commission %' : 'কমিশন %'}</th>
-                                  <th style={{ textAlign: 'center', whiteSpace: 'nowrap', padding: '0.75rem' }}>{language === 'en' ? 'Commission' : 'কমিশন'}</th>
-                                  <th style={{ textAlign: 'center', whiteSpace: 'nowrap', padding: '0.75rem' }}>{language === 'en' ? 'Total Commission' : 'মোট কমিশন'}</th>
-                                  <th style={{ textAlign: 'center', whiteSpace: 'nowrap', padding: '0.75rem' }}>{language === 'en' ? 'Due Amount' : 'বাকি পরিমাণ'}</th>
-                                </tr>
-                              </thead>
-                              <tbody>
-                                {viewingOrder.paymentHistory && viewingOrder.paymentHistory.length > 0 ? (
-                                  (() => {
-                                    let runningPaid = 0
-                                    let runningCommission = 0
-                                    const totalPrice = parseFloat(viewingOrder.totalPrice || 0)
-                                    const discount = viewingOrder.discountEnabled && viewingOrder.discountAmount > 0 ? viewingOrder.discountAmount : 1
-                                    const orderGrandTotal = totalPrice * discount
+                        {viewingOrder.approvalStatus !== 'Pending' && (
+                          <div className="admin-order-detail-full-width" style={{ gridColumn: '1 / -1', padding: '1rem', backgroundColor: '#f9fafb', borderRadius: '0.375rem', marginTop: '1rem', marginBottom: '1.5rem' }}>
+                            <label style={{ fontSize: '0.875rem', color: '#6b7280', fontWeight: 600, marginBottom: '0.75rem', display: 'block' }}>
+                              {language === 'en' ? 'Payment History' : 'পেমেন্ট ইতিহাস'}
+                            </label>
+                            <div className="admin-table-container" style={{ background: '#fff', borderRadius: '0.5rem', border: '1px solid #e2e8f0', overflowX: 'auto' }}>
+                              <table className="admin-table" style={{ width: '100%', minWidth: '800px' }}>
+                                <thead>
+                                  <tr>
+                                    <th style={{ textAlign: 'center', whiteSpace: 'nowrap', padding: '0.75rem' }}>{language === 'en' ? 'Date' : 'তারিখ'}</th>
+                                    <th style={{ textAlign: 'center', whiteSpace: 'nowrap', padding: '0.75rem' }}>{language === 'en' ? 'Total Price' : 'মোট মূল্য'}</th>
+                                    <th style={{ textAlign: 'center', whiteSpace: 'nowrap', padding: '0.75rem' }}>{language === 'en' ? 'Grand Total' : 'সর্বমোট'}</th>
+                                    <th style={{ textAlign: 'center', whiteSpace: 'nowrap', padding: '0.75rem' }}>{language === 'en' ? 'Total Paid Amount' : 'মোট পরিশোধিত'}</th>
+                                    <th style={{ textAlign: 'center', whiteSpace: 'nowrap', padding: '0.75rem' }}>{language === 'en' ? 'Pay Amount' : 'পরিশোধের পরিমাণ'}</th>
+                                    <th style={{ textAlign: 'center', whiteSpace: 'nowrap', padding: '0.75rem' }}>{language === 'en' ? 'Commission %' : 'কমিশন %'}</th>
+                                    <th style={{ textAlign: 'center', whiteSpace: 'nowrap', padding: '0.75rem' }}>{language === 'en' ? 'Commission' : 'কমিশন'}</th>
+                                    <th style={{ textAlign: 'center', whiteSpace: 'nowrap', padding: '0.75rem' }}>{language === 'en' ? 'Total Commission' : 'মোট কমিশন'}</th>
+                                    <th style={{ textAlign: 'center', whiteSpace: 'nowrap', padding: '0.75rem' }}>{language === 'en' ? 'Due Amount' : 'বাকি পরিমাণ'}</th>
+                                  </tr>
+                                </thead>
+                                <tbody>
+                                  {viewingOrder.paymentHistory && viewingOrder.paymentHistory.length > 0 ? (
+                                    (() => {
+                                      let runningPaid = 0
+                                      let runningCommission = 0
+                                      const totalPrice = parseFloat(viewingOrder.totalPrice || 0)
+                                      const discount = viewingOrder.discountEnabled && viewingOrder.discountAmount > 0 ? viewingOrder.discountAmount : 1
+                                      const orderGrandTotal = totalPrice * discount
 
-                                    const rows = viewingOrder.paymentHistory.map((payment, index) => {
-                                      const amount = parseFloat(payment.amount || 0)
-                                      const commission = parseFloat(payment.commission || 0)
-                                      const commPercent = amount > 0 ? ((commission / amount) * 100).toFixed(0) + '%' : '-'
+                                      const rows = viewingOrder.paymentHistory.map((payment, index) => {
+                                        const amount = parseFloat(payment.amount || 0)
+                                        const commission = parseFloat(payment.commission || 0)
+                                        const commPercent = amount > 0 ? Math.round(((commission / amount) * 100)) + '%' : '-'
 
-                                      runningPaid += amount
-                                      runningCommission += commission
-                                      // Correctly calculate due as (Order Grand Total) - (all paid cash + all commissions so far)
-                                      const currentDue = Math.max(0, orderGrandTotal - (runningPaid + runningCommission))
+                                        runningPaid += amount
+                                        runningCommission += commission
+                                        // Correctly calculate due as (Order Grand Total) - (all paid cash + all commissions so far)
+                                        const currentDue = Math.max(0, orderGrandTotal - (runningPaid + runningCommission))
 
-                                      return (
-                                        <tr key={index}>
-                                          <td style={{ textAlign: 'center' }}>{payment.date ? new Date(payment.date).toLocaleDateString() : '-'}</td>
-                                          <td style={{ textAlign: 'center' }}>৳{totalPrice.toFixed(2)}</td>
-                                          <td style={{ textAlign: 'center', fontWeight: 600, color: '#1e40af' }}>৳{orderGrandTotal.toFixed(2)}</td>
-                                          <td style={{ textAlign: 'center', fontWeight: 600 }}>৳{runningPaid.toFixed(2)}</td>
-                                          <td style={{ textAlign: 'center', color: '#16a34a', fontWeight: 600 }}>৳{amount.toFixed(2)}</td>
-                                          <td style={{ textAlign: 'center' }}>{commPercent}</td>
-                                          <td style={{ textAlign: 'center' }}>৳{commission.toFixed(2)}</td>
-                                          <td style={{ textAlign: 'center', fontWeight: 600 }}>৳{runningCommission.toFixed(2)}</td>
-                                          <td style={{ textAlign: 'center', color: '#dc2626', fontWeight: 600 }}>৳{currentDue.toFixed(2)}</td>
+                                        return (
+                                          <tr key={index}>
+                                            <td style={{ textAlign: 'center' }}>{payment.date ? new Date(payment.date).toLocaleDateString() : '-'}</td>
+                                            <td style={{ textAlign: 'center' }}>৳{Math.round(totalPrice)}</td>
+                                            <td style={{ textAlign: 'center', fontWeight: 600, color: '#1e40af' }}>৳{Math.round(orderGrandTotal)}</td>
+                                            <td style={{ textAlign: 'center', fontWeight: 600 }}>৳{Math.round(runningPaid)}</td>
+                                            <td style={{ textAlign: 'center', color: '#16a34a', fontWeight: 600 }}>৳{Math.round(amount)}</td>
+                                            <td style={{ textAlign: 'center' }}>{commPercent}</td>
+                                            <td style={{ textAlign: 'center' }}>৳{Math.round(commission)}</td>
+                                            <td style={{ textAlign: 'center', fontWeight: 600 }}>৳{Math.round(runningCommission)}</td>
+                                            <td style={{ textAlign: 'center', color: '#dc2626', fontWeight: 600 }}>৳{Math.round(currentDue)}</td>
+                                          </tr>
+                                        )
+                                      })
+
+                                      // Add summary row
+                                      rows.push(
+                                        <tr key="summary" style={{ backgroundColor: '#f8fafc', fontWeight: 700, borderTop: '2px solid #e2e8f0' }}>
+                                          <td colSpan="4" style={{ textAlign: 'right', padding: '0.75rem' }}>{language === 'en' ? 'TOTAL:' : 'মোট:'}</td>
+                                          <td style={{ textAlign: 'center', color: '#16a34a' }}>৳{Math.round(runningPaid)}</td>
+                                          <td style={{ textAlign: 'center' }}>-</td>
+                                          <td style={{ textAlign: 'center', color: '#ca8a04' }}>৳{Math.round(runningCommission)}</td>
+                                          <td colSpan="2" style={{ textAlign: 'center', backgroundColor: '#eff6ff' }}>
+                                            <div style={{ fontSize: '0.75rem', color: '#1e40af' }}>{language === 'en' ? 'TOTAL COLLECTION' : 'মোট সংগ্রহ'}</div>
+                                            <div style={{ color: '#1e40af', fontSize: '1rem' }}>৳{Math.round((runningPaid + runningCommission))}</div>
+                                          </td>
                                         </tr>
                                       )
-                                    })
+                                      rows.push(
+                                        <tr key="final-due" style={{ backgroundColor: '#fef2f2', fontWeight: 800 }}>
+                                          <td colSpan="7" style={{ textAlign: 'right', padding: '0.75rem', color: '#dc2626' }}>
+                                            {language === 'en' ? 'FINAL DUE AMOUNT:' : 'সর্বমোট বকেয়া পরিমাণ:'}
+                                          </td>
+                                          <td colSpan="2" style={{ textAlign: 'center', color: '#dc2626', fontSize: '1.1rem' }}>
+                                            ৳{Math.round(Math.max(0, orderGrandTotal - (runningPaid + runningCommission)))}
+                                          </td>
+                                        </tr>
+                                      )
+                                      return rows
+                                    })()
+                                  ) : (
+                                    <tr>
+                                      <td colSpan="9" style={{ textAlign: 'center', padding: '1rem', color: '#6b7280' }}>
+                                        {language === 'en' ? 'No payment history available' : 'কোনো পেমেন্ট ইতিহাস নেই'}
+                                      </td>
+                                    </tr>
+                                  )}
+                                </tbody>
+                              </table>
+                            </div>
 
-                                    // Add summary row
-                                    rows.push(
-                                      <tr key="summary" style={{ backgroundColor: '#f8fafc', fontWeight: 700, borderTop: '2px solid #e2e8f0' }}>
-                                        <td colSpan="4" style={{ textAlign: 'right', padding: '0.75rem' }}>{language === 'en' ? 'TOTAL:' : 'মোট:'}</td>
-                                        <td style={{ textAlign: 'center', color: '#16a34a' }}>৳{runningPaid.toFixed(2)}</td>
-                                        <td style={{ textAlign: 'center' }}>-</td>
-                                        <td style={{ textAlign: 'center', color: '#ca8a04' }}>৳{runningCommission.toFixed(2)}</td>
-                                        <td colSpan="2" style={{ textAlign: 'center', backgroundColor: '#eff6ff' }}>
-                                          <div style={{ fontSize: '0.75rem', color: '#1e40af' }}>{language === 'en' ? 'TOTAL COLLECTION' : 'মোট সংগ্রহ'}</div>
-                                          <div style={{ color: '#1e40af', fontSize: '1rem' }}>৳{(runningPaid + runningCommission).toFixed(2)}</div>
-                                        </td>
-                                      </tr>
+                            {/* Mobile View for Payment History */}
+                            <div className="mobile-card-container">
+                              {viewingOrder.paymentHistory && viewingOrder.paymentHistory.length > 0 ? (
+                                (() => {
+                                  let runningPaid = 0
+                                  let runningCommission = 0
+                                  const totalPrice = parseFloat(viewingOrder.totalPrice || 0)
+                                  const discount = viewingOrder.discountEnabled && viewingOrder.discountAmount > 0 ? viewingOrder.discountAmount : 1
+                                  const orderGrandTotal = totalPrice * discount
+
+                                  const cards = viewingOrder.paymentHistory.map((payment, index) => {
+                                    const amount = parseFloat(payment.amount || 0)
+                                    const commission = parseFloat(payment.commission || 0)
+                                    const commPercent = amount > 0 ? Math.round(((commission / amount) * 100)) + '%' : ''
+
+                                    runningPaid += amount
+                                    runningCommission += commission
+                                    const currentDue = Math.max(0, orderGrandTotal - (runningPaid + runningCommission))
+
+                                    return (
+                                      <div key={index} className="mobile-card" style={{ padding: '0.75rem', border: '1px solid #e2e8f0', boxShadow: 'none' }}>
+                                        <div className="mobile-card-row">
+                                          <span className="mobile-card-label" style={{ fontWeight: 600, color: '#475569' }}>{language === 'en' ? 'Date' : 'তারিখ'}</span>
+                                          <span className="mobile-card-value">{payment.date ? new Date(payment.date).toLocaleDateString() : '-'}</span>
+                                        </div>
+                                        <div className="mobile-card-row">
+                                          <span className="mobile-card-label">{language === 'en' ? 'Total Price' : 'মোট মূল্য'}</span>
+                                          <span className="mobile-card-value">৳{Math.round(totalPrice)}</span>
+                                        </div>
+                                        <div className="mobile-card-row">
+                                          <span className="mobile-card-label">{language === 'en' ? 'Grand Total' : 'সর্বমোট'}</span>
+                                          <span className="mobile-card-value" style={{ fontWeight: 700, color: '#1e40af' }}>৳{Math.round(orderGrandTotal)}</span>
+                                        </div>
+                                        <div className="mobile-card-row">
+                                          <span className="mobile-card-label">{language === 'en' ? 'Paid Amount' : 'পরিশোধিত'}</span>
+                                          <span className="mobile-card-value" style={{ color: '#16a34a', fontWeight: 600 }}>৳{Math.round(amount)}</span>
+                                        </div>
+                                        <div className="mobile-card-row">
+                                          <span className="mobile-card-label">
+                                            {language === 'en' ? 'Commission' : 'কমিশন'}
+                                            {commPercent && <span style={{ fontSize: '0.75rem', color: '#64748b', marginLeft: '0.4rem' }}>({commPercent})</span>}
+                                          </span>
+                                          <span className="mobile-card-value">৳{Math.round(commission)}</span>
+                                        </div>
+                                        <div className="mobile-card-row">
+                                          <span className="mobile-card-label">{language === 'en' ? 'Due' : 'বাকি'}</span>
+                                          <span className="mobile-card-value" style={{ color: '#dc2626', fontWeight: 600 }}>৳{Math.round(currentDue)}</span>
+                                        </div>
+                                      </div>
                                     )
-                                    rows.push(
-                                      <tr key="final-due" style={{ backgroundColor: '#fef2f2', fontWeight: 800 }}>
-                                        <td colSpan="7" style={{ textAlign: 'right', padding: '0.75rem', color: '#dc2626' }}>
-                                          {language === 'en' ? 'FINAL DUE AMOUNT:' : 'সর্বমোট বকেয়া পরিমাণ:'}
-                                        </td>
-                                        <td colSpan="2" style={{ textAlign: 'center', color: '#dc2626', fontSize: '1.1rem' }}>
-                                          ৳{Math.max(0, orderGrandTotal - (runningPaid + runningCommission)).toFixed(2)}
-                                        </td>
-                                      </tr>
-                                    )
-                                    return rows
-                                  })()
-                                ) : (
-                                  <tr>
-                                    <td colSpan="9" style={{ textAlign: 'center', padding: '1rem', color: '#6b7280' }}>
-                                      {language === 'en' ? 'No payment history available' : 'কোনো পেমেন্ট ইতিহাস নেই'}
-                                    </td>
-                                  </tr>
-                                )}
-                              </tbody>
-                            </table>
-                          </div>
+                                  })
 
-                          {/* Mobile View for Payment History */}
-                          <div className="mobile-card-container">
-                            {viewingOrder.paymentHistory && viewingOrder.paymentHistory.length > 0 ? (
-                              (() => {
-                                let runningPaid = 0
-                                let runningCommission = 0
-                                const totalPrice = parseFloat(viewingOrder.totalPrice || 0)
-                                const discount = viewingOrder.discountEnabled && viewingOrder.discountAmount > 0 ? viewingOrder.discountAmount : 1
-                                const orderGrandTotal = totalPrice * discount
-
-                                const cards = viewingOrder.paymentHistory.map((payment, index) => {
-                                  const amount = parseFloat(payment.amount || 0)
-                                  const commission = parseFloat(payment.commission || 0)
-                                  const commPercent = amount > 0 ? ((commission / amount) * 100).toFixed(0) + '%' : ''
-
-                                  runningPaid += amount
-                                  runningCommission += commission
-                                  const currentDue = Math.max(0, orderGrandTotal - (runningPaid + runningCommission))
-
-                                  return (
-                                    <div key={index} className="mobile-card" style={{ padding: '0.75rem', border: '1px solid #e2e8f0', boxShadow: 'none' }}>
-                                      <div className="mobile-card-row">
-                                        <span className="mobile-card-label" style={{ fontWeight: 600, color: '#475569' }}>{language === 'en' ? 'Date' : 'তারিখ'}</span>
-                                        <span className="mobile-card-value">{payment.date ? new Date(payment.date).toLocaleDateString() : '-'}</span>
+                                  // Add summary card for mobile
+                                  cards.push(
+                                    <div key="mobile-summary" className="mobile-card" style={{
+                                      padding: '0.75rem',
+                                      border: '2px solid #e2e8f0',
+                                      backgroundColor: '#f8fafc',
+                                      boxShadow: 'none',
+                                      marginTop: '1rem'
+                                    }}>
+                                      <div className="mobile-card-row" style={{ borderBottom: '1px solid #e2e8f0', paddingBottom: '0.5rem', marginBottom: '0.5rem' }}>
+                                        <span className="mobile-card-label" style={{ fontWeight: 800, color: '#0f172a' }}>{language === 'en' ? 'TOTAL SUMMARY' : 'মোট সারসংক্ষেপ'}</span>
                                       </div>
                                       <div className="mobile-card-row">
-                                        <span className="mobile-card-label">{language === 'en' ? 'Total Price' : 'মোট মূল্য'}</span>
-                                        <span className="mobile-card-value">৳{totalPrice.toFixed(2)}</span>
+                                        <span className="mobile-card-label">{language === 'en' ? 'Total Paid' : 'মোট পরিশোধিত'}</span>
+                                        <span className="mobile-card-value" style={{ color: '#16a34a', fontWeight: 700 }}>৳{Math.round(runningPaid)}</span>
                                       </div>
                                       <div className="mobile-card-row">
-                                        <span className="mobile-card-label">{language === 'en' ? 'Grand Total' : 'সর্বমোট'}</span>
-                                        <span className="mobile-card-value" style={{ fontWeight: 700, color: '#1e40af' }}>৳{orderGrandTotal.toFixed(2)}</span>
+                                        <span className="mobile-card-label">{language === 'en' ? 'Total Commission' : 'মোট কমিশন'}</span>
+                                        <span className="mobile-card-value" style={{ color: '#ca8a04', fontWeight: 700 }}>৳{Math.round(runningCommission)}</span>
                                       </div>
-                                      <div className="mobile-card-row">
-                                        <span className="mobile-card-label">{language === 'en' ? 'Paid Amount' : 'পরিশোধিত'}</span>
-                                        <span className="mobile-card-value" style={{ color: '#16a34a', fontWeight: 600 }}>৳{amount.toFixed(2)}</span>
+                                      <div className="mobile-card-row" style={{ backgroundColor: '#eff6ff', padding: '0.4rem', borderRadius: '0.25rem', marginTop: '0.5rem' }}>
+                                        <span className="mobile-card-label" style={{ color: '#1e40af', fontWeight: 700 }}>{language === 'en' ? 'TOTAL COLLECTION' : 'মোট সংগ্রহ'}</span>
+                                        <span className="mobile-card-value" style={{ color: '#1e40af', fontWeight: 800 }}>৳{Math.round((runningPaid + runningCommission))}</span>
                                       </div>
-                                      <div className="mobile-card-row">
-                                        <span className="mobile-card-label">
-                                          {language === 'en' ? 'Commission' : 'কমিশন'}
-                                          {commPercent && <span style={{ fontSize: '0.75rem', color: '#64748b', marginLeft: '0.4rem' }}>({commPercent})</span>}
-                                        </span>
-                                        <span className="mobile-card-value">৳{commission.toFixed(2)}</span>
-                                      </div>
-                                      <div className="mobile-card-row">
-                                        <span className="mobile-card-label">{language === 'en' ? 'Due' : 'বাকি'}</span>
-                                        <span className="mobile-card-value" style={{ color: '#dc2626', fontWeight: 600 }}>৳{currentDue.toFixed(2)}</span>
+                                      <div className="mobile-card-row" style={{ backgroundColor: '#fef2f2', padding: '0.4rem', borderRadius: '0.25rem', marginTop: '0.5rem' }}>
+                                        <span className="mobile-card-label" style={{ color: '#dc2626', fontWeight: 800 }}>{language === 'en' ? 'FINAL DUE' : 'সর্বমোট বকেয়া'}</span>
+                                        <span className="mobile-card-value" style={{ color: '#dc2626', fontWeight: 900, fontSize: '1.1rem' }}>৳{Math.round(Math.max(0, orderGrandTotal - (runningPaid + runningCommission)))}</span>
                                       </div>
                                     </div>
                                   )
-                                })
-
-                                // Add summary card for mobile
-                                cards.push(
-                                  <div key="mobile-summary" className="mobile-card" style={{
-                                    padding: '0.75rem',
-                                    border: '2px solid #e2e8f0',
-                                    backgroundColor: '#f8fafc',
-                                    boxShadow: 'none',
-                                    marginTop: '1rem'
-                                  }}>
-                                    <div className="mobile-card-row" style={{ borderBottom: '1px solid #e2e8f0', paddingBottom: '0.5rem', marginBottom: '0.5rem' }}>
-                                      <span className="mobile-card-label" style={{ fontWeight: 800, color: '#0f172a' }}>{language === 'en' ? 'TOTAL SUMMARY' : 'মোট সারসংক্ষেপ'}</span>
-                                    </div>
-                                    <div className="mobile-card-row">
-                                      <span className="mobile-card-label">{language === 'en' ? 'Total Paid' : 'মোট পরিশোধিত'}</span>
-                                      <span className="mobile-card-value" style={{ color: '#16a34a', fontWeight: 700 }}>৳{runningPaid.toFixed(2)}</span>
-                                    </div>
-                                    <div className="mobile-card-row">
-                                      <span className="mobile-card-label">{language === 'en' ? 'Total Commission' : 'মোট কমিশন'}</span>
-                                      <span className="mobile-card-value" style={{ color: '#ca8a04', fontWeight: 700 }}>৳{runningCommission.toFixed(2)}</span>
-                                    </div>
-                                    <div className="mobile-card-row" style={{ backgroundColor: '#eff6ff', padding: '0.4rem', borderRadius: '0.25rem', marginTop: '0.5rem' }}>
-                                      <span className="mobile-card-label" style={{ color: '#1e40af', fontWeight: 700 }}>{language === 'en' ? 'TOTAL COLLECTION' : 'মোট সংগ্রহ'}</span>
-                                      <span className="mobile-card-value" style={{ color: '#1e40af', fontWeight: 800 }}>৳{(runningPaid + runningCommission).toFixed(2)}</span>
-                                    </div>
-                                    <div className="mobile-card-row" style={{ backgroundColor: '#fef2f2', padding: '0.4rem', borderRadius: '0.25rem', marginTop: '0.5rem' }}>
-                                      <span className="mobile-card-label" style={{ color: '#dc2626', fontWeight: 800 }}>{language === 'en' ? 'FINAL DUE' : 'সর্বমোট বকেয়া'}</span>
-                                      <span className="mobile-card-value" style={{ color: '#dc2626', fontWeight: 900, fontSize: '1.1rem' }}>৳{Math.max(0, orderGrandTotal - (runningPaid + runningCommission)).toFixed(2)}</span>
-                                    </div>
-                                  </div>
-                                )
-                                return cards
-                              })()
-                            ) : (
-                              <div style={{ padding: '1rem', textAlign: 'center', color: '#6b7280', fontSize: '0.875rem', background: '#f9fafb', borderRadius: '0.375rem', border: '1px solid #e5e7eb' }}>
-                                {language === 'en' ? 'No payment history available' : 'কোনো পেমেন্ট ইতিহাস নেই'}
-                              </div>
-                            )}
+                                  return cards
+                                })()
+                              ) : (
+                                <div style={{ padding: '1rem', textAlign: 'center', color: '#6b7280', fontSize: '0.875rem', background: '#f9fafb', borderRadius: '0.375rem', border: '1px solid #e5e7eb' }}>
+                                  {language === 'en' ? 'No payment history available' : 'কোনো পেমেন্ট ইতিহাস নেই'}
+                                </div>
+                              )}
+                            </div>
                           </div>
-                        </div>
+                        )}
 
                         {/* Action Buttons */}
                         <div style={{ position: 'relative', display: 'flex', gap: '0.75rem', marginTop: '1.5rem', zIndex: 1 }}>
@@ -14548,7 +14460,6 @@ function AdminPage({ language, toggleLanguage, t }) {
                           <input
                             type="number"
                             min="0"
-                            step="0.01"
                             value={discountAmount}
                             onChange={(e) => setDiscountAmount(e.target.value)}
                             style={{ width: '100%', padding: '0.5rem', border: '1px solid #cbd5e1', borderRadius: '0.375rem' }}
@@ -14971,7 +14882,7 @@ const OrderInvoice = ({ order, dealers, products, language }) => {
               const looseItems = Math.round((totalQty % 1) * cSize);
 
               const discount = order.discountEnabled && order.discountAmount > 0 ? order.discountAmount : 1;
-              const value = ((parseFloat(item.totalPrice) || 0) * discount).toFixed(2);
+              const value = Math.round(((parseFloat(item.totalPrice) || 0) * discount));
 
               return (
                 <tr key={idx}>
