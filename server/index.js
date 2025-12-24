@@ -12,6 +12,7 @@ import dealerRoutes from './routes/dealerRoutes.js'
 import productRoutes from './routes/productRoutes.js'
 import orderRoutes from './routes/orderRoutes.js'
 import settingsRoutes from './routes/settingsRoutes.js'
+import inventoryRoutes from './routes/inventoryRoutes.js'
 
 // Load environment variables
 dotenv.config()
@@ -46,6 +47,7 @@ app.use('/api/dealers', dealerRoutes)
 app.use('/api/products', productRoutes)
 app.use('/api/orders', orderRoutes)
 app.use('/api/settings', settingsRoutes)
+app.use('/api/inventory', inventoryRoutes)
 
 // Error handling middleware
 app.use((err, req, res, next) => {

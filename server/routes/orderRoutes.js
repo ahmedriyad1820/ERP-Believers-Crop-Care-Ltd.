@@ -3,6 +3,7 @@ import Order from '../models/Order.js'
 import Dealer from '../models/Dealer.js'
 import Product from '../models/Product.js'
 import Employee from '../models/Employee.js'
+import Inventory from '../models/Inventory.js'
 
 const router = express.Router()
 
@@ -653,6 +654,40 @@ router.put('/:id', async (req, res) => {
     if (requestedBy !== undefined) order.requestedBy = requestedBy
     if (requestedByName !== undefined) order.requestedByName = requestedByName
     if (requestedByRole !== undefined) order.requestedByRole = requestedByRole
+
+    // If status changed to Delivered, deduct stock from Inventory
+    if (order.status === 'Delivered' && previousStatus !== 'Delivered') {
+      try {
+        console.log(`[Order Delivery] Deducting stock for order ${order.orderId}`)
+        const itemsToProcess = (order.items && order.items.length > 0)
+          ? order.items
+          : [{ product: order.product, variant: order.variant, quantity: order.quantity }];
+
+        for (const item of itemsToProcess) {
+          if (!item.product) continue;
+
+          const query = { product: item.product };
+          if (item.variant && item.variant.productCode) {
+            query['variant.productCode'] = item.variant.productCode;
+          }
+
+          const inventoryItem = await Inventory.findOne(query);
+          if (inventoryItem) {
+            if (inventoryItem.quantity < item.quantity) {
+              throw new Error(`Insufficient stock for product ${item.productName || 'Unknown'}. Available: ${inventoryItem.quantity}, Required: ${item.quantity}`);
+            }
+            inventoryItem.quantity -= item.quantity;
+            await inventoryItem.save();
+            console.log(`[Order Delivery] Deducted ${item.quantity} from inventory for product ${item.product}`);
+          } else {
+            console.warn(`[Order Delivery] Inventory record not found for product ${item.product}`);
+          }
+        }
+      } catch (err) {
+        console.error('[Order Delivery] Stock deduction failed:', err);
+        return res.status(400).json({ message: 'Failed to mark as Delivered: ' + err.message });
+      }
+    }
 
     await order.save()
 
