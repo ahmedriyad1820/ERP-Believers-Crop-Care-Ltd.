@@ -228,7 +228,6 @@ function AdminPage({ language, toggleLanguage, t }) {
   const [savingInventory, setSavingInventory] = useState(false)
   const [inventoryStatus, setInventoryStatus] = useState('')
   const [expandedInventoryId, setExpandedInventoryId] = useState(null)
-  const [expandedProductVariants, setExpandedProductVariants] = useState(null)
 
 
   // Fetch settings on mount
@@ -5637,77 +5636,29 @@ function AdminPage({ language, toggleLanguage, t }) {
                               <td>{product.category}</td>
                               <td>
                                 {hasVariants ? (
-                                  <div style={{ position: 'relative' }}>
-                                    <button
-                                      onClick={() => setExpandedProductVariants(expandedProductVariants === product._id ? null : product._id)}
-                                      style={{
-                                        display: 'flex',
-                                        alignItems: 'center',
-                                        justifyContent: 'space-between',
-                                        width: '100%',
-                                        padding: '0.5rem 0.75rem',
-                                        backgroundColor: 'white',
-                                        border: '1px solid #cbd5e1',
-                                        borderRadius: '0.375rem',
-                                        fontSize: '0.875rem',
-                                        cursor: 'pointer',
-                                        transition: 'all 0.2s'
-                                      }}
-                                    >
-                                      <span style={{ fontWeight: 600, color: '#475569' }}>
-                                        {language === 'en' ? 'Select variant' : 'ভ্যারিয়েন্ট নির্বাচন করুন'}
-                                      </span>
-                                      <svg
-                                        viewBox="0 0 24 24"
-                                        width="16"
-                                        height="16"
-                                        fill="none"
-                                        style={{
-                                          transform: expandedProductVariants === product._id ? 'rotate(180deg)' : 'rotate(0)',
-                                          transition: 'transform 0.2s'
-                                        }}
-                                      >
-                                        <path d="M6 9l6 6 6-6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-                                      </svg>
-                                    </button>
-
-                                    {expandedProductVariants === product._id && (
-                                      <div style={{
-                                        position: 'absolute',
-                                        top: '100%',
-                                        left: 0,
-                                        zIndex: 100,
-                                        width: '240px',
-                                        marginTop: '0.5rem',
-                                        backgroundColor: 'white',
-                                        border: '1px solid #e2e8f0',
-                                        borderRadius: '0.5rem',
-                                        boxShadow: '0 10px 25px -5px rgba(0, 0, 0, 0.1), 0 8px 10px -6px rgba(0, 0, 0, 0.1)',
-                                        overflow: 'hidden',
-                                        padding: '0.5rem'
-                                      }}>
-                                        {product.variants.map((variant, vIndex) => (
-                                          <div key={vIndex} style={{
-                                            padding: '0.6rem 0.75rem',
-                                            borderRadius: '0.375rem',
-                                            backgroundColor: vIndex % 2 === 0 ? '#f8fafc' : 'white',
-                                            marginBottom: vIndex < product.variants.length - 1 ? '0.25rem' : '0',
-                                            borderLeft: '3px solid #16a34a'
-                                          }}>
-                                            <div style={{ fontWeight: 700, fontSize: '0.8rem', color: '#1e293b' }}>
-                                              {variant.productCode}
-                                            </div>
-                                            <div style={{ color: '#64748b', fontSize: '0.75rem', marginTop: '0.1rem' }}>
-                                              {variant.packSize} {variant.packUnit || 'ml'} x {variant.cartoonSize} {variant.cartoonUnit || 'Pcs'}
-                                            </div>
-                                            <div style={{ fontWeight: 700, color: '#16a34a', fontSize: '0.8rem', marginTop: '0.2rem' }}>
-                                              ৳{variant.price || 0}
-                                            </div>
-                                          </div>
-                                        ))}
-                                      </div>
-                                    )}
-                                  </div>
+                                  <select
+                                    style={{
+                                      padding: '0.4rem 0.6rem',
+                                      border: '1px solid #cbd5e1',
+                                      borderRadius: '0.375rem',
+                                      fontSize: '0.875rem',
+                                      backgroundColor: 'white',
+                                      cursor: 'pointer',
+                                      width: '100%',
+                                      minWidth: '150px'
+                                    }}
+                                    onChange={(e) => {
+                                      // Purely for viewing
+                                      e.target.blur()
+                                    }}
+                                  >
+                                    <option value="">{language === 'en' ? 'Select variant' : 'ভ্যারিয়েন্ট নির্বাচন করুন'}</option>
+                                    {product.variants.map((variant, vIndex) => (
+                                      <option key={vIndex} value={variant.productCode}>
+                                        {variant.productCode} ({variant.packSize} {variant.packUnit || 'ml'} x {variant.cartoonSize} {variant.cartoonUnit || 'Pcs'}): ৳{variant.price || 0}
+                                      </option>
+                                    ))}
+                                  </select>
                                 ) : (
                                   <span style={{ fontWeight: 600, color: '#16a34a' }}>
                                     ৳{Math.round(displayPrice)}
@@ -5796,19 +5747,8 @@ function AdminPage({ language, toggleLanguage, t }) {
                                         <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', width: '100%' }}>
                                           <div style={{ textAlign: 'left', width: '100%' }}>
                                             {product.variants.map((variant, vIndex) => (
-                                              <div key={vIndex} style={{
-                                                fontSize: '0.85rem',
-                                                marginBottom: '0.5rem',
-                                                padding: '0.5rem',
-                                                backgroundColor: '#f8fafc',
-                                                borderRadius: '0.375rem',
-                                                borderLeft: '3px solid #16a34a'
-                                              }}>
-                                                <div style={{ fontWeight: 700, color: '#1e293b' }}>{variant.productCode}</div>
-                                                <div style={{ color: '#64748b', fontSize: '0.75rem' }}>
-                                                  {variant.packSize} {variant.packUnit || 'ml'} x {variant.cartoonSize} {variant.cartoonUnit || 'Pcs'}
-                                                </div>
-                                                <div style={{ fontWeight: 600, color: '#16a34a', marginTop: '0.1rem' }}>৳{variant.price}</div>
+                                              <div key={vIndex} style={{ fontSize: '0.85rem', marginBottom: '0.35rem', color: '#475569' }}>
+                                                <span style={{ fontWeight: 700 }}>{variant.productCode}</span>: ({variant.packSize} {variant.packUnit || 'ml'} x {variant.cartoonSize} {variant.cartoonUnit || 'Pcs'}): <span style={{ fontWeight: 700, color: '#16a34a' }}>৳{variant.price}</span>
                                               </div>
                                             ))}
                                           </div>
@@ -10383,7 +10323,7 @@ function AdminPage({ language, toggleLanguage, t }) {
                       ) : showAssignedDealers ? (
                         <div className="admin-employee-assigned-dealers-section" style={{ marginTop: '1rem', display: 'flex', flexDirection: 'column', gap: '1rem' }}>
                           <h3 style={{ fontSize: '1.125rem', fontWeight: 700, color: '#0f172a', margin: '0.25rem 0' }}>
-                            {language === 'en' ? 'Assigned Dealers' : 'নির্ধারিত ডিলার'}
+                            {language === 'en' ? 'Assigned Customers' : 'নির্ধারিত কাস্টমার'}
                           </h3>
                           {(() => {
                             // Filter dealers assigned to this employee
@@ -10403,7 +10343,7 @@ function AdminPage({ language, toggleLanguage, t }) {
                                   border: '1px solid #e5e7eb',
                                   color: '#6b7280'
                                 }}>
-                                  {language === 'en' ? 'No dealers assigned to this employee' : 'এই কর্মচারীর জন্য কোন ডিলার নির্ধারিত নেই'}
+                                  {language === 'en' ? 'No customers assigned to this employee' : 'এই কর্মচারীর জন্য কোন কাস্টমার নির্ধারিত নেই'}
                                 </div>
                               )
                             }
@@ -10420,10 +10360,13 @@ function AdminPage({ language, toggleLanguage, t }) {
                                     <thead>
                                       <tr style={{ backgroundColor: '#f9fafb', borderBottom: '2px solid #e5e7eb' }}>
                                         <th style={{ padding: '0.75rem', textAlign: 'left', fontSize: '0.875rem', fontWeight: 600, color: '#6b7280' }}>
-                                          {language === 'en' ? 'Dealer ID' : 'ডিলার আইডি'}
+                                          {language === 'en' ? 'Customer ID' : 'কাস্টমার আইডি'}
                                         </th>
                                         <th style={{ padding: '0.75rem', textAlign: 'left', fontSize: '0.875rem', fontWeight: 600, color: '#6b7280' }}>
-                                          {language === 'en' ? 'Dealer Name' : 'ডিলারের নাম'}
+                                          {language === 'en' ? 'Customer Name' : 'কাস্টমারের নাম'}
+                                        </th>
+                                        <th style={{ padding: '0.75rem', textAlign: 'left', fontSize: '0.875rem', fontWeight: 600, color: '#6b7280' }}>
+                                          {language === 'en' ? 'Shop Name' : 'দোকানের নাম'}
                                         </th>
                                         <th style={{ padding: '0.75rem', textAlign: 'left', fontSize: '0.875rem', fontWeight: 600, color: '#6b7280' }}>
                                           {language === 'en' ? 'Contact' : 'যোগাযোগ'}
@@ -10468,6 +10411,9 @@ function AdminPage({ language, toggleLanguage, t }) {
                                             <td style={{ padding: '0.75rem', fontSize: '0.875rem', color: '#111827', fontWeight: 600 }}>
                                               {dealer.name || '-'}
                                             </td>
+                                            <td style={{ padding: '0.75rem', fontSize: '0.875rem', color: '#111827' }}>
+                                              {dealer.shopName || '-'}
+                                            </td>
                                             <td style={{ padding: '0.75rem', fontSize: '0.875rem', color: '#374151' }}>
                                               {dealer.phone || '-'}
                                             </td>
@@ -10508,12 +10454,16 @@ function AdminPage({ language, toggleLanguage, t }) {
                                     return (
                                       <div key={idx} className="mobile-card" style={{ padding: '0.75rem', border: '1px solid #e2e8f0', boxShadow: 'none' }}>
                                         <div className="mobile-card-row">
-                                          <span className="mobile-card-label" style={{ fontWeight: 600, color: '#475569' }}>{language === 'en' ? 'Dealer ID' : 'ডিলার আইডি'}</span>
+                                          <span className="mobile-card-label" style={{ fontWeight: 600, color: '#475569' }}>{language === 'en' ? 'Customer ID' : 'কাস্টমার আইডি'}</span>
                                           <span className="mobile-card-value">{dealer.dealerId || '-'}</span>
                                         </div>
                                         <div className="mobile-card-row">
-                                          <span className="mobile-card-label">{language === 'en' ? 'Dealer Name' : 'ডিলারের নাম'}</span>
+                                          <span className="mobile-card-label">{language === 'en' ? 'Customer Name' : 'কাস্টমারের নাম'}</span>
                                           <span className="mobile-card-value" style={{ fontWeight: 600 }}>{dealer.name || '-'}</span>
+                                        </div>
+                                        <div className="mobile-card-row">
+                                          <span className="mobile-card-label">{language === 'en' ? 'Shop Name' : 'দোকানের নাম'}</span>
+                                          <span className="mobile-card-value">{dealer.shopName || '-'}</span>
                                         </div>
                                         <div className="mobile-card-row">
                                           <span className="mobile-card-label">{language === 'en' ? 'Contact' : 'যোগাযোগ'}</span>
