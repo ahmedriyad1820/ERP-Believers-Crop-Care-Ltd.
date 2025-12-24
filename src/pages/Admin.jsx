@@ -10363,10 +10363,10 @@ function AdminPage({ language, toggleLanguage, t }) {
                                           {language === 'en' ? 'Customer ID' : 'কাস্টমার আইডি'}
                                         </th>
                                         <th style={{ padding: '0.75rem', textAlign: 'left', fontSize: '0.875rem', fontWeight: 600, color: '#6b7280' }}>
-                                          {language === 'en' ? 'Customer Name' : 'কাস্টমারের নাম'}
+                                          {language === 'en' ? 'Shop Name' : 'দোকানের নাম'}
                                         </th>
                                         <th style={{ padding: '0.75rem', textAlign: 'left', fontSize: '0.875rem', fontWeight: 600, color: '#6b7280' }}>
-                                          {language === 'en' ? 'Shop Name' : 'দোকানের নাম'}
+                                          {language === 'en' ? 'Customer Name' : 'কাস্টমারের নাম'}
                                         </th>
                                         <th style={{ padding: '0.75rem', textAlign: 'left', fontSize: '0.875rem', fontWeight: 600, color: '#6b7280' }}>
                                           {language === 'en' ? 'Contact' : 'যোগাযোগ'}
@@ -10408,11 +10408,11 @@ function AdminPage({ language, toggleLanguage, t }) {
                                             <td style={{ padding: '0.75rem', fontSize: '0.875rem', color: '#111827', fontFamily: 'monospace' }}>
                                               {dealer.dealerId || '-'}
                                             </td>
-                                            <td style={{ padding: '0.75rem', fontSize: '0.875rem', color: '#111827', fontWeight: 600 }}>
-                                              {dealer.name || '-'}
-                                            </td>
                                             <td style={{ padding: '0.75rem', fontSize: '0.875rem', color: '#111827' }}>
                                               {dealer.shopName || '-'}
+                                            </td>
+                                            <td style={{ padding: '0.75rem', fontSize: '0.875rem', color: '#111827', fontWeight: 600 }}>
+                                              {dealer.name || '-'}
                                             </td>
                                             <td style={{ padding: '0.75rem', fontSize: '0.875rem', color: '#374151' }}>
                                               {dealer.phone || '-'}
@@ -10458,12 +10458,12 @@ function AdminPage({ language, toggleLanguage, t }) {
                                           <span className="mobile-card-value">{dealer.dealerId || '-'}</span>
                                         </div>
                                         <div className="mobile-card-row">
-                                          <span className="mobile-card-label">{language === 'en' ? 'Customer Name' : 'কাস্টমারের নাম'}</span>
-                                          <span className="mobile-card-value" style={{ fontWeight: 600 }}>{dealer.name || '-'}</span>
-                                        </div>
-                                        <div className="mobile-card-row">
                                           <span className="mobile-card-label">{language === 'en' ? 'Shop Name' : 'দোকানের নাম'}</span>
                                           <span className="mobile-card-value">{dealer.shopName || '-'}</span>
+                                        </div>
+                                        <div className="mobile-card-row">
+                                          <span className="mobile-card-label">{language === 'en' ? 'Customer Name' : 'কাস্টমারের নাম'}</span>
+                                          <span className="mobile-card-value" style={{ fontWeight: 600 }}>{dealer.name || '-'}</span>
                                         </div>
                                         <div className="mobile-card-row">
                                           <span className="mobile-card-label">{language === 'en' ? 'Contact' : 'যোগাযোগ'}</span>
