@@ -228,6 +228,7 @@ function AdminPage({ language, toggleLanguage, t }) {
   const [savingInventory, setSavingInventory] = useState(false)
   const [inventoryStatus, setInventoryStatus] = useState('')
   const [expandedInventoryId, setExpandedInventoryId] = useState(null)
+  const [expandedProductVariants, setExpandedProductVariants] = useState(null)
 
 
   // Fetch settings on mount
@@ -5636,25 +5637,76 @@ function AdminPage({ language, toggleLanguage, t }) {
                               <td>{product.category}</td>
                               <td>
                                 {hasVariants ? (
-                                  <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem', padding: '0.2rem 0' }}>
-                                    {product.variants.map((variant, vIndex) => (
-                                      <div key={vIndex} style={{
-                                        fontSize: '0.8rem',
-                                        lineHeight: 1.4,
-                                        paddingBottom: vIndex < product.variants.length - 1 ? '0.4rem' : '0',
-                                        borderBottom: vIndex < product.variants.length - 1 ? '1px dashed #e2e8f0' : 'none'
+                                  <div style={{ position: 'relative' }}>
+                                    <button
+                                      onClick={() => setExpandedProductVariants(expandedProductVariants === product._id ? null : product._id)}
+                                      style={{
+                                        display: 'flex',
+                                        alignItems: 'center',
+                                        justifyContent: 'space-between',
+                                        width: '100%',
+                                        padding: '0.5rem 0.75rem',
+                                        backgroundColor: 'white',
+                                        border: '1px solid #cbd5e1',
+                                        borderRadius: '0.375rem',
+                                        fontSize: '0.875rem',
+                                        cursor: 'pointer',
+                                        transition: 'all 0.2s'
+                                      }}
+                                    >
+                                      <span style={{ fontWeight: 600, color: '#475569' }}>
+                                        {language === 'en' ? 'Select variant' : 'ভ্যারিয়েন্ট নির্বাচন করুন'}
+                                      </span>
+                                      <svg
+                                        viewBox="0 0 24 24"
+                                        width="16"
+                                        height="16"
+                                        fill="none"
+                                        style={{
+                                          transform: expandedProductVariants === product._id ? 'rotate(180deg)' : 'rotate(0)',
+                                          transition: 'transform 0.2s'
+                                        }}
+                                      >
+                                        <path d="M6 9l6 6 6-6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+                                      </svg>
+                                    </button>
+
+                                    {expandedProductVariants === product._id && (
+                                      <div style={{
+                                        position: 'absolute',
+                                        top: '100%',
+                                        left: 0,
+                                        zIndex: 100,
+                                        width: '240px',
+                                        marginTop: '0.5rem',
+                                        backgroundColor: 'white',
+                                        border: '1px solid #e2e8f0',
+                                        borderRadius: '0.5rem',
+                                        boxShadow: '0 10px 25px -5px rgba(0, 0, 0, 0.1), 0 8px 10px -6px rgba(0, 0, 0, 0.1)',
+                                        overflow: 'hidden',
+                                        padding: '0.5rem'
                                       }}>
-                                        <div style={{ fontWeight: 700, color: '#1e293b' }}>
-                                          {variant.productCode}
-                                        </div>
-                                        <div style={{ color: '#64748b' }}>
-                                          {variant.packSize} {variant.packUnit || 'ml'} x {variant.cartoonSize} {variant.cartoonUnit || 'Pcs'}
-                                        </div>
-                                        <div style={{ fontWeight: 600, color: '#16a34a' }}>
-                                          ৳{variant.price || 0}
-                                        </div>
+                                        {product.variants.map((variant, vIndex) => (
+                                          <div key={vIndex} style={{
+                                            padding: '0.6rem 0.75rem',
+                                            borderRadius: '0.375rem',
+                                            backgroundColor: vIndex % 2 === 0 ? '#f8fafc' : 'white',
+                                            marginBottom: vIndex < product.variants.length - 1 ? '0.25rem' : '0',
+                                            borderLeft: '3px solid #16a34a'
+                                          }}>
+                                            <div style={{ fontWeight: 700, fontSize: '0.8rem', color: '#1e293b' }}>
+                                              {variant.productCode}
+                                            </div>
+                                            <div style={{ color: '#64748b', fontSize: '0.75rem', marginTop: '0.1rem' }}>
+                                              {variant.packSize} {variant.packUnit || 'ml'} x {variant.cartoonSize} {variant.cartoonUnit || 'Pcs'}
+                                            </div>
+                                            <div style={{ fontWeight: 700, color: '#16a34a', fontSize: '0.8rem', marginTop: '0.2rem' }}>
+                                              ৳{variant.price || 0}
+                                            </div>
+                                          </div>
+                                        ))}
                                       </div>
-                                    ))}
+                                    )}
                                   </div>
                                 ) : (
                                   <span style={{ fontWeight: 600, color: '#16a34a' }}>
