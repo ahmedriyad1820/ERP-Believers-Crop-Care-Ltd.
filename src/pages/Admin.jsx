@@ -5636,28 +5636,26 @@ function AdminPage({ language, toggleLanguage, t }) {
                               <td>{product.category}</td>
                               <td>
                                 {hasVariants ? (
-                                  <select
-                                    style={{
-                                      padding: '0.4rem 0.6rem',
-                                      border: '1px solid #cbd5e1',
-                                      borderRadius: '0.375rem',
-                                      fontSize: '0.875rem',
-                                      backgroundColor: 'white',
-                                      cursor: 'pointer',
-                                      minWidth: '120px'
-                                    }}
-                                    onChange={(e) => {
-                                      // Display only, not editable
-                                      e.target.blur()
-                                    }}
-                                  >
-                                    <option value="">{language === 'en' ? 'Select variant' : 'ভ্যারিয়েন্ট নির্বাচন করুন'}</option>
+                                  <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem', padding: '0.2rem 0' }}>
                                     {product.variants.map((variant, vIndex) => (
-                                      <option key={vIndex} value={variant.productCode}>
-                                        {variant.productCode} ({variant.packSize} {variant.packUnit || 'ml'}): ৳{variant.price || 0}
-                                      </option>
+                                      <div key={vIndex} style={{
+                                        fontSize: '0.8rem',
+                                        lineHeight: 1.4,
+                                        paddingBottom: vIndex < product.variants.length - 1 ? '0.4rem' : '0',
+                                        borderBottom: vIndex < product.variants.length - 1 ? '1px dashed #e2e8f0' : 'none'
+                                      }}>
+                                        <div style={{ fontWeight: 700, color: '#1e293b' }}>
+                                          {variant.productCode}
+                                        </div>
+                                        <div style={{ color: '#64748b' }}>
+                                          {variant.packSize} {variant.packUnit || 'ml'} x {variant.cartoonSize} {variant.cartoonUnit || 'Pcs'}
+                                        </div>
+                                        <div style={{ fontWeight: 600, color: '#16a34a' }}>
+                                          ৳{variant.price || 0}
+                                        </div>
+                                      </div>
                                     ))}
-                                  </select>
+                                  </div>
                                 ) : (
                                   <span style={{ fontWeight: 600, color: '#16a34a' }}>
                                     ৳{Math.round(displayPrice)}
@@ -5744,10 +5742,21 @@ function AdminPage({ language, toggleLanguage, t }) {
                                     <span className="mobile-card-value">
                                       {hasVariants ? (
                                         <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', width: '100%' }}>
-                                          <div style={{ textAlign: 'left' }}>
+                                          <div style={{ textAlign: 'left', width: '100%' }}>
                                             {product.variants.map((variant, vIndex) => (
-                                              <div key={vIndex} style={{ fontSize: '0.85rem', marginBottom: '0.25rem' }}>
-                                                <span style={{ fontWeight: 600 }}>({variant.packSize} {variant.packUnit || 'ml'} x {variant.cartoonSize} {variant.cartoonUnit || 'Pcs'}): ৳{variant.price}</span>
+                                              <div key={vIndex} style={{
+                                                fontSize: '0.85rem',
+                                                marginBottom: '0.5rem',
+                                                padding: '0.5rem',
+                                                backgroundColor: '#f8fafc',
+                                                borderRadius: '0.375rem',
+                                                borderLeft: '3px solid #16a34a'
+                                              }}>
+                                                <div style={{ fontWeight: 700, color: '#1e293b' }}>{variant.productCode}</div>
+                                                <div style={{ color: '#64748b', fontSize: '0.75rem' }}>
+                                                  {variant.packSize} {variant.packUnit || 'ml'} x {variant.cartoonSize} {variant.cartoonUnit || 'Pcs'}
+                                                </div>
+                                                <div style={{ fontWeight: 600, color: '#16a34a', marginTop: '0.1rem' }}>৳{variant.price}</div>
                                               </div>
                                             ))}
                                           </div>
