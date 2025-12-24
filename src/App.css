@@ -10267,12 +10267,14 @@ html {
 
 .admin-revenue-controls {
   display: flex;
-  flex-direction: row-reverse;
-  /* Actions Right, Filters Left */
+  flex-direction: row;
+  /* Filters Left, Actions Right */
   justify-content: space-between;
   align-items: center;
   gap: 0.75rem;
   flex-wrap: wrap;
+  margin-bottom: 2rem;
+  /* Add spacing below controls */
 }
 
 /* Grouping containers for filters and actions */
@@ -10603,6 +10605,7 @@ html {
     opacity: 1;
   }
 }
+
 /* Hide spin-buttons in Chrome, Safari, Edge, Opera */
 input::-webkit-outer-spin-button,
 input::-webkit-inner-spin-button {

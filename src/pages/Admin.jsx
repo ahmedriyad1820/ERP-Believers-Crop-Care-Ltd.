@@ -227,6 +227,7 @@ function AdminPage({ language, toggleLanguage, t }) {
   })
   const [savingInventory, setSavingInventory] = useState(false)
   const [inventoryStatus, setInventoryStatus] = useState('')
+  const [expandedInventoryId, setExpandedInventoryId] = useState(null)
 
 
   // Fetch settings on mount
@@ -1156,6 +1157,10 @@ function AdminPage({ language, toggleLanguage, t }) {
     }
   }
 
+  const toggleInventoryExpansion = (id) => {
+    setExpandedInventoryId(expandedInventoryId === id ? null : id);
+  };
+
   const loadInventory = async () => {
     setLoadingInventory(true)
     try {
@@ -1411,7 +1416,7 @@ function AdminPage({ language, toggleLanguage, t }) {
   const inventoryStats = useMemo(() => {
     return {
       totalItems: (inventory || []).length,
-      lowStock: (inventory || []).filter(item => item.quantity <= (item.minStockLevel || 10)).length,
+      lowStock: (inventory || []).filter(item => (item.requiredQuantity > item.quantity) || (item.quantity <= (item.minStockLevel || 10))).length,
       totalValue: (inventory || []).reduce((sum, item) => sum + (item.quantity * (item.variant?.agentPrice || 0)), 0)
     }
   }, [inventory])
@@ -14353,11 +14358,11 @@ function AdminPage({ language, toggleLanguage, t }) {
                         <thead>
                           <tr>
                             <th>{language === 'en' ? 'Product Name' : 'পণ্যের নাম'}</th>
-                            <th>{language === 'en' ? 'SKU' : 'এসকেইউ'}</th>
+                            <th>{language === 'en' ? 'Product ID' : 'পণ্য আইডি'}</th>
                             <th>{language === 'en' ? 'Quantity' : 'পরিমাণ'}</th>
                             <th>{language === 'en' ? 'Required' : 'প্রয়োজন'}</th>
                             <th>{language === 'en' ? 'Delivered' : 'সরবরাহকৃত'}</th>
-                            <th>{language === 'en' ? 'Unit Price' : 'ইউনিট মূল্য'}</th>
+                            <th>{language === 'en' ? 'Status' : 'অবস্থা'}</th>
                             <th>{language === 'en' ? 'Actions' : 'কার্যক্রম'}</th>
                           </tr>
                         </thead>
@@ -14372,12 +14377,24 @@ function AdminPage({ language, toggleLanguage, t }) {
                                   </div>
                                 </td>
                                 <td>{item.variant?.productCode || '-'}</td>
-                                <td style={{ color: item.quantity <= (item.minStockLevel || 10) ? '#ef4444' : 'inherit', fontWeight: item.quantity <= (item.minStockLevel || 10) ? 700 : 400 }}>
+                                <td style={{
+                                  color: ((item.requiredQuantity > item.quantity) || (item.quantity <= (item.minStockLevel || 10))) ? '#ef4444' : 'inherit',
+                                  fontWeight: ((item.requiredQuantity > item.quantity) || (item.quantity <= (item.minStockLevel || 10))) ? 700 : 400
+                                }}>
                                   {item.quantity}
                                 </td>
                                 <td style={{ color: '#3b82f6', fontWeight: 600 }}>{item.requiredQuantity || 0}</td>
                                 <td style={{ color: '#10b981', fontWeight: 600 }}>{item.deliveredQuantity || 0}</td>
-                                <td>৳{item.variant?.agentPrice || 0}</td>
+                                <td>
+                                  <div className="mobile-card-status-badge" style={{
+                                    position: 'static',
+                                    backgroundColor: ((item.requiredQuantity > item.quantity) || (item.quantity <= (item.minStockLevel || 10))) ? '#fee2e2' : '#dcfce7',
+                                    color: ((item.requiredQuantity > item.quantity) || (item.quantity <= (item.minStockLevel || 10))) ? '#dc2626' : '#166534',
+                                    display: 'inline-block'
+                                  }}>
+                                    {((item.requiredQuantity > item.quantity) || (item.quantity <= (item.minStockLevel || 10))) ? (language === 'en' ? 'Low Stock' : 'কম স্টক') : (language === 'en' ? 'In Stock' : 'স্টকে আছে')}
+                                  </div>
+                                </td>
                                 <td>
                                   <div style={{ display: 'flex', gap: '0.5rem' }}>
                                     <button
@@ -14417,6 +14434,114 @@ function AdminPage({ language, toggleLanguage, t }) {
                           )}
                         </tbody>
                       </table>
+                    </div>
+
+                    {/* Mobile Card View for Inventory */}
+                    <div className="mobile-card-container">
+                      {inventory.length === 0 ? (
+                        <div style={{ textAlign: 'center', padding: '2rem', color: '#6b7280' }}>
+                          {adminContent.noData}
+                        </div>
+                      ) : (
+                        inventory.map((item) => {
+                          const isExpanded = expandedInventoryId === item._id;
+                          const isLowStock = (item.requiredQuantity > item.quantity) || (item.quantity <= (item.minStockLevel || 10));
+
+                          return (
+                            <div
+                              className="mobile-card"
+                              key={item._id}
+                              onClick={() => toggleInventoryExpansion(item._id)}
+                              style={{ cursor: 'pointer', borderLeft: isLowStock ? '4px solid #ef4444' : '4px solid #3b82f6' }}
+                            >
+                              <div className="mobile-card-header">
+                                <div className="mobile-card-avatar" style={{ overflow: 'hidden', borderRadius: '4px' }}>
+                                  {item.product?.image ? (
+                                    <img src={item.product.image} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                                  ) : (
+                                    (item.product?.name || 'U').charAt(0).toUpperCase()
+                                  )}
+                                </div>
+                                <div className="mobile-card-header-text">
+                                  <div className="mobile-card-title">{item.product?.name || 'Unknown'}</div>
+                                  <div className="mobile-card-subtitle">{item.variant?.productCode || '-'}</div>
+                                </div>
+                                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', marginLeft: 'auto' }}>
+                                  <div className="mobile-card-status-badge" style={{
+                                    position: 'static',
+                                    backgroundColor: isLowStock ? '#fee2e2' : '#dcfce7',
+                                    color: isLowStock ? '#dc2626' : '#166534',
+                                    marginBottom: '0.25rem'
+                                  }}>
+                                    {isLowStock ? 'Low Stock' : 'In Stock'}
+                                  </div>
+                                  <div style={{ fontSize: '0.875rem', fontWeight: 700, color: isLowStock ? '#ef4444' : '#1e293b' }}>
+                                    Qty: {item.quantity}
+                                  </div>
+                                </div>
+                              </div>
+
+                              <div className="mobile-card-body">
+                                {isExpanded && (
+                                  <>
+                                    <div className="mobile-card-row" style={{ animation: 'fadeIn 0.2s' }}>
+                                      <span className="mobile-card-label">{language === 'en' ? 'Required' : 'প্রয়োজন'}</span>
+                                      <span className="mobile-card-value" style={{ color: '#3b82f6', fontWeight: 600 }}>{item.requiredQuantity || 0}</span>
+                                    </div>
+                                    <div className="mobile-card-row" style={{ animation: 'fadeIn 0.2s' }}>
+                                      <span className="mobile-card-label">{language === 'en' ? 'Delivered' : 'সরবরাহকৃত'}</span>
+                                      <span className="mobile-card-value" style={{ color: '#10b981', fontWeight: 600 }}>{item.deliveredQuantity || 0}</span>
+                                    </div>
+                                    <div className="mobile-card-row" style={{ animation: 'fadeIn 0.2s' }}>
+                                      <span className="mobile-card-label">{language === 'en' ? 'Status' : 'অবস্থা'}</span>
+                                      <span className="mobile-card-value" style={{
+                                        color: isLowStock ? '#dc2626' : '#166534',
+                                        fontWeight: 600
+                                      }}>
+                                        {isLowStock ? (language === 'en' ? 'Low Stock' : 'কম স্টক') : (language === 'en' ? 'In Stock' : 'স্টকে আছে')}
+                                      </span>
+                                    </div>
+                                    {item.notes && (
+                                      <div className="mobile-card-row" style={{ animation: 'fadeIn 0.2s', flexDirection: 'column', alignItems: 'flex-start' }}>
+                                        <span className="mobile-card-label">{language === 'en' ? 'Notes' : 'নোট'}</span>
+                                        <span className="mobile-card-value" style={{ marginTop: '0.25rem', fontSize: '0.8rem' }}>{item.notes}</span>
+                                      </div>
+                                    )}
+                                  </>
+                                )}
+                              </div>
+
+                              {isExpanded && (
+                                <div className="mobile-card-actions" onClick={(e) => e.stopPropagation()} style={{ animation: 'fadeIn 0.2s' }}>
+                                  <button
+                                    className="mobile-action-btn"
+                                    onClick={() => {
+                                      setInventoryForm({
+                                        id: item._id,
+                                        product: item.product?._id || item.product,
+                                        variant: item.variant,
+                                        quantity: item.quantity,
+                                        minStockLevel: item.minStockLevel,
+                                        notes: item.notes
+                                      });
+                                      setShowInventoryForm(true);
+                                    }}
+                                  >
+                                    {language === 'en' ? 'Edit' : 'সম্পাদনা'}
+                                  </button>
+                                  <button
+                                    className="mobile-action-btn delete"
+                                    onClick={() => handleDeleteInventory(item._id)}
+                                    style={{ backgroundColor: '#fee2e2', color: '#dc2626', marginLeft: '0.5rem' }}
+                                  >
+                                    {language === 'en' ? 'Delete' : 'মুছুন'}
+                                  </button>
+                                </div>
+                              )}
+                            </div>
+                          );
+                        })
+                      )}
                     </div>
                   </>
                 )
