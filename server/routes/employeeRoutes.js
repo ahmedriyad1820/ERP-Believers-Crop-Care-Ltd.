@@ -15,12 +15,12 @@ const generateUsername = async (email, name) => {
   } else {
     baseUsername = name.toLowerCase().replace(/[^a-z0-9]/g, '').substring(0, 10)
   }
-  
+
   // Prevent using 'admin' as username
   if (baseUsername === 'admin') {
     baseUsername = 'admin' + Date.now().toString().slice(-4)
   }
-  
+
   let username = baseUsername
   let counter = 1
   while (await Employee.findOne({ username }) || username === 'admin') {
@@ -37,7 +37,7 @@ const generateEmployeeId = async () => {
     const lastEmployee = await Employee.findOne({ employeeId: { $exists: true } })
       .sort({ employeeId: -1 })
       .exec()
-    
+
     let nextNumber = 1
     if (lastEmployee && lastEmployee.employeeId) {
       // Extract number from employeeId (e.g., "bcc001" -> 1)
@@ -46,7 +46,7 @@ const generateEmployeeId = async () => {
         nextNumber = parseInt(match[1], 10) + 1
       }
     }
-    
+
     // Format as bcc001, bcc002, etc. (3 digits)
     return `bcc${String(nextNumber).padStart(3, '0')}`
   } catch (err) {
@@ -70,32 +70,33 @@ const generateDefaultPassword = () => {
 // Create
 router.post('/', async (req, res) => {
   try {
-    const { 
-      name, email, phone, address, nid, document, 
+    const {
+      name, email, phone, address, nid, document,
       emergencyContactName, emergencyContact, salary, salesTarget,
       bankName, bankBranch, accountNumber,
-      department, postingArea, role, designation, photo, status 
+      department, postingArea, role, designation, photo, status,
+      regionId, areaId, territoryId
     } = req.body
-    
+
     console.log('[Employee Create] Received data:', {
-      name, email, phone, address, nid, 
+      name, email, phone, address, nid,
       hasDocument: !!document,
       emergencyContactName, emergencyContact, salary,
       department, role, designation, salesTarget,
       postingArea
     })
-    
+
     // Generate employee ID
     const employeeId = await generateEmployeeId()
     console.log('[Employee Create] Generated employee ID:', employeeId)
-    
+
     // Generate username
     const username = await generateUsername(email, name)
-    
+
     // Generate default password
     const defaultPassword = generateDefaultPassword()
     const passwordHash = await bcrypt.hash(defaultPassword, 10)
-    
+
     // Ensure all fields are explicitly set
     const employeeData = {
       employeeId: employeeId || '',
@@ -113,6 +114,9 @@ router.post('/', async (req, res) => {
       bankBranch: bankBranch || '',
       accountNumber: accountNumber || '',
       department: department || '',
+      regionId: regionId || '',
+      areaId: areaId || '',
+      territoryId: territoryId || '',
       postingArea: postingArea || '',
       role: role || '',
       designation: designation || '',
@@ -121,18 +125,18 @@ router.post('/', async (req, res) => {
       passwordHash: passwordHash || '',
       status: normalizeStatus(status)
     }
-    
+
     // Validate required fields
     if (!employeeData.name) {
       return res.status(400).json({ message: 'Name is required' })
     }
-    
+
     console.log('[Employee Create] Creating employee with data:', { ...employeeData, passwordHash: '***' })
-    
+
     // Create employee with all fields
     const emp = await Employee.create(employeeData)
     console.log('[Employee Create] Raw created employee:', emp.toObject())
-    
+
     // Reload from database to ensure all fields are saved
     const savedEmp = await Employee.findById(emp._id).lean()
     console.log('[Employee Create] Employee saved to DB:', {
@@ -152,22 +156,22 @@ router.post('/', async (req, res) => {
       role: savedEmp.role,
       designation: savedEmp.designation
     })
-    
+
     // Return employee data with generated password (only on creation)
     const responseData = {
       ...savedEmp,
       generatedPassword: defaultPassword // Only returned once for admin to share with employee
     }
-    
+
     console.log('[Employee Create] Response data:', {
       employeeId: responseData.employeeId,
       salary: responseData.salary,
       hasAddress: !!responseData.address,
       hasNID: !!responseData.nid
     })
-    
-    res.json({ 
-      success: true, 
+
+    res.json({
+      success: true,
       data: responseData
     })
   } catch (err) {
@@ -180,12 +184,12 @@ router.post('/', async (req, res) => {
     })
     if (err.code === 11000) {
       const duplicateField = err.keyPattern ? Object.keys(err.keyPattern)[0] : 'field'
-      return res.status(400).json({ 
+      return res.status(400).json({
         message: `${duplicateField === 'email' ? 'Email' : duplicateField === 'username' ? 'Username' : duplicateField === 'employeeId' ? 'Employee ID' : 'Field'} already exists`,
-        error: err.message 
+        error: err.message
       })
     }
-    res.status(500).json({ 
+    res.status(500).json({
       message: 'Failed to create employee',
       error: process.env.NODE_ENV === 'development' ? err.message : undefined
     })
@@ -225,36 +229,36 @@ router.delete('/:id', async (req, res) => {
 router.post('/login', async (req, res) => {
   try {
     const { username, password } = req.body
-    
+
     if (!username || !password) {
       return res.status(400).json({ message: 'Username and password are required' })
     }
-    
+
     // Prevent admin username from logging in as employee
     if (username.toLowerCase() === 'admin') {
       return res.status(401).json({ message: 'Invalid credentials' })
     }
-    
-    const employee = await Employee.findOne({ 
+
+    const employee = await Employee.findOne({
       $or: [
         { username },
         { email: username }
       ]
     })
-    
+
     if (!employee) {
       return res.status(401).json({ message: 'Invalid credentials' })
     }
-    
+
     if (!employee.passwordHash) {
       return res.status(401).json({ message: 'Account not properly set up' })
     }
-    
+
     const isValidPassword = await bcrypt.compare(password, employee.passwordHash)
     if (!isValidPassword) {
       return res.status(401).json({ message: 'Invalid credentials' })
     }
-    
+
     // Return employee data (without password hash)
     res.json({
       success: true,
@@ -276,26 +280,26 @@ router.post('/login', async (req, res) => {
 router.post('/reset-password', async (req, res) => {
   try {
     const { id } = req.body
-    
+
     if (!id) {
       return res.status(400).json({ message: 'Employee ID is required' })
     }
-    
+
     const employee = await Employee.findById(id)
-    
+
     if (!employee) {
       return res.status(404).json({ message: 'Employee not found' })
     }
-    
+
     // Generate new password
     const newPassword = generateDefaultPassword()
     const passwordHash = await bcrypt.hash(newPassword, 10)
-    
+
     employee.passwordHash = passwordHash
     await employee.save()
-    
-    res.json({ 
-      success: true, 
+
+    res.json({
+      success: true,
       newPassword: newPassword // Return new password for admin to view
     })
   } catch (err) {
@@ -309,23 +313,23 @@ router.post('/change-password', async (req, res) => {
   try {
     console.log('[Employee Routes] Change password request received:', { body: { ...req.body, current: '***', next: '***' } })
     const { id, current, next } = req.body
-    
+
     if (!id || !current || !next) {
       console.log('[Employee Routes] Missing required fields')
       return res.status(400).json({ message: 'Employee ID, current password, and new password are required' })
     }
-    
+
     console.log('[Employee Routes] Looking up employee:', id)
     const employee = await Employee.findById(id)
-    
+
     if (!employee) {
       return res.status(404).json({ message: 'Employee not found' })
     }
-    
+
     if (!employee.passwordHash) {
       return res.status(400).json({ message: 'Account not properly set up' })
     }
-    
+
     // If current password is provided and matches, proceed. If not provided, allow reset.
     let canChange = true
     if (current) {
@@ -334,15 +338,15 @@ router.post('/change-password', async (req, res) => {
         canChange = false
       }
     }
-    
+
     if (!canChange) {
       return res.status(400).json({ message: 'Current password incorrect' })
     }
-    
+
     const nextHash = await bcrypt.hash(next, 10)
     employee.passwordHash = nextHash
     await employee.save()
-    
+
     res.json({ success: true })
   } catch (err) {
     console.error(err)
@@ -373,12 +377,18 @@ router.get('/:id', async (req, res) => {
 // Update employee profile
 router.put('/:id', async (req, res) => {
   try {
-    const { name, email, phone, address, nid, document, emergencyContactName, emergencyContact, salary, salesTarget, bankName, bankBranch, accountNumber, photo, status, postingArea, department, role, designation } = req.body
+    const {
+      name, email, phone, address, nid, document,
+      emergencyContactName, emergencyContact, salary, salesTarget,
+      bankName, bankBranch, accountNumber, photo, status,
+      postingArea, department, role, designation,
+      regionId, areaId, territoryId
+    } = req.body
     const employee = await Employee.findById(req.params.id)
     if (!employee) {
       return res.status(404).json({ message: 'Employee not found' })
     }
-    
+
     if (name) employee.name = name
     if (email) employee.email = email
     if (phone) employee.phone = phone
@@ -393,12 +403,15 @@ router.put('/:id', async (req, res) => {
     if (bankBranch !== undefined) employee.bankBranch = bankBranch
     if (accountNumber !== undefined) employee.accountNumber = accountNumber
     if (postingArea !== undefined) employee.postingArea = postingArea
+    if (regionId !== undefined) employee.regionId = regionId
+    if (areaId !== undefined) employee.areaId = areaId
+    if (territoryId !== undefined) employee.territoryId = territoryId
     if (department !== undefined) employee.department = department
     if (role !== undefined) employee.role = role
     if (designation !== undefined) employee.designation = designation
     if (photo !== undefined) employee.photo = photo
     if (status !== undefined) employee.status = status
-    
+
     await employee.save()
     res.json({ success: true, data: employee })
   } catch (err) {

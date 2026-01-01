@@ -11,6 +11,9 @@ const DealerSchema = new mongoose.Schema({
   nid: { type: String, default: '' },
   tradeLicense: { type: String, default: '' },
   pesticideLicense: { type: String, default: '' },
+  regionId: { type: String, default: '' },
+  areaId: { type: String, default: '' },
+  territoryId: { type: String, default: '' },
   area: { type: String, default: '' },
   agreement: { type: String, default: '' }, // base64/pdf or image
   assignedTo: { type: mongoose.Schema.Types.ObjectId, ref: 'Employee', default: null },

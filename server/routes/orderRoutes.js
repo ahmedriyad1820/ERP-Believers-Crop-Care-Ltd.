@@ -127,7 +127,10 @@ router.post('/', async (req, res) => {
       items: cartItems,
       paidAmount,
       discountAmount,
-      discountEnabled
+      discountEnabled,
+      targetHalf,
+      targetYear,
+      targetMonth
     } = req.body
 
     if (!dealer) {
@@ -174,7 +177,10 @@ router.post('/', async (req, res) => {
         notes: clean(notes || ''),
         hasOffer: first.hasOffer || false,
         buyQuantity: first.buyQuantity || null,
-        freeQuantity: first.freeQuantity || null
+        freeQuantity: first.freeQuantity || null,
+        targetHalf: targetHalf || (new Date().getMonth() < 6 ? 'H1' : 'H2'),
+        targetYear: targetYear || new Date().getFullYear(),
+        targetMonth: targetMonth !== undefined ? targetMonth : new Date().getMonth()
       }
 
       const created = await Order.create(orderData)
@@ -333,7 +339,10 @@ router.post('/', async (req, res) => {
       notes: clean(notes || ''),
       hasOffer: productDoc.hasOffer || false,
       buyQuantity: productDoc.buyQuantity || null,
-      freeQuantity: productDoc.freeQuantity || null
+      freeQuantity: productDoc.freeQuantity || null,
+      targetHalf: targetHalf || (new Date().getMonth() < 6 ? 'H1' : 'H2'),
+      targetYear: targetYear || new Date().getFullYear(),
+      targetMonth: targetMonth !== undefined ? targetMonth : new Date().getMonth()
     }
 
     const created = await Order.create(orderData)
@@ -502,6 +511,8 @@ router.put('/:id', async (req, res) => {
       requestedByName,
       requestedByRole,
       paidAmount,
+      totalPrice,
+      dueAmount,
       commission,
       newPayment,
       discountAmount,
@@ -592,13 +603,26 @@ router.put('/:id', async (req, res) => {
       order.paidAmount = parseFloat(paidAmount) || 0
     }
 
+    // Update totalPrice if provided (e.g., for returns)
+    if (totalPrice !== undefined) {
+      order.totalPrice = parseFloat(totalPrice) || 0
+      // Recalculate grandTotal based on new totalPrice
+      const discount = order.discountEnabled && order.discountAmount > 0 ? order.discountAmount : 1
+      order.grandTotal = order.totalPrice * discount
+    }
+
     // Calculate total commission from existing history and new payment
     const existingCommission = (order.paymentHistory || []).reduce((sum, p) => sum + (parseFloat(p.commission) || 0), 0)
     const newCommValue = newPayment ? (parseFloat(newPayment.commission) || 0) : 0
     const totalComm = existingCommission + newCommValue
 
-    // Recalculate dueAmount based on current grandTotal, paidAmount AND total commission
-    order.dueAmount = Math.max(0, order.grandTotal - ((order.paidAmount || 0) + totalComm))
+    // Use provided dueAmount if available, otherwise recalculate
+    if (dueAmount !== undefined) {
+      order.dueAmount = parseFloat(dueAmount) || 0
+    } else {
+      // Recalculate dueAmount based on current grandTotal, paidAmount AND total commission
+      order.dueAmount = Math.max(0, order.grandTotal - ((order.paidAmount || 0) + totalComm))
+    }
 
     if (commission !== undefined) {
       order.commission = commission
@@ -611,6 +635,9 @@ router.put('/:id', async (req, res) => {
         date: newPayment.date || new Date(),
         amount: parseFloat(newPayment.amount) || 0,
         commission: parseFloat(newPayment.commission) || 0,
+        type: newPayment.type || 'Payment',
+        note: newPayment.note || '',
+        metadata: newPayment.metadata || {},
         due: order.dueAmount
       })
       console.log('[Order Update] Updated payment history length:', order.paymentHistory.length)

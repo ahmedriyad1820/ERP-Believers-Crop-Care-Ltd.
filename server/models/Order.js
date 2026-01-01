@@ -191,6 +191,18 @@ const orderSchema = new mongoose.Schema({
       type: Number,
       default: 0
     },
+    type: {
+      type: String,
+      default: 'Payment'
+    },
+    note: {
+      type: String,
+      default: ''
+    },
+    metadata: {
+      type: mongoose.Schema.Types.Mixed,
+      default: {}
+    },
     due: {
       type: Number,
       default: 0
@@ -205,6 +217,27 @@ const orderSchema = new mongoose.Schema({
     type: String,
     trim: true,
     default: ''
+  },
+  targetHalf: {
+    type: String,
+    enum: ['H1', 'H2'],
+    default: function () {
+      return new Date().getMonth() < 6 ? 'H1' : 'H2'
+    }
+  },
+  targetYear: {
+    type: Number,
+    default: function () {
+      return new Date().getFullYear()
+    }
+  },
+  targetMonth: {
+    type: Number,
+    min: 0,
+    max: 11,
+    default: function () {
+      return new Date().getMonth()
+    }
   }
 }, {
   timestamps: true

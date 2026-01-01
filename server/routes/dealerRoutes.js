@@ -79,8 +79,12 @@ router.post('/', async (req, res) => {
       address,
       photo,
       nid,
+
       tradeLicense,
       pesticideLicense,
+      regionId,
+      areaId,
+      territoryId,
       area,
       agreement,
       assignedTo,
@@ -105,6 +109,9 @@ router.post('/', async (req, res) => {
       nid: nid || '',
       tradeLicense: tradeLicense || '',
       pesticideLicense: pesticideLicense || '',
+      regionId: regionId || '',
+      areaId: areaId || '',
+      territoryId: territoryId || '',
       area: area || '',
       agreement: agreement || '',
       assignedTo: assigned.assignedTo,
@@ -128,7 +135,7 @@ router.put('/:id', async (req, res) => {
     const dealer = await Dealer.findById(req.params.id)
     if (!dealer) return res.status(404).json({ message: 'Dealer not found' })
 
-    const fields = ['dealerId', 'name', 'shopName', 'phone', 'email', 'address', 'photo', 'nid', 'tradeLicense', 'pesticideLicense', 'area', 'agreement']
+    const fields = ['dealerId', 'name', 'shopName', 'phone', 'email', 'address', 'photo', 'nid', 'tradeLicense', 'pesticideLicense', 'regionId', 'areaId', 'territoryId', 'area', 'agreement']
     fields.forEach((f) => {
       if (req.body[f] !== undefined) dealer[f] = req.body[f]
     })

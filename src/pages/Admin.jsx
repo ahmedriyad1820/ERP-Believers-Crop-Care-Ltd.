@@ -1,4 +1,5 @@
 import { useState, useEffect, useMemo } from 'react'
+import { createPortal } from 'react-dom'
 import * as XLSX from 'xlsx'
 
 // Resolve API base so mobile devices on the LAN can reach the backend.
@@ -164,6 +165,68 @@ function AdminPage({ language, toggleLanguage, t }) {
   const [dealerOrdersLoading, setDealerOrdersLoading] = useState(false)
   const [dealerOrdersStatus, setDealerOrdersStatus] = useState('')
   const [showDealerOrders, setShowDealerOrders] = useState(false)
+  const [dealerFilterHalf, setDealerFilterHalf] = useState(() => new Date().getMonth() < 6 ? 'H1' : 'H2')
+  const [dealerFilterYear, setDealerFilterYear] = useState(() => new Date().getFullYear())
+
+  // Filter dealerOrders specific to the View Dealer modal
+  const filteredDealerOrders = useMemo(() => {
+    if (!dealerOrders || dealerOrders.length === 0) return []
+    return dealerOrders.filter(order => {
+      const orderYear = order.targetYear || new Date(order.createdAt).getFullYear()
+      const orderHalf = order.targetHalf || (new Date(order.createdAt).getMonth() < 6 ? 'H1' : 'H2')
+      // Ensure vague comparison handles string/number mismatch if any
+      // eslint-disable-next-line eqeqeq
+      return (orderYear == dealerFilterYear) && (orderHalf === dealerFilterHalf)
+    })
+  }, [dealerOrders, dealerFilterHalf, dealerFilterYear])
+
+  const customOrderIds = useMemo(() => {
+    const ids = {}
+    const combined = [...(orders || []), ...(dealerOrders || [])]
+    if (combined.length === 0) return ids
+
+    // dedupe by _id
+    const seenIds = new Set()
+    const uniqueOrders = combined.filter(o => {
+      if (seenIds.has(o._id)) return false
+      seenIds.add(o._id)
+      return true
+    })
+
+    // Grouping by dealer and period
+    const groups = {}
+    uniqueOrders.forEach(order => {
+      const dealer = dealers.find(d => d._id === (order.dealer?._id || order.dealer)) || order.dealer;
+      const dealerId = dealer?._id || order.dealerId || 'unknown'
+      const year = order.targetYear || new Date(order.createdAt).getFullYear()
+      const half = order.targetHalf || (new Date(order.createdAt).getMonth() < 6 ? 'H1' : 'H2')
+      const groupKey = `${dealerId}-${year}-${half}`
+
+      if (!groups[groupKey]) groups[groupKey] = []
+      groups[groupKey].push(order)
+    })
+
+    // Sorting each group and assigning IDs
+    Object.values(groups).forEach(group => {
+      group.sort((a, b) => new Date(a.createdAt) - new Date(b.createdAt))
+      group.forEach((order, index) => {
+        const year = order.targetYear || new Date(order.createdAt).getFullYear()
+        const half = order.targetHalf || (new Date(order.createdAt).getMonth() < 6 ? 'H1' : 'H2')
+        const halfLabel = half === 'H1' ? '1s' : '2s'
+        ids[order._id] = `${year} ${halfLabel} ${index + 1}`
+      })
+    })
+
+    return ids
+  }, [orders, dealerOrders, dealers])
+
+  const [expandedOrderRows, setExpandedOrderRows] = useState([])
+
+  const toggleOrderRow = (orderId) => {
+    setExpandedOrderRows(prev =>
+      prev.includes(orderId) ? prev.filter(id => id !== orderId) : [...prev, orderId]
+    )
+  }
   const [editingDealerOrderPaidAmount, setEditingDealerOrderPaidAmount] = useState(null)
   const [savingDealerOrderPaidAmount, setSavingDealerOrderPaidAmount] = useState(false)
   const [editingTotalPaid, setEditingTotalPaid] = useState(false)
@@ -173,6 +236,7 @@ function AdminPage({ language, toggleLanguage, t }) {
   const [commissionRates, setCommissionRates] = useState(['7%', '8%', '9%', '10%', '11%']) // Default fallback
   const [showManageCommissions, setShowManageCommissions] = useState(false)
   const [newCommissionRate, setNewCommissionRate] = useState('')
+  const [productSortConfig, setProductSortConfig] = useState({ key: 'productId', direction: 'asc' })
   const [showManageDiscount, setShowManageDiscount] = useState(false)
   const [discountAmount, setDiscountAmount] = useState(0)
   const [discountEnabled, setDiscountEnabled] = useState(false)
@@ -189,12 +253,25 @@ function AdminPage({ language, toggleLanguage, t }) {
     setExpandedDealerId(prev => (prev === id ? null : id))
   }
   const [savingCollection, setSavingCollection] = useState(false)
+  const [showReturnForm, setShowReturnForm] = useState(false)
+  const [returnForm, setReturnForm] = useState({
+    productId: '',
+    variant: null,
+    packQuantity: '',
+    cartonQuantity: '',
+    returnPlace: ''
+  })
+  const [savingReturn, setSavingReturn] = useState(false)
 
   // Revenue Filtering State
   const [revenueFilterType, setRevenueFilterType] = useState('monthly') // Default to 'monthly'
   const [revenueSelectedDate, setRevenueSelectedDate] = useState(new Date().toISOString().split('T')[0])
   const [revenueSelectedMonth, setRevenueSelectedMonth] = useState(new Date().getMonth()) // 0-11
   const [revenueSelectedYear, setRevenueSelectedYear] = useState(new Date().getFullYear())
+  const [revenueSelectedHalf, setRevenueSelectedHalf] = useState('H1') // 'H1' or 'H2'
+  const [revenueSelectedRegion, setRevenueSelectedRegion] = useState('')
+  const [revenueSelectedArea, setRevenueSelectedArea] = useState('')
+  const [revenueSelectedTerritory, setRevenueSelectedTerritory] = useState('')
 
   // Manage Target State
   const [salesTargets, setSalesTargets] = useState([])
@@ -228,6 +305,21 @@ function AdminPage({ language, toggleLanguage, t }) {
   const [savingInventory, setSavingInventory] = useState(false)
   const [inventoryStatus, setInventoryStatus] = useState('')
   const [expandedInventoryId, setExpandedInventoryId] = useState(null)
+  const [inventoryFilter, setInventoryFilter] = useState('monthly') // all, monthly, yearly, half
+  const [inventorySelectedMonth, setInventorySelectedMonth] = useState(new Date().getMonth())
+  const [inventorySelectedYear, setInventorySelectedYear] = useState(new Date().getFullYear())
+  const [inventorySelectedHalf, setInventorySelectedHalf] = useState(new Date().getMonth() < 6 ? 'H1' : 'H2')
+  const [inventorySortField, setInventorySortField] = useState('productCode')
+  const [inventorySortDirection, setInventorySortDirection] = useState('asc')
+
+  const [territories, setTerritories] = useState([])
+  const [loadingTerritories, setLoadingTerritories] = useState(false)
+  const [showTerritoryForm, setShowTerritoryForm] = useState(false)
+  const [territoryForm, setTerritoryForm] = useState({ territoryId: '', regionId: '', areaId: '', division: '', zilla: '', area: '' })
+  const [savingTerritory, setSavingTerritory] = useState(false)
+  const [territoryStatus, setTerritoryStatus] = useState('')
+  const [territorySortField, setTerritorySortField] = useState('regionId')
+  const [territorySortDirection, setTerritorySortDirection] = useState('asc')
 
 
   // Fetch settings on mount
@@ -431,6 +523,10 @@ function AdminPage({ language, toggleLanguage, t }) {
   const [orderStatus, setOrderStatus] = useState('')
   const [orderSearch, setOrderSearch] = useState('')
   const [orderFilter, setOrderFilter] = useState('all') // 'all', 'rejected', 'cancelled'
+  const [orderTimeFilter, setOrderTimeFilter] = useState('monthly') // 'monthly', 'yearly', 'all'
+  const [orderSelectedMonth, setOrderSelectedMonth] = useState(new Date().getMonth()) // 0-11
+  const [orderSelectedYear, setOrderSelectedYear] = useState(new Date().getFullYear())
+  const [showOrderFilterDropdown, setShowOrderFilterDropdown] = useState(false)
   const [orderSortField, setOrderSortField] = useState(null) // null, 'date', 'orderId', 'dealer', 'totalPrice', etc.
   const [orderSortDirection, setOrderSortDirection] = useState('asc') // 'asc' or 'desc'
   const [orderForm, setOrderForm] = useState({
@@ -439,11 +535,60 @@ function AdminPage({ language, toggleLanguage, t }) {
     variant: { productCode: '', packSize: '', packUnit: 'ml', cartoonSize: 1, cartoonUnit: 'Pcs', price: 0 },
     quantity: 1,
     notes: '',
-    status: 'Pending',
-    paidAmount: 0
+    status: (userRole || '').toLowerCase() === 'admin' ? 'Processing' : 'Pending',
+    paidAmount: 0,
+    targetHalf: new Date().getMonth() < 6 ? 'H1' : 'H2', // Current half
+    targetYear: new Date().getFullYear(), // Current year
+    targetMonth: new Date().getMonth() // Current month (0-11)
   })
   const [selectedProductVariants, setSelectedProductVariants] = useState([])
   const [productSearch, setProductSearch] = useState('')
+  const productList = products.length ? products : t.products.items
+  const filteredProducts = useMemo(() => {
+    let list = [...productList].filter((product) => {
+      if (!productSearch.trim()) return true
+      const query = productSearch.toLowerCase().trim()
+      return (
+        (product.productId || '').toLowerCase().includes(query) ||
+        (product.name || '').toLowerCase().includes(query) ||
+        (product.genericName || '').toLowerCase().includes(query) ||
+        (product.description || '').toLowerCase().includes(query) ||
+        (product.usage || '').toLowerCase().includes(query) ||
+        (product.category || '').toLowerCase().includes(query)
+      )
+    })
+
+    if (productSortConfig.key) {
+      list.sort((a, b) => {
+        let valA = a[productSortConfig.key] || ''
+        let valB = b[productSortConfig.key] || ''
+
+        // Special handling for Product ID (e.g., BP001)
+        if (productSortConfig.key === 'productId') {
+          const numA = parseInt((valA.match(/\d+/) || [0])[0], 10)
+          const numB = parseInt((valB.match(/\d+/) || [0])[0], 10)
+          if (numA !== numB) return productSortConfig.direction === 'asc' ? numA - numB : numB - numA
+        }
+
+        // Special handling for Price
+        if (productSortConfig.key === 'price') {
+          const priceA = a.priceCategory === 'per_variant'
+            ? Math.min(...(a.variants || []).map(v => v.price || 0))
+            : (a.price || 0)
+          const priceB = b.priceCategory === 'per_variant'
+            ? Math.min(...(b.variants || []).map(v => v.price || 0))
+            : (b.price || 0)
+          return productSortConfig.direction === 'asc' ? priceA - priceB : priceB - priceA
+        }
+
+        if (valA < valB) return productSortConfig.direction === 'asc' ? -1 : 1
+        if (valA > valB) return productSortConfig.direction === 'asc' ? 1 : -1
+        return 0
+      })
+    }
+
+    return list
+  }, [productList, productSearch, productSortConfig])
   const [productStatus, setProductStatus] = useState('')
   const [productForm, setProductForm] = useState({
     productId: '',
@@ -494,6 +639,9 @@ function AdminPage({ language, toggleLanguage, t }) {
     bankBranch: '',
     accountNumber: '',
     department: '',
+    regionId: '',
+    areaId: '',
+    territoryId: '',
     postingArea: '',
     role: '',
     designation: '',
@@ -515,6 +663,10 @@ function AdminPage({ language, toggleLanguage, t }) {
     nid: '',
     tradeLicense: '',
     pesticideLicense: '',
+
+    regionId: '',
+    areaId: '',
+    territoryId: '',
     area: '',
     agreement: '',
     assignedTo: '',
@@ -587,6 +739,75 @@ function AdminPage({ language, toggleLanguage, t }) {
       return role.includes('sales')
     })
   }, [employees])
+
+  // Derived state for Add Dealer form territory dropdowns
+  const uniqueRegionIds = useMemo(() => {
+    if (!territories) return []
+    return [...new Set(territories.map(t => t.regionId))].filter(Boolean).sort()
+  }, [territories])
+
+  const availableAreaIds = useMemo(() => {
+    if (!newDealer.regionId || !territories) return []
+    return [...new Set(territories
+      .filter(t => t.regionId === newDealer.regionId)
+      .map(t => t.areaId))].filter(Boolean).sort()
+  }, [territories, newDealer.regionId])
+
+  const availableTerritoryIds = useMemo(() => {
+    if (!newDealer.regionId || !newDealer.areaId || !territories) return []
+    return [...new Set(territories
+      .filter(t => t.regionId === newDealer.regionId && t.areaId === newDealer.areaId)
+      .map(t => t.territoryId))].filter(Boolean).sort()
+  }, [territories, newDealer.regionId, newDealer.areaId])
+
+  // Employee Form Location Options
+  const employeeAvailableAreaIds = useMemo(() => {
+    if (!newEmployee.regionId || !territories) return []
+    return [...new Set(territories
+      .filter(t => t.regionId === newEmployee.regionId)
+      .map(t => t.areaId))].filter(Boolean).sort()
+  }, [territories, newEmployee.regionId])
+
+  const employeeAvailableTerritoryIds = useMemo(() => {
+    if (!newEmployee.regionId || !newEmployee.areaId || !territories) return []
+    return [...new Set(territories
+      .filter(t => t.regionId === newEmployee.regionId && t.areaId === newEmployee.areaId)
+      .map(t => t.territoryId))].filter(Boolean).sort()
+  }, [territories, newEmployee.regionId, newEmployee.areaId])
+
+  const editEmployeeAvailableAreaIds = useMemo(() => {
+    if (!editingEmployeeData?.regionId || !territories) return []
+    return [...new Set(territories
+      .filter(t => t.regionId === editingEmployeeData.regionId)
+      .map(t => t.areaId))].filter(Boolean).sort()
+  }, [territories, editingEmployeeData?.regionId])
+
+  const editEmployeeAvailableTerritoryIds = useMemo(() => {
+    if (!editingEmployeeData?.regionId || !editingEmployeeData?.areaId || !territories) return []
+    return [...new Set(territories
+      .filter(t => t.regionId === editingEmployeeData.regionId && t.areaId === editingEmployeeData.areaId)
+      .map(t => t.territoryId))].filter(Boolean).sort()
+  }, [territories, editingEmployeeData?.regionId, editingEmployeeData?.areaId])
+
+  // Revenue Location Filter Options
+  const revenueUniqueRegionIds = useMemo(() => {
+    if (!territories) return []
+    return [...new Set(territories.map(t => t.regionId))].filter(Boolean).sort()
+  }, [territories])
+
+  const revenueAvailableAreaIds = useMemo(() => {
+    if (!revenueSelectedRegion || !territories) return []
+    return [...new Set(territories
+      .filter(t => t.regionId === revenueSelectedRegion)
+      .map(t => t.areaId))].filter(Boolean).sort()
+  }, [revenueSelectedRegion, territories])
+
+  const revenueAvailableTerritoryIds = useMemo(() => {
+    if (!revenueSelectedRegion || !revenueSelectedArea || !territories) return []
+    return [...new Set(territories
+      .filter(t => t.regionId === revenueSelectedRegion && t.areaId === revenueSelectedArea)
+      .map(t => t.territoryId))].filter(Boolean).sort()
+  }, [revenueSelectedRegion, revenueSelectedArea, territories])
   // Body Scroll Locking for Modals
   // Body Scroll Locking for Modals
   useEffect(() => {
@@ -851,8 +1072,24 @@ function AdminPage({ language, toggleLanguage, t }) {
         (o.createdAt && new Date(o.createdAt).toLocaleDateString().toLowerCase().includes(q))
       )
     }
+
+    // Apply time-based filter
+    if (orderTimeFilter === 'monthly') {
+      list = list.filter((o) => {
+        const orderTargetMonth = o.targetMonth !== undefined ? o.targetMonth : new Date(o.createdAt).getMonth()
+        const orderTargetYear = o.targetYear || new Date(o.createdAt).getFullYear()
+        return orderTargetMonth === orderSelectedMonth && orderTargetYear === orderSelectedYear
+      })
+    } else if (orderTimeFilter === 'yearly') {
+      list = list.filter((o) => {
+        const orderTargetYear = o.targetYear || new Date(o.createdAt).getFullYear()
+        return orderTargetYear === orderSelectedYear
+      })
+    }
+    // For 'all', no time filtering
+
     return list
-  }, [orders, orderSearch, orderFilter])
+  }, [orders, orderSearch, orderFilter, orderTimeFilter, orderSelectedMonth, orderSelectedYear])
 
   // Sorted orders
   const sortedOrders = useMemo(() => {
@@ -1021,7 +1258,12 @@ function AdminPage({ language, toggleLanguage, t }) {
 
   useEffect(() => {
     loadDealers()
-  }, [userRole, loggedInUserId, loggedInUser])
+    // Load territories for Admin/RSM/Incharge to ensure filters work
+    const role = (userRole || '').toLowerCase()
+    if (role === 'admin' || role === 'rsm' || role === 'incharge') {
+      loadTerritories()
+    }
+  }, [activeTab, userRole, loggedInUserId, loggedInUser])
 
   // Restore sub-views once data is loaded
   useEffect(() => {
@@ -1164,7 +1406,13 @@ function AdminPage({ language, toggleLanguage, t }) {
   const loadInventory = async () => {
     setLoadingInventory(true)
     try {
-      const res = await fetch(`${API_BASE}/api/inventory`)
+      const params = new URLSearchParams({
+        period: inventoryFilter,
+        selectedMonth: inventorySelectedMonth,
+        selectedYear: inventorySelectedYear,
+        selectedHalf: inventorySelectedHalf
+      })
+      const res = await fetch(`${API_BASE}/api/inventory?${params}`)
       if (res.ok) {
         const data = await res.json()
         setInventory(data.data || [])
@@ -1173,6 +1421,86 @@ function AdminPage({ language, toggleLanguage, t }) {
       console.error('Failed to load inventory', err)
     } finally {
       setLoadingInventory(false)
+    }
+  }
+
+  const loadEmployees = async () => {
+    setLoadingEmployees(true)
+    try {
+      const res = await fetch(`${API_BASE}/api/employees`)
+      if (res.ok) {
+        const empData = await res.json()
+        setEmployees((empData.data || []).map((e) => ({
+          ...e,
+          status: normalizeSalaryStatus(e.status)
+        })))
+      }
+    } catch (err) {
+      console.error('Failed to load employees', err)
+    } finally {
+      setLoadingEmployees(false)
+    }
+  }
+
+  const loadTerritories = async () => {
+    setLoadingTerritories(true)
+    try {
+      const res = await fetch(`${API_BASE}/api/territories`)
+      if (res.ok) {
+        const data = await res.json()
+        setTerritories(data.data || [])
+      }
+    } catch (err) {
+      console.error('Failed to load territories', err)
+    } finally {
+      setLoadingTerritories(false)
+    }
+  }
+
+  const resetTerritoryForm = () => {
+    setTerritoryForm({ territoryId: '', regionId: '', areaId: '', division: '', zilla: '', area: '' })
+    setTerritoryStatus('')
+  }
+
+  const handleSaveTerritory = async (e) => {
+    e.preventDefault()
+    setSavingTerritory(true)
+    setTerritoryStatus('')
+    try {
+      const method = territoryForm._id ? 'PUT' : 'POST'
+      const url = territoryForm._id ? `${API_BASE}/api/territories/${territoryForm._id}` : `${API_BASE}/api/territories`
+      const res = await fetch(url, {
+        method,
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(territoryForm)
+      })
+      if (res.ok) {
+        setTerritoryStatus(language === 'en' ? 'Territory saved successfully!' : 'টেরিটরি সফলভাবে সংরক্ষিত হয়েছে!')
+        setTimeout(() => {
+          setShowTerritoryForm(false)
+          resetTerritoryForm()
+          loadTerritories()
+        }, 1500)
+      } else {
+        const error = await res.json()
+        setTerritoryStatus(`Error: ${error.message}`)
+      }
+    } catch (err) {
+      setTerritoryStatus(`Error: ${err.message}`)
+    } finally {
+      setSavingTerritory(false)
+    }
+  }
+
+  const handleDeleteTerritory = async (id) => {
+    if (!window.confirm(language === 'en' ? 'Are you sure you want to delete this territory?' : 'আপনি কি নিশ্চিত যে আপনি এই টেরিটরি মুছে ফেলতে চান?')) return
+    try {
+      const res = await fetch(`${API_BASE}/api/territories/${id}`, { method: 'DELETE' })
+      if (res.ok) {
+        loadTerritories()
+      }
+    } catch (err) {
+      console.error('Failed to delete territory', err)
     }
   }
 
@@ -1246,10 +1574,12 @@ function AdminPage({ language, toggleLanguage, t }) {
     }
   }, [activeTab, userRole, showOrderRequests])
 
-  // Load orders when Revenue tab is active (needed for Total Collection and Total Due calculations)
+  // Load orders and employees when Revenue tab is active
   useEffect(() => {
     if (activeTab === 'revenue') {
       loadOrders()
+      loadEmployees()
+      loadTerritories()
     }
   }, [activeTab])
 
@@ -1260,12 +1590,19 @@ function AdminPage({ language, toggleLanguage, t }) {
     }
   }, [activeTab])
 
-  // Load inventory when Inventory tab is active
+  // Load inventory when Inventory tab is active or filters change
   useEffect(() => {
     if (activeTab === 'inventory') {
       loadInventory()
     }
-  }, [activeTab])
+  }, [activeTab, inventoryFilter, inventorySelectedMonth, inventorySelectedYear, inventorySelectedHalf])
+
+  // Load territories when territory tab is active, Revenue tab is active, or Dealer form is open
+  useEffect(() => {
+    if (activeTab === 'territory' || activeTab === 'revenue' || showDealerForm) {
+      loadTerritories()
+    }
+  }, [activeTab, showDealerForm])
 
   // Ensure orders are loaded when viewing sales history (even outside Orders tab)
   useEffect(() => {
@@ -1298,15 +1635,18 @@ function AdminPage({ language, toggleLanguage, t }) {
       variant: { productCode: '', packSize: '', packUnit: 'ml', cartoonSize: 1, cartoonUnit: 'Pcs', price: 0 },
       quantity: 1,
       notes: '',
-      status: 'Pending',
-      paidAmount: 0
+      status: (userRole || '').toLowerCase() === 'admin' ? 'Processing' : 'Pending',
+      paidAmount: 0,
+      targetHalf: new Date().getMonth() < 6 ? 'H1' : 'H2', // Reset to current half
+      targetYear: new Date().getFullYear(), // Reset to current year
+      targetMonth: new Date().getMonth() // Reset to current month
     })
     setSelectedProductVariants([])
     setEditingOrderId(null)
   }
 
   // Helper to get date range for revenue filtering
-  const getRevenueDateRange = (type, dateStr, month, year) => {
+  const getRevenueDateRange = (type, dateStr, month, year, half = 'H1') => {
     if (type === 'all') return { start: null, end: null }
 
     const start = new Date()
@@ -1322,15 +1662,29 @@ function AdminPage({ language, toggleLanguage, t }) {
       start.setHours(0, 0, 0, 0)
       end.setFullYear(year, 11, 31)
       end.setHours(23, 59, 59, 999)
+    } else if (type === 'half-yearly') {
+      if (half === 'H1') {
+        // 1st Half: January to June
+        start.setFullYear(year, 0, 1)
+        start.setHours(0, 0, 0, 0)
+        end.setFullYear(year, 5, 30)
+        end.setHours(23, 59, 59, 999)
+      } else {
+        // 2nd Half: July to December
+        start.setFullYear(year, 6, 1)
+        start.setHours(0, 0, 0, 0)
+        end.setFullYear(year, 11, 31)
+        end.setHours(23, 59, 59, 999)
+      }
     }
 
     return { start, end }
   }
 
   // Calculate Revenue Stats based on filters
-  // Calculate Revenue Stats based on filtered orders
-  const revenueStats = useMemo(() => {
-    const { start, end } = getRevenueDateRange(revenueFilterType, revenueSelectedDate, revenueSelectedMonth, revenueSelectedYear)
+  // Calculate Filtered Orders for Revenue once to be shared across widgets
+  const filteredOrdersForRevenue = useMemo(() => {
+    const { start, end } = getRevenueDateRange(revenueFilterType, revenueSelectedDate, revenueSelectedMonth, revenueSelectedYear, revenueSelectedHalf)
 
     let relevantOrders = orders || []
 
@@ -1340,14 +1694,55 @@ function AdminPage({ language, toggleLanguage, t }) {
       o.approvalStatus !== 'Rejected'
     )
 
-    let filteredOrdersForRevenue = [...relevantOrders]
-    if (start && end) {
-      filteredOrdersForRevenue = filteredOrdersForRevenue.filter(o => {
+    let filtered = [...relevantOrders]
+
+    // Filter by target period fields instead of createdAt
+    filtered = filtered.filter(o => {
+      if (revenueFilterType === 'half-yearly') {
+        // Check targetHalf and targetYear
+        return o.targetHalf === revenueSelectedHalf && o.targetYear === revenueSelectedYear
+      } else if (revenueFilterType === 'monthly') {
+        // Check targetMonth and targetYear
+        const orderTargetMonth = o.targetMonth !== undefined ? o.targetMonth : new Date(o.createdAt).getMonth()
+        const orderTargetYear = o.targetYear || new Date(o.createdAt).getFullYear()
+        return orderTargetMonth === revenueSelectedMonth && orderTargetYear === revenueSelectedYear
+      } else if (revenueFilterType === 'yearly') {
+        // Check targetYear
+        const orderTargetYear = o.targetYear || new Date(o.createdAt).getFullYear()
+        return orderTargetYear === revenueSelectedYear
+      } else if (start && end) {
+        // For 'all' or date-based filtering, use createdAt
         const d = new Date(o.createdAt)
         return d >= start && d <= end
+      }
+      return true // No filtering for 'all' without date range
+    })
+
+    // Location Filtering
+    if (revenueSelectedRegion || revenueSelectedArea || revenueSelectedTerritory) {
+      filtered = filtered.filter(o => {
+        const dealerId = o.dealer?._id || o.dealer
+        const dealer = dealers.find(d => d._id === dealerId)
+        if (!dealer) return false
+
+        if (revenueSelectedTerritory) {
+          return dealer.territoryId === revenueSelectedTerritory
+        }
+        if (revenueSelectedArea) {
+          return dealer.areaId === revenueSelectedArea
+        }
+        if (revenueSelectedRegion) {
+          return dealer.regionId === revenueSelectedRegion
+        }
+        return true
       })
     }
 
+    return filtered
+  }, [orders, dealers, revenueFilterType, revenueSelectedDate, revenueSelectedMonth, revenueSelectedYear, revenueSelectedHalf, revenueSelectedRegion, revenueSelectedArea, revenueSelectedTerritory])
+
+  // Calculate Revenue Stats based on filtered orders
+  const revenueStats = useMemo(() => {
     const totalRev = filteredOrdersForRevenue.reduce((sum, o) => {
       const total = Number(o.totalPrice || 0)
       const discount = o.discountEnabled && o.discountAmount > 0 ? o.discountAmount : 1
@@ -1365,42 +1760,17 @@ function AdminPage({ language, toggleLanguage, t }) {
       return sum + Math.max(0, grandTotal - (paid + commission))
     }, 0)
 
-    // 3. Calculate Collection & Commission (Payments Made in Range)
-    // iterating over RELEVANT orders (excluding cancelled)
+    // 3. Calculate Collection & Commission (based on Filtered Orders - Cohort View)
+    // This allows Revenue = Collection + Due to hold true (Revenue of orders in period = Collection for those orders + Due for those orders)
     let totalCol = 0
     let totalComm = 0
 
-    relevantOrders.forEach(order => {
-      const history = order.paymentHistory || []
+    filteredOrdersForRevenue.forEach(o => {
+      const paid = Number(o.paidAmount || 0)
+      const commission = (o.paymentHistory || []).reduce((cSum, p) => cSum + (parseFloat(p.commission) || 0), 0)
 
-      history.forEach(pay => {
-        if (pay.date && !isNaN(new Date(pay.date).getTime())) {
-          const pDate = new Date(pay.date)
-          if (start && end) {
-            if (pDate >= start && pDate <= end) {
-              const amount = Number(pay.amount || 0)
-              const comm = Number(pay.commission || 0)
-              totalCol += (amount + comm) // Collection = Cash + Comm (Effective Payment)
-              totalComm += comm
-            }
-          } else {
-            const amount = Number(pay.amount || 0)
-            const comm = Number(pay.commission || 0)
-            totalCol += (amount + comm)
-            totalComm += comm
-          }
-        }
-      })
-
-      // Handle legacy paidAmount if no history? (Assuming data migration or fallback)
-      if (history.length === 0 && Number(order.paidAmount) > 0) {
-        const cDate = new Date(order.createdAt)
-        if (!start || (cDate >= start && cDate <= end)) {
-          // If simply paidAmount is present, we assume it might include commission or is just cash.
-          // For safety, just add it. If backend migrates, it should populate history.
-          totalCol += Number(order.paidAmount)
-        }
-      }
+      totalCol += (paid + commission)
+      totalComm += commission
     })
 
     return {
@@ -1411,7 +1781,252 @@ function AdminPage({ language, toggleLanguage, t }) {
       grossCollection: totalCol, // Total Paid (Cash + Comm)
       cashCollection: totalCol - totalComm // Net Cash Received
     }
-  }, [orders, revenueFilterType, revenueSelectedDate, revenueSelectedMonth, revenueSelectedYear])
+  }, [orders, revenueFilterType, revenueSelectedDate, revenueSelectedMonth, revenueSelectedYear, revenueSelectedHalf])
+
+  // Calculate Product Wise Sale Summary
+  const productSalesSummary = useMemo(() => {
+    const summary = {}
+
+    filteredOrdersForRevenue.forEach(order => {
+      const discount = order.discountEnabled && order.discountAmount > 0 ? order.discountAmount : 1
+
+      // 1. Identify all "sale items" from the order
+      let saleItems = []
+      if (order.items && order.items.length > 0) {
+        saleItems = order.items
+      } else {
+        // Fallback for single-item order format
+        saleItems = [{
+          product: order.product?._id || order.product,
+          productId: order.productId,
+          productName: order.productName,
+          variant: order.variant,
+          quantity: order.quantity,
+          unitPrice: order.unitPrice || order.variant?.price || 0,
+          totalPrice: order.totalPrice,
+          hasOffer: order.hasOffer,
+          buyQuantity: order.buyQuantity,
+          freeQuantity: order.freeQuantity
+        }]
+      }
+
+      saleItems.forEach(item => {
+        const productId = item.product?._id || item.product
+        if (!productId) return
+
+        const v = item.variant || {}
+        const packDisplay = v.packSize ? `${v.packSize} ${v.packUnit || ''}`.trim() : ''
+        const cartoonDisplay = v.cartoonSize ? `(${v.cartoonSize} ${v.cartoonUnit || 'Pcs'})` : ''
+        const variantDisplay = `${packDisplay} ${cartoonDisplay}`.trim()
+        const variantKey = v.productCode || variantDisplay || 'Standard'
+        const groupKey = `${productId}-${variantKey}`
+
+        if (!summary[groupKey]) {
+          const product = products.find(p => p._id === productId) || {}
+          summary[groupKey] = {
+            productId,
+            productName: item.productName || product.name || 'Unknown',
+            variant: v,
+            variantDisplay,
+            unitPrice: parseFloat(item.unitPrice || item.price || v.price || 0),
+            quantity: 0,
+            freeQuantity: 0,
+            totalValue: 0
+          }
+        }
+
+        const itemQty = parseFloat(item.quantity) || 0
+        let freeQty = 0
+        if (item.hasOffer && item.buyQuantity && item.freeQuantity) {
+          const buyQty = parseFloat(item.buyQuantity) || 0
+          const offerFreeQty = parseFloat(item.freeQuantity) || 0
+          if (buyQty > 0) {
+            const eligibleOffers = Math.floor(itemQty / buyQty)
+            freeQty = eligibleOffers * offerFreeQty
+          }
+        }
+
+        const value = (parseFloat(item.totalPrice) || 0) * discount
+
+        summary[groupKey].quantity += itemQty
+        summary[groupKey].freeQuantity += freeQty
+        summary[groupKey].totalValue += value
+      })
+    })
+
+    const summaryArray = Object.values(summary).sort((a, b) => {
+      const codeA = parseInt(a.variant?.productCode) || 0
+      const codeB = parseInt(b.variant?.productCode) || 0
+      return codeA - codeB
+    })
+
+    // Calculate Totals
+    const totals = summaryArray.reduce((acc, curr) => ({
+      quantity: acc.quantity + curr.quantity,
+      totalValue: acc.totalValue + curr.totalValue
+    }), { quantity: 0, totalValue: 0 })
+
+    return {
+      items: summaryArray,
+      totals
+    }
+  }, [filteredOrdersForRevenue, products])
+
+  // Calculate Customer Wise Sale Summary (Ledger)
+  const customerSalesSummary = useMemo(() => {
+    // Determine the view mode based on selections
+    const viewMode = !revenueSelectedRegion ? 'region'
+      : !revenueSelectedArea ? 'area'
+        : !revenueSelectedTerritory ? 'territory'
+          : 'dealer'
+
+    const summary = {}
+
+    // 1. Pre-populate summary with all entities for the current level (Show all even if no orders)
+    if (territories) {
+      if (viewMode === 'region') {
+        const uniqueRegionIds = [...new Set(territories.map(t => t.regionId))].filter(Boolean)
+        uniqueRegionIds.forEach(rid => {
+          const t = territories.find(tObj => tObj.regionId === rid)
+          summary[rid] = {
+            id: rid,
+            label: t?.zilla || 'N/A',
+            revenue: 0,
+            due: 0,
+            orderCount: 0
+          }
+        })
+      } else if (viewMode === 'area') {
+        const filteredTerritories = territories.filter(t => t.regionId === revenueSelectedRegion)
+        filteredTerritories.forEach(t => {
+          if (t.areaId && !summary[t.areaId]) {
+            summary[t.areaId] = {
+              id: t.areaId,
+              label: t.area || 'N/A',
+              revenue: 0,
+              due: 0,
+              orderCount: 0
+            }
+          }
+        })
+      } else if (viewMode === 'territory') {
+        const filteredTerritories = territories.filter(t =>
+          t.regionId === revenueSelectedRegion && t.areaId === revenueSelectedArea
+        )
+        filteredTerritories.forEach(t => {
+          if (t.territoryId && !summary[t.territoryId]) {
+            summary[t.territoryId] = {
+              id: t.territoryId,
+              label: t.area || 'N/A',
+              revenue: 0,
+              due: 0,
+              orderCount: 0
+            }
+          }
+        })
+      } else if (viewMode === 'dealer' && dealers) {
+        const filteredDealers = dealers.filter(d => d.territoryId === revenueSelectedTerritory)
+        filteredDealers.forEach(d => {
+          summary[d._id] = {
+            id: d.dealerId || 'N/A',
+            label: d.name || 'Unknown',
+            shopName: d.shopName || 'N/A',
+            revenue: 0,
+            due: 0,
+            orderCount: 0
+          }
+        })
+      }
+    }
+
+    // 2. Aggregate actual order data
+    filteredOrdersForRevenue.forEach(order => {
+      let groupKey
+      const dealerId = order.dealer?._id || order.dealer
+      const d = (dealers || []).find(del => del._id === dealerId)
+
+      if (viewMode === 'region') {
+        groupKey = d?.regionId || 'Unknown'
+      } else if (viewMode === 'area') {
+        groupKey = d?.areaId || 'Unknown'
+      } else if (viewMode === 'territory') {
+        groupKey = d?.territoryId || 'Unknown'
+      } else {
+        groupKey = dealerId
+      }
+
+      if (!groupKey) return
+
+      if (!summary[groupKey]) {
+        // Fallback for data that wasn't pre-populated (e.g. data inconsistencies)
+        if (viewMode === 'dealer') {
+          summary[groupKey] = {
+            id: d?.dealerId || order.dealerId || 'N/A',
+            label: d?.name || order.dealerName || 'Unknown',
+            shopName: d?.shopName || 'N/A',
+            revenue: 0,
+            due: 0,
+            orderCount: 0
+          }
+        } else {
+          summary[groupKey] = {
+            id: groupKey,
+            label: 'N/A',
+            revenue: 0,
+            due: 0,
+            orderCount: 0
+          }
+        }
+      }
+
+      const discount = order.discountEnabled && order.discountAmount > 0 ? order.discountAmount : 1
+      const total = Number(order.totalPrice || 0)
+      const grandTotal = total * discount
+
+      summary[groupKey].revenue += grandTotal
+      summary[groupKey].due += Number(order.dueAmount || 0)
+      summary[groupKey].orderCount += 1
+    })
+
+    const summaryArray = Object.values(summary).sort((a, b) => b.revenue - a.revenue)
+
+    const totals = summaryArray.reduce((acc, curr) => ({
+      revenue: acc.revenue + curr.revenue,
+      due: acc.due + curr.due
+    }), { revenue: 0, due: 0 })
+
+    return {
+      items: summaryArray,
+      totals,
+      viewMode
+    }
+  }, [filteredOrdersForRevenue, dealers, territories, revenueSelectedRegion, revenueSelectedArea, revenueSelectedTerritory])
+
+  // Find Employee for the selected Territory in Revenue Dashboard
+  const ledgerEmployeeInfo = useMemo(() => {
+    if (!revenueSelectedTerritory || !employees || !territories) return null
+
+    // Find territory name to help matching if territoryId isn't enough
+    const currentTerritory = territories.find(t => String(t.territoryId) === String(revenueSelectedTerritory))
+    const territoryName = currentTerritory?.area
+
+    const emp = employees.find(e => {
+      const matchId = e.territoryId && String(e.territoryId) === String(revenueSelectedTerritory)
+      const matchPosting = e.postingArea && (
+        e.postingArea.includes(revenueSelectedTerritory) ||
+        (territoryName && e.postingArea.includes(territoryName))
+      )
+      return matchId || matchPosting
+    })
+
+    if (!emp) return null
+
+    return {
+      name: emp.name || 'N/A',
+      phone: emp.phone || 'N/A',
+      postingArea: emp.postingArea || emp.area || 'N/A'
+    }
+  }, [revenueSelectedTerritory, employees, territories])
 
   const inventoryStats = useMemo(() => {
     return {
@@ -1420,6 +2035,120 @@ function AdminPage({ language, toggleLanguage, t }) {
       totalValue: (inventory || []).reduce((sum, item) => sum + (item.quantity * (item.variant?.agentPrice || 0)), 0)
     }
   }, [inventory])
+
+  const sortedInventory = useMemo(() => {
+    let list = [...(inventory || [])]
+    if (!inventorySortField) return list
+
+    return list.sort((a, b) => {
+      let aValue, bValue
+
+      switch (inventorySortField) {
+        case 'productName':
+          aValue = (a.product?.name || '').toLowerCase()
+          bValue = (b.product?.name || '').toLowerCase()
+          break
+        case 'productCode':
+          aValue = (a.variant?.productCode || '').toLowerCase()
+          bValue = (b.variant?.productCode || '').toLowerCase()
+          break
+        case 'quantity':
+          aValue = parseFloat(a.quantity) || 0
+          bValue = parseFloat(b.quantity) || 0
+          break
+        case 'required':
+          aValue = parseFloat(a.requiredQuantity) || 0
+          bValue = parseFloat(b.requiredQuantity) || 0
+          break
+        case 'delivered':
+          aValue = parseFloat(a.deliveredQuantity) || 0
+          bValue = parseFloat(b.deliveredQuantity) || 0
+          break
+        default:
+          return 0
+      }
+
+      if (typeof aValue === 'string') {
+        return inventorySortDirection === 'asc'
+          ? aValue.localeCompare(bValue, undefined, { numeric: true, sensitivity: 'base' })
+          : bValue.localeCompare(aValue, undefined, { numeric: true, sensitivity: 'base' })
+      } else {
+        return inventorySortDirection === 'asc'
+          ? aValue - bValue
+          : bValue - aValue
+      }
+    })
+  }, [inventory, inventorySortField, inventorySortDirection])
+
+  const sortedTerritories = useMemo(() => {
+    let list = [...(territories || [])]
+    if (!territorySortField) return list
+
+    return list.sort((a, b) => {
+      let aValue, bValue
+
+      switch (territorySortField) {
+        case 'territoryId':
+          aValue = a.territoryId || ''
+          bValue = b.territoryId || ''
+          break
+        case 'regionId':
+          aValue = a.regionId || ''
+          bValue = b.regionId || ''
+          break
+        case 'areaId':
+          aValue = a.areaId || ''
+          bValue = b.areaId || ''
+          break
+        case 'division':
+          aValue = (a.division || '').toLowerCase()
+          bValue = (b.division || '').toLowerCase()
+          break
+        case 'zilla':
+          aValue = (a.zilla || '').toLowerCase()
+          bValue = (b.zilla || '').toLowerCase()
+          break
+        case 'area':
+          aValue = (a.area || '').toLowerCase()
+          bValue = (b.area || '').toLowerCase()
+          break
+        default:
+          return 0
+      }
+
+      if (typeof aValue === 'string' && (territorySortField === 'territoryId' || territorySortField === 'regionId' || territorySortField === 'areaId')) {
+        return territorySortDirection === 'asc'
+          ? aValue.localeCompare(bValue, undefined, { numeric: true, sensitivity: 'base' })
+          : bValue.localeCompare(aValue, undefined, { numeric: true, sensitivity: 'base' })
+      } else if (typeof aValue === 'string') {
+        return territorySortDirection === 'asc'
+          ? aValue.localeCompare(bValue)
+          : bValue.localeCompare(aValue)
+      } else {
+        return territorySortDirection === 'asc'
+          ? aValue - bValue
+          : bValue - aValue
+      }
+    })
+  }, [territories, territorySortField, territorySortDirection])
+
+  const handleSortTerritory = (field) => {
+    if (territorySortField === field) {
+      setTerritorySortDirection(territorySortDirection === 'asc' ? 'desc' : 'asc')
+    } else {
+      setTerritorySortField(field)
+      setTerritorySortDirection('asc')
+    }
+  }
+
+  const handleSortInventory = (field) => {
+    if (inventorySortField === field) {
+      setInventorySortDirection(inventorySortDirection === 'asc' ? 'desc' : 'asc')
+    } else {
+      setInventorySortField(field)
+      setInventorySortDirection('asc')
+    }
+  }
 
   const handleSaveOrder = async (e) => {
     e.preventDefault()
@@ -1570,7 +2299,7 @@ function AdminPage({ language, toggleLanguage, t }) {
 
         return {
           'Date': order.createdAt ? new Date(order.createdAt).toLocaleDateString() : '-',
-          'Order ID': order.orderId || '-',
+          'Order ID': customOrderIds[order._id] || order.orderId || '-',
           'Customer': order.dealerName || order.dealer?.name || '-',
           'CID': order.dealerId || order.dealer?.dealerId || '-',
           'Product': order.productName || order.product?.name || '-',
@@ -1842,8 +2571,7 @@ function AdminPage({ language, toggleLanguage, t }) {
     try {
       setSavingCollection(true)
 
-      // Sort orders by due amount (highest first) to reduce due amounts one by one
-      const sortedOrders = [...dealerOrders].map(order => {
+      const sortedOrders = [...filteredDealerOrders].map(order => {
         const totalPrice = parseFloat(order.totalPrice || 0)
         const discount = order.discountEnabled && order.discountAmount > 0 ? order.discountAmount : 1
         const grandTotal = totalPrice * discount
@@ -1857,7 +2585,6 @@ function AdminPage({ language, toggleLanguage, t }) {
 
       let remainingAmount = amount
 
-      // Update orders one by one, reducing due amounts
       for (const order of sortedOrders) {
         if (remainingAmount <= 0) break
 
@@ -1870,7 +2597,6 @@ function AdminPage({ language, toggleLanguage, t }) {
         const amountToAdd = Math.min(remainingAmount, currentDue)
         if (amountToAdd <= 0) continue
 
-        // Calculate commission for this payment chunk
         let commissionAmount = 0
         if (addCollectionCommission) {
           const rate = parseFloat(addCollectionCommission.replace('%', '')) || 0
@@ -1888,7 +2614,6 @@ function AdminPage({ language, toggleLanguage, t }) {
           body: JSON.stringify({
             paidAmount: newPaidAmount,
             dueAmount: newDueAmount,
-            // Send newPayment info so backend can record history
             newPayment: {
               amount: amountToAdd,
               commission: commissionAmount,
@@ -1904,17 +2629,151 @@ function AdminPage({ language, toggleLanguage, t }) {
         remainingAmount -= amountToAdd
       }
 
-      // Reload dealer orders to get updated data
       await handleShowDealerOrders()
-      setAddCollectionAmount('')
-
-      // Also reload main orders list
       await loadOrders()
+      setAddCollectionAmount('')
+      setAddCollectionCommission('')
+      alert(language === 'en' ? 'Collection added successfully!' : 'সংগ্রহ সফলভাবে যোগ করা হয়েছে!')
     } catch (err) {
       console.error('Failed to add collection:', err)
-      alert(language === 'en' ? 'Failed to add collection' : 'সংগ্রহ যোগ করতে ব্যর্থ')
+      alert(language === 'en' ? 'Failed to add collection' : 'সংগ্রহ যোগ করতে ব্যর্থ হয়েছে')
     } finally {
       setSavingCollection(false)
+    }
+  }
+
+  const handleReturnProduct = async () => {
+    if ((userRole || '').toLowerCase() !== 'admin') return
+    if (!returnForm.productId || (!returnForm.packQuantity && !returnForm.cartonQuantity)) {
+      alert(language === 'en' ? 'Please select product and quantity' : 'পণ্য এবং পরিমাণ নির্বাচন করুন')
+      return
+    }
+
+    try {
+      setSavingReturn(true)
+      const product = products.find(p => p._id === returnForm.productId)
+      if (!product) throw new Error('Product not found')
+
+      let unitPrice = 0
+      let cartonSize = 1
+
+      if (product.priceCategory === 'per_variant') {
+        const variant = product.variants.find(v => v.productCode === returnForm.variant)
+        if (!variant) throw new Error('Variant not found')
+        cartonSize = parseFloat(variant.cartoonSize) || 1
+        // variant.price is the carton price, divide by carton size to get unit price
+        const cartonPrice = parseFloat(variant.price) || 0
+        unitPrice = cartonPrice / cartonSize
+      } else {
+        unitPrice = parseFloat(product.price) || 0
+        cartonSize = product.variants?.[0]?.cartoonSize || 1
+      }
+
+      const packQty = parseFloat(returnForm.packQuantity) || 0
+      const cartonQty = parseFloat(returnForm.cartonQuantity) || 0
+
+      console.log('Return Product Info:', {
+        productName: product.name,
+        priceCategory: product.priceCategory,
+        variantCode: returnForm.variant,
+        unitPrice: unitPrice,
+        cartonSize: cartonSize,
+        packQty: packQty,
+        cartonQty: cartonQty
+      })
+
+      // Calculate base return amount (before discount)
+      const baseReturnAmount = (packQty * unitPrice) + (cartonQty * unitPrice * cartonSize)
+
+      if (baseReturnAmount <= 0) return
+
+      const sortedOrders = [...filteredDealerOrders].map(order => {
+        const totalPrice = parseFloat(order.totalPrice || 0)
+        const discount = order.discountEnabled && order.discountAmount > 0 ? order.discountAmount : 1
+        const grandTotal = totalPrice * discount
+        const paidAmount = parseFloat(order.paidAmount || 0)
+        const commission = (order.paymentHistory || []).reduce((cSum, p) => cSum + (parseFloat(p.commission) || 0), 0)
+        const dueAmount = order.dueAmount !== undefined
+          ? parseFloat(order.dueAmount)
+          : Math.max(0, grandTotal - (paidAmount + commission))
+        return { ...order, calculatedDue: dueAmount }
+      }).sort((a, b) => b.calculatedDue - a.calculatedDue)
+
+      let remainingBaseReturn = baseReturnAmount
+
+      for (const order of sortedOrders) {
+        if (remainingBaseReturn <= 0) break
+
+        const totalPrice = parseFloat(order.totalPrice) || 0
+        const currentPaid = parseFloat(order.paidAmount || 0)
+        const currentDue = order.calculatedDue
+        const discount = order.discountEnabled && order.discountAmount > 0 ? order.discountAmount : 1
+
+        // Calculate the discounted return amount for this order
+        const discountedReturnForOrder = remainingBaseReturn * discount
+        const amountToDeduct = Math.min(discountedReturnForOrder, currentDue)
+        if (amountToDeduct <= 0) continue
+
+        // Deduct from totalPrice (base price before discount)
+        const baseAmountToDeduct = amountToDeduct / discount
+        const newTotalPrice = totalPrice - baseAmountToDeduct
+        const newGrandTotal = newTotalPrice * discount
+        const currentHistComm = (order.paymentHistory || []).reduce((sum, p) => sum + (parseFloat(p.commission) || 0), 0)
+        const newDueAmount = Math.max(0, newGrandTotal - (currentPaid + currentHistComm))
+
+        console.log('Return Calculation:', {
+          orderId: order.orderId,
+          originalTotalPrice: totalPrice,
+          discount: discount,
+          baseReturnAmount: baseReturnAmount,
+          discountedReturnForOrder: discountedReturnForOrder,
+          amountToDeduct: amountToDeduct,
+          baseAmountToDeduct: baseAmountToDeduct,
+          newTotalPrice: newTotalPrice,
+          newGrandTotal: newGrandTotal,
+          currentPaid: currentPaid,
+          newDueAmount: newDueAmount
+        })
+
+        const res = await fetch(`${API_BASE}/api/orders/${order._id}`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            totalPrice: newTotalPrice,
+            dueAmount: newDueAmount,
+            newPayment: {
+              amount: amountToDeduct,
+              commission: 0,
+              type: 'Return',
+              date: new Date(),
+              note: `Product Return: ${product.name} - ${packQty} P/B, ${cartonQty} C`,
+              metadata: {
+                productName: product.name,
+                productId: product._id,
+                variantCode: returnForm.variant,
+                packQuantity: packQty,
+                cartonQuantity: cartonQty,
+                returnPlace: returnForm.returnPlace
+              }
+            }
+          })
+        })
+
+        if (!res.ok) throw new Error('Failed to update order for return')
+        remainingBaseReturn -= baseAmountToDeduct
+      }
+
+      console.log('Return processed successfully, refreshing dealer orders...')
+      await handleShowDealerOrders(viewingDealer)
+      await loadOrders()
+      setReturnForm({ productId: '', variant: null, packQuantity: '', cartonQuantity: '', returnPlace: '' })
+      setShowReturnForm(false)
+      alert(language === 'en' ? 'Product return processed successfully!' : 'পণ্য ফেরত সফলভাবে সম্পন্ন হয়েছে!')
+    } catch (err) {
+      console.error('Error returning product:', err)
+      alert(language === 'en' ? 'Failed to process return' : 'ফেরত সম্পন্ন করতে ব্যর্থ হয়েছে')
+    } finally {
+      setSavingReturn(false)
     }
   }
 
@@ -2034,6 +2893,9 @@ function AdminPage({ language, toggleLanguage, t }) {
         requestedByRole: userRole || '',
         discountAmount: parseFloat(discountAmount) || 0,
         discountEnabled: !!discountEnabled,
+        targetHalf: orderForm.targetHalf || (new Date().getMonth() < 6 ? 'H1' : 'H2'),
+        targetYear: orderForm.targetYear || new Date().getFullYear(),
+        targetMonth: orderForm.targetMonth !== undefined ? orderForm.targetMonth : new Date().getMonth(),
         ...(editingOrderId && {
           paidAmount: orderForm.paidAmount || 0
         })
@@ -2295,6 +3157,9 @@ function AdminPage({ language, toggleLanguage, t }) {
           bankBranch: editingEmployeeData.bankBranch,
           accountNumber: editingEmployeeData.accountNumber,
           department: editingEmployeeData.department,
+          regionId: editingEmployeeData.regionId,
+          areaId: editingEmployeeData.areaId,
+          territoryId: editingEmployeeData.territoryId,
           postingArea: editingEmployeeData.postingArea,
           designation: editingEmployeeData.designation,
           photo: editingEmployeeData.photo,
@@ -2353,6 +3218,9 @@ function AdminPage({ language, toggleLanguage, t }) {
           nid: newDealer.nid,
           tradeLicense: newDealer.tradeLicense,
           pesticideLicense: newDealer.pesticideLicense,
+          regionId: newDealer.regionId,
+          areaId: newDealer.areaId,
+          territoryId: newDealer.territoryId,
           area: newDealer.area,
           agreement: newDealer.agreement,
           assignedTo: newDealer.assignedTo || undefined,
@@ -2375,6 +3243,9 @@ function AdminPage({ language, toggleLanguage, t }) {
         nid: '',
         tradeLicense: '',
         pesticideLicense: '',
+        regionId: '',
+        areaId: '',
+        territoryId: '',
         area: '',
         agreement: '',
         assignedTo: '',
@@ -2484,14 +3355,7 @@ function AdminPage({ language, toggleLanguage, t }) {
         } else {
           setPageImages(defaultPageImages)
         }
-        const resEmployees = await fetch(`${API_BASE}/api/employees`)
-        if (resEmployees.ok) {
-          const empData = await resEmployees.json()
-          setEmployees((empData.data || []).map((e) => ({
-            ...e,
-            status: normalizeSalaryStatus(e.status)
-          })))
-        }
+        await loadEmployees()
       } catch (err) {
         console.error('Failed to load initial data', err)
         setPageImages(defaultPageImages)
@@ -4431,7 +5295,7 @@ function AdminPage({ language, toggleLanguage, t }) {
 
     const roleAccess = {
       'RSM': ['dashboard', 'profile', 'crm', 'products', 'orders', 'revenue'],
-      'Incharge': ['dashboard', 'profile', 'products', 'orders', 'inventory'],
+      'Incharge': ['dashboard', 'profile', 'products', 'orders', 'inventory', 'territory'],
       'SalesMan': ['dashboard', 'profile', 'products', 'orders']
     }
 
@@ -4511,6 +5375,8 @@ function AdminPage({ language, toggleLanguage, t }) {
     inventory: 'Inventory',
     revenue: 'Revenue',
     manageAsset: 'Manage Asset',
+    territory: 'Territory Management',
+    territoryId: 'Territory ID',
     settings: 'Settings',
     logout: 'Logout',
     overview: 'Overview',
@@ -4577,6 +5443,8 @@ function AdminPage({ language, toggleLanguage, t }) {
     inventory: 'ইনভেন্টরি',
     revenue: 'রাজস্ব',
     manageAsset: 'সম্পদ ব্যবস্থাপনা',
+    territory: 'টেরিটরি ম্যানেজমেন্ট',
+    territoryId: 'টেরিটরি আইডি',
     settings: 'সেটিংস',
     logout: 'লগআউট',
     overview: 'ওভারভিউ',
@@ -4642,24 +5510,13 @@ function AdminPage({ language, toggleLanguage, t }) {
     ]
   }
 
-  const productList = products.length ? products : t.products.items
-  const filteredProducts = productList.filter((product) => {
-    if (!productSearch.trim()) return true
-    const query = productSearch.toLowerCase().trim()
-    return (
-      (product.productId || '').toLowerCase().includes(query) ||
-      (product.name || '').toLowerCase().includes(query) ||
-      (product.genericName || '').toLowerCase().includes(query) ||
-      (product.description || '').toLowerCase().includes(query) ||
-      (product.usage || '').toLowerCase().includes(query) ||
-      (product.category || '').toLowerCase().includes(query)
-    )
-  })
-
   // Helper function to handle tab change and close sidebar on mobile
   const handleTabChange = (tab) => {
     setActiveTab(tab)
     setSidebarOpen(false)
+    if (tab === 'revenue' || tab === 'territory') {
+      loadTerritories()
+    }
   }
 
   // Loading Spinner Component
@@ -4838,6 +5695,18 @@ function AdminPage({ language, toggleLanguage, t }) {
                   <path d="M8 14h8" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
                 </svg>
                 {adminContent.inventory}
+              </button>
+            )}
+            {canAccessTab('territory') && (
+              <button
+                className={`admin-nav-item ${activeTab === 'territory' ? 'active' : ''}`}
+                onClick={() => handleTabChange('territory')}
+              >
+                <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                  <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+                  <circle cx="12" cy="10" r="3" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+                </svg>
+                {adminContent.territory}
               </button>
             )}
             {canAccessTab('manageAsset') && (
@@ -5617,10 +6486,62 @@ function AdminPage({ language, toggleLanguage, t }) {
                     <table className="admin-table">
                       <thead>
                         <tr>
-                          <th>{language === 'en' ? 'Product ID' : 'পণ্য আইডি'}</th>
-                          <th>{adminContent.productName}</th>
-                          <th>{adminContent.category}</th>
-                          <th>{language === 'en' ? 'Price' : 'মূল্য'}</th>
+                          <th
+                            onClick={() => {
+                              const direction = productSortConfig.key === 'productId' && productSortConfig.direction === 'asc' ? 'desc' : 'asc'
+                              setProductSortConfig({ key: 'productId', direction })
+                            }}
+                            style={{ cursor: 'pointer', userSelect: 'none' }}
+                          >
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+                              {language === 'en' ? 'Product ID' : 'পণ্য আইডি'}
+                              {productSortConfig.key === 'productId' && (
+                                <span>{productSortConfig.direction === 'asc' ? '↑' : '↓'}</span>
+                              )}
+                            </div>
+                          </th>
+                          <th
+                            onClick={() => {
+                              const direction = productSortConfig.key === 'name' && productSortConfig.direction === 'asc' ? 'desc' : 'asc'
+                              setProductSortConfig({ key: 'name', direction })
+                            }}
+                            style={{ cursor: 'pointer', userSelect: 'none' }}
+                          >
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+                              {adminContent.productName}
+                              {productSortConfig.key === 'name' && (
+                                <span>{productSortConfig.direction === 'asc' ? '↑' : '↓'}</span>
+                              )}
+                            </div>
+                          </th>
+                          <th
+                            onClick={() => {
+                              const direction = productSortConfig.key === 'category' && productSortConfig.direction === 'asc' ? 'desc' : 'asc'
+                              setProductSortConfig({ key: 'category', direction })
+                            }}
+                            style={{ cursor: 'pointer', userSelect: 'none' }}
+                          >
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+                              {adminContent.category}
+                              {productSortConfig.key === 'category' && (
+                                <span>{productSortConfig.direction === 'asc' ? '↑' : '↓'}</span>
+                              )}
+                            </div>
+                          </th>
+                          <th
+                            onClick={() => {
+                              const direction = productSortConfig.key === 'price' && productSortConfig.direction === 'asc' ? 'desc' : 'asc'
+                              setProductSortConfig({ key: 'price', direction })
+                            }}
+                            style={{ cursor: 'pointer', userSelect: 'none' }}
+                          >
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+                              {language === 'en' ? 'Price' : 'মূল্য'}
+                              {productSortConfig.key === 'price' && (
+                                <span>{productSortConfig.direction === 'asc' ? '↑' : '↓'}</span>
+                              )}
+                            </div>
+                          </th>
                           <th>{language === 'en' ? 'Actions' : 'কার্যক্রম'}</th>
                         </tr>
                       </thead>
@@ -7391,6 +8312,9 @@ function AdminPage({ language, toggleLanguage, t }) {
                             nid: '',
                             tradeLicense: '',
                             pesticideLicense: '',
+                            regionId: '',
+                            areaId: '',
+                            territoryId: '',
                             area: '',
                             agreement: '',
                             assignedTo: '',
@@ -7428,6 +8352,49 @@ function AdminPage({ language, toggleLanguage, t }) {
                       )}
                       <form onSubmit={handleAddDealer} className="admin-form-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: '1rem' }}>
                         <div className="admin-form-group">
+                          <label>{language === 'en' ? 'Region ID' : 'অঞ্চল আইডি'}</label>
+                          <select
+                            value={newDealer.regionId}
+                            onChange={(e) => setNewDealer({ ...newDealer, regionId: e.target.value, areaId: '', territoryId: '' })}
+                            style={{ width: '100%', padding: '0.5rem', border: '1px solid #d1d5db', borderRadius: '0.375rem', fontSize: '0.95rem' }}
+                          >
+                            <option value="">{language === 'en' ? 'Select Region' : 'অঞ্চল নির্বাচন করুন'}</option>
+                            {uniqueRegionIds.map(id => <option key={id} value={id}>{id}</option>)}
+                          </select>
+                        </div>
+                        <div className="admin-form-group">
+                          <label>{language === 'en' ? 'Area ID' : 'এলাকা আইডি'}</label>
+                          <select
+                            value={newDealer.areaId}
+                            onChange={(e) => setNewDealer({ ...newDealer, areaId: e.target.value, territoryId: '' })}
+                            disabled={!newDealer.regionId}
+                            style={{ width: '100%', padding: '0.5rem', border: '1px solid #d1d5db', borderRadius: '0.375rem', fontSize: '0.95rem', opacity: !newDealer.regionId ? 0.7 : 1 }}
+                          >
+                            <option value="">{language === 'en' ? 'Select Area ID' : 'এলাকা আইডি নির্বাচন করুন'}</option>
+                            {availableAreaIds.map(id => <option key={id} value={id}>{id}</option>)}
+                          </select>
+                        </div>
+                        <div className="admin-form-group">
+                          <label>{adminContent.territoryId}</label>
+                          <select
+                            value={newDealer.territoryId}
+                            onChange={(e) => {
+                              const tid = e.target.value
+                              const found = territories.find(t => t.regionId === newDealer.regionId && t.areaId === newDealer.areaId && t.territoryId === tid)
+                              setNewDealer({
+                                ...newDealer,
+                                territoryId: tid,
+                                area: found ? found.area : newDealer.area
+                              })
+                            }}
+                            disabled={!newDealer.areaId}
+                            style={{ width: '100%', padding: '0.5rem', border: '1px solid #d1d5db', borderRadius: '0.375rem', fontSize: '0.95rem', opacity: !newDealer.areaId ? 0.7 : 1 }}
+                          >
+                            <option value="">{language === 'en' ? 'Select Territory' : 'টেরিটরি নির্বাচন করুন'}</option>
+                            {availableTerritoryIds.map(id => <option key={id} value={id}>{id}</option>)}
+                          </select>
+                        </div>
+                        <div className="admin-form-group">
                           <label>{language === 'en' ? 'CID' : 'সিআইডি'}</label>
                           <input type="text" value={newDealer.dealerId} onChange={(e) => setNewDealer({ ...newDealer, dealerId: e.target.value })} />
                         </div>
@@ -7463,8 +8430,9 @@ function AdminPage({ language, toggleLanguage, t }) {
                           <label>{language === 'en' ? 'Pesticides License Number' : 'কীটনাশক লাইসেন্স নম্বর'}</label>
                           <input type="text" value={newDealer.pesticideLicense} onChange={(e) => setNewDealer({ ...newDealer, pesticideLicense: e.target.value })} />
                         </div>
+
                         <div className="admin-form-group">
-                          <label>{language === 'en' ? 'Area' : 'এলাকা'}</label>
+                          <label>{language === 'en' ? 'Area Name' : 'এলাকার নাম'}</label>
                           <input type="text" value={newDealer.area} onChange={(e) => setNewDealer({ ...newDealer, area: e.target.value })} />
                         </div>
                         <div className="admin-form-group">
@@ -7555,6 +8523,9 @@ function AdminPage({ language, toggleLanguage, t }) {
                                 nid: '',
                                 tradeLicense: '',
                                 pesticideLicense: '',
+                                regionId: '',
+                                areaId: '',
+                                territoryId: '',
                                 area: '',
                                 agreement: '',
                                 assignedTo: '',
@@ -7958,7 +8929,47 @@ function AdminPage({ language, toggleLanguage, t }) {
                               : (language === 'en' ? 'Orders' : 'অর্ডার')}
                           </button>
                         )}
-                        {!isEditingDealer && (
+
+                        {/* Dealer Order Filters (Only when showing orders) */}
+                        {showDealerOrders && !isEditingDealer && (
+                          <>
+                            <select
+                              value={dealerFilterHalf}
+                              onChange={(e) => setDealerFilterHalf(e.target.value)}
+                              style={{
+                                padding: '0.45rem 0.85rem',
+                                border: '1px solid #d1d5db',
+                                borderRadius: '0.5rem',
+                                cursor: 'pointer',
+                                fontWeight: 700,
+                                fontSize: '0.9rem',
+                                outline: 'none'
+                              }}
+                            >
+                              <option value="H1">H1 (Jan-Jun)</option>
+                              <option value="H2">H2 (Jul-Dec)</option>
+                            </select>
+                            <select
+                              value={dealerFilterYear}
+                              onChange={(e) => setDealerFilterYear(parseInt(e.target.value))}
+                              style={{
+                                padding: '0.45rem 0.85rem',
+                                border: '1px solid #d1d5db',
+                                borderRadius: '0.5rem',
+                                cursor: 'pointer',
+                                fontWeight: 700,
+                                fontSize: '0.9rem',
+                                outline: 'none'
+                              }}
+                            >
+                              {Array.from({ length: 5 }, (_, i) => new Date().getFullYear() + 1 - i).map(year => (
+                                <option key={year} value={year}>{year}</option>
+                              ))}
+                            </select>
+                          </>
+                        )}
+
+                        {!isEditingDealer && !showDealerOrders && (
                           <button
                             onClick={() => {
                               setIsEditingDealer(true)
@@ -8089,166 +9100,280 @@ function AdminPage({ language, toggleLanguage, t }) {
                               {!dealerOrdersLoading && dealerOrders.length > 0 && (
                                 <>
                                   {(() => {
-                                    const totalAmount = dealerOrders.reduce((sum, order) => {
+                                    // Filter used to be here, now using centralized filteredDealerOrders from scope
+
+
+                                    const totalAmount = filteredDealerOrders.reduce((sum, order) => {
                                       const price = parseFloat(order.totalPrice || 0)
                                       const discount = order.discountEnabled && order.discountAmount > 0 ? order.discountAmount : 1
                                       return sum + (price * discount)
                                     }, 0)
 
-                                    const totalPaid = dealerOrders.reduce((sum, order) => {
+                                    const totalPaid = filteredDealerOrders.reduce((sum, order) => {
                                       const paid = order.paidAmount ? parseFloat(order.paidAmount) || 0 : 0
-                                      const commission = (order.paymentHistory || []).reduce((cSum, p) => cSum + (parseFloat(p.commission) || 0), 0)
+                                      const commission = (order.paymentHistory || [])
+                                        .filter(p => p.type !== 'Return')
+                                        .reduce((cSum, p) => cSum + (parseFloat(p.commission) || 0), 0)
                                       return sum + paid + commission
                                     }, 0)
 
-                                    const totalDue = dealerOrders.reduce((sum, order) => {
+                                    const totalDue = filteredDealerOrders.reduce((sum, order) => {
                                       const price = parseFloat(order.totalPrice || 0)
                                       const discount = order.discountEnabled && order.discountAmount > 0 ? order.discountAmount : 1
                                       const grandTotal = price * discount
                                       const paid = order.paidAmount ? parseFloat(order.paidAmount) || 0 : 0
-                                      const commission = (order.paymentHistory || []).reduce((cSum, p) => cSum + (parseFloat(p.commission) || 0), 0)
+                                      const commission = (order.paymentHistory || [])
+                                        .filter(p => p.type !== 'Return')
+                                        .reduce((cSum, p) => cSum + (parseFloat(p.commission) || 0), 0)
                                       const due = Math.max(0, grandTotal - (paid + commission))
                                       return sum + due
                                     }, 0)
 
                                     return (
-                                      <div style={{
-                                        display: 'grid',
-                                        gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))',
-                                        gap: '1rem',
-                                        marginBottom: '1.5rem'
-                                      }}>
+                                      <>
                                         <div style={{
-                                          padding: '1rem',
-                                          borderRadius: '0.5rem',
-                                          backgroundColor: '#ffffff',
-                                          border: '1px solid #e5e7eb'
+                                          display: 'grid',
+                                          gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))',
+                                          gap: '1rem',
+                                          marginBottom: '1.5rem'
                                         }}>
-                                          <div style={{ fontSize: '0.875rem', color: '#6b7280', fontWeight: 700, marginBottom: '0.5rem' }}>
-                                            {language === 'en' ? 'Total Amount' : 'মোট পরিমাণ'}
-                                          </div>
-                                          <div style={{ fontSize: '1.5rem', fontWeight: 800, color: '#0f172a' }}>
-                                            ৳{Number(totalAmount || 0).toLocaleString()}
-                                          </div>
-                                        </div>
-                                        <div style={{
-                                          padding: '1rem',
-                                          borderRadius: '0.5rem',
-                                          backgroundColor: '#f0fdf4',
-                                          border: '1px solid #dcfce7'
-                                        }}>
-                                          <div style={{ fontSize: '0.875rem', color: '#15803d', fontWeight: 700, marginBottom: '0.5rem' }}>
-                                            {language === 'en' ? 'Total Paid' : 'মোট পরিশোধিত'}
-                                          </div>
-                                          <div style={{ fontSize: '1.5rem', fontWeight: 800, color: '#166534' }}>
-                                            ৳{Number(totalPaid || 0).toLocaleString()}
-                                          </div>
-                                        </div>
-                                        <div style={{
-                                          padding: '1rem',
-                                          borderRadius: '0.5rem',
-                                          backgroundColor: '#fff7ed',
-                                          border: '1px solid #fed7aa'
-                                        }}>
-                                          <div style={{ fontSize: '0.875rem', color: '#c2410c', fontWeight: 700, marginBottom: '0.5rem' }}>
-                                            {language === 'en' ? 'Total Due' : 'মোট বকেয়া'}
-                                          </div>
-                                          <div style={{ fontSize: '1.5rem', fontWeight: 800, color: '#9a3412' }}>
-                                            ৳{Number(totalDue || 0).toLocaleString()}
-                                          </div>
-                                        </div>
-                                        <div style={{
-                                          padding: '1rem',
-                                          borderRadius: '0.5rem',
-                                          backgroundColor: '#fef2f2',
-                                          border: '1px solid #fecaca'
-                                        }}>
-                                          <div style={{ fontSize: '0.875rem', color: '#b91c1c', fontWeight: 700, marginBottom: '0.5rem' }}>
-                                            {language === 'en' ? 'Total Commission' : 'মোট কমিশন'}
-                                          </div>
-                                          <div style={{ fontSize: '1.5rem', fontWeight: 800, color: '#991b1b' }}>
-                                            ৳{dealerOrders.reduce((sum, order) => {
-                                              const orderComm = (order.paymentHistory || []).reduce((pSum, p) => pSum + (parseFloat(p.commission) || 0), 0)
-                                              return sum + orderComm
-                                            }, 0).toLocaleString(undefined, { maximumFractionDigits: 0 })}
-                                          </div>
-                                        </div>
-                                        {isAdmin && (
                                           <div style={{
                                             padding: '1rem',
                                             borderRadius: '0.5rem',
-                                            backgroundColor: '#eff6ff',
-                                            border: '1px solid #bfdbfe'
+                                            backgroundColor: '#ffffff',
+                                            border: '1px solid #e5e7eb'
                                           }}>
-                                            <div style={{ fontSize: '0.875rem', color: '#1e40af', fontWeight: 700, marginBottom: '0.5rem' }}>
-                                              {language === 'en' ? 'Add Collection' : 'সংগ্রহ যোগ করুন'}
+                                            <div style={{ fontSize: '0.875rem', color: '#6b7280', fontWeight: 700, marginBottom: '0.5rem' }}>
+                                              {language === 'en' ? 'Total Amount' : 'মোট পরিমাণ'}
                                             </div>
-                                            <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center', flexWrap: 'wrap' }}>
-                                              <select
-                                                value={addCollectionCommission}
-                                                onChange={(e) => setAddCollectionCommission(e.target.value)}
-                                                style={{
-                                                  padding: '0.5rem',
-                                                  border: '1px solid #3b82f6',
-                                                  borderRadius: '0.375rem',
-                                                  fontSize: '1rem',
-                                                  fontWeight: 600,
-                                                  color: '#1e40af',
-                                                  backgroundColor: 'white',
-                                                  width: '100px'
-                                                }}
-                                              >
-                                                <option value="">Comm %</option>
-                                                {commissionRates.map(rate => (
-                                                  <option key={rate} value={rate}>{rate}</option>
-                                                ))}
-                                              </select>
-                                              <input
-                                                type="number"
-                                                min="0"
-                                                value={addCollectionAmount}
-                                                onChange={(e) => setAddCollectionAmount(e.target.value)}
-                                                onKeyDown={(e) => {
-                                                  if (e.key === 'Enter') {
-                                                    e.preventDefault()
-                                                    handleAddCollection(addCollectionAmount)
-                                                  }
-                                                }}
-                                                placeholder={language === 'en' ? 'Enter amount' : 'পরিমাণ লিখুন'}
-                                                style={{
-                                                  flex: 1,
-                                                  minWidth: '120px',
-                                                  padding: '0.5rem',
-                                                  border: '1px solid #3b82f6',
-                                                  borderRadius: '0.375rem',
-                                                  fontSize: '1rem',
-                                                  fontWeight: 600,
-                                                  color: '#1e40af'
-                                                }}
-                                              />
-                                              <button
-                                                onClick={() => handleAddCollection(addCollectionAmount)}
-                                                disabled={savingCollection || !addCollectionAmount || parseFloat(addCollectionAmount) <= 0}
-                                                style={{
-                                                  padding: '0.5rem 1rem',
-                                                  backgroundColor: savingCollection ? '#9ca3af' : '#3b82f6',
-                                                  color: 'white',
-                                                  border: 'none',
-                                                  borderRadius: '0.375rem',
-                                                  fontSize: '0.875rem',
-                                                  fontWeight: 700,
-                                                  cursor: savingCollection || !addCollectionAmount || parseFloat(addCollectionAmount) <= 0 ? 'not-allowed' : 'pointer',
-                                                  whiteSpace: 'nowrap'
-                                                }}
-                                              >
-                                                {savingCollection
-                                                  ? (language === 'en' ? 'Adding...' : 'যোগ করা হচ্ছে...')
-                                                  : (language === 'en' ? 'Add' : 'যোগ করুন')}
-                                              </button>
+                                            <div style={{ fontSize: '1.5rem', fontWeight: 800, color: '#0f172a' }}>
+                                              ৳{Number(totalAmount || 0).toLocaleString()}
+                                            </div>
+                                          </div>
+                                          <div style={{
+                                            padding: '1rem',
+                                            borderRadius: '0.5rem',
+                                            backgroundColor: '#f0fdf4',
+                                            border: '1px solid #dcfce7'
+                                          }}>
+                                            <div style={{ fontSize: '0.875rem', color: '#15803d', fontWeight: 700, marginBottom: '0.5rem' }}>
+                                              {language === 'en' ? 'Total Paid' : 'মোট পরিশোধিত'}
+                                            </div>
+                                            <div style={{ fontSize: '1.5rem', fontWeight: 800, color: '#166534' }}>
+                                              ৳{Number(totalPaid || 0).toLocaleString()}
+                                            </div>
+                                          </div>
+                                          <div style={{
+                                            padding: '1rem',
+                                            borderRadius: '0.5rem',
+                                            backgroundColor: '#fff7ed',
+                                            border: '1px solid #fed7aa'
+                                          }}>
+                                            <div style={{ fontSize: '0.875rem', color: '#c2410c', fontWeight: 700, marginBottom: '0.5rem' }}>
+                                              {language === 'en' ? 'Total Due' : 'মোট বকেয়া'}
+                                            </div>
+                                            <div style={{ fontSize: '1.5rem', fontWeight: 800, color: '#9a3412' }}>
+                                              ৳{Number(totalDue || 0).toLocaleString()}
+                                            </div>
+                                          </div>
+                                          <div style={{
+                                            padding: '1rem',
+                                            borderRadius: '0.5rem',
+                                            backgroundColor: '#fef2f2',
+                                            border: '1px solid #fecaca'
+                                          }}>
+                                            <div style={{ fontSize: '0.875rem', color: '#b91c1c', fontWeight: 700, marginBottom: '0.5rem' }}>
+                                              {language === 'en' ? 'Total Commission' : 'মোট কমিশন'}
+                                            </div>
+                                            <div style={{ fontSize: '1.5rem', fontWeight: 800, color: '#991b1b' }}>
+                                              ৳{filteredDealerOrders.reduce((sum, order) => {
+                                                const orderComm = (order.paymentHistory || []).reduce((pSum, p) => pSum + (parseFloat(p.commission) || 0), 0)
+                                                return sum + orderComm
+                                              }, 0).toLocaleString(undefined, { maximumFractionDigits: 0 })}
+                                            </div>
+                                          </div>
+                                        </div>
+
+                                        {isAdmin && (
+                                          <div style={{
+                                            display: 'grid',
+                                            gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))',
+                                            gap: '1rem',
+                                            marginBottom: '1.5rem'
+                                          }}>
+                                            <div style={{
+                                              padding: '1rem',
+                                              borderRadius: '0.5rem',
+                                              backgroundColor: '#eff6ff',
+                                              border: '1px solid #bfdbfe'
+                                            }}>
+                                              <div style={{ fontSize: '0.875rem', color: '#1e40af', fontWeight: 700, marginBottom: '0.5rem' }}>
+                                                {language === 'en' ? 'Add Collection' : 'সংগ্রহ যোগ করুন'}
+                                              </div>
+                                              <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center', flexWrap: 'wrap' }}>
+                                                <select
+                                                  value={addCollectionCommission}
+                                                  onChange={(e) => setAddCollectionCommission(e.target.value)}
+                                                  style={{
+                                                    padding: '0.5rem',
+                                                    border: '1px solid #3b82f6',
+                                                    borderRadius: '0.375rem',
+                                                    fontSize: '1rem',
+                                                    fontWeight: 600,
+                                                    color: '#1e40af',
+                                                    backgroundColor: 'white',
+                                                    width: '100px'
+                                                  }}
+                                                >
+                                                  <option value="">Comm %</option>
+                                                  {commissionRates.map(rate => (
+                                                    <option key={rate} value={rate}>{rate}</option>
+                                                  ))}
+                                                </select>
+                                                <input
+                                                  type="number"
+                                                  min="0"
+                                                  value={addCollectionAmount}
+                                                  onChange={(e) => setAddCollectionAmount(e.target.value)}
+                                                  onKeyDown={(e) => {
+                                                    if (e.key === 'Enter') {
+                                                      e.preventDefault()
+                                                      handleAddCollection(addCollectionAmount)
+                                                    }
+                                                  }}
+                                                  placeholder={language === 'en' ? 'Enter amount' : 'পরিমাণ লিখুন'}
+                                                  style={{
+                                                    flex: 1,
+                                                    minWidth: '120px',
+                                                    padding: '0.5rem',
+                                                    border: '1px solid #3b82f6',
+                                                    borderRadius: '0.375rem',
+                                                    fontSize: '1rem',
+                                                    fontWeight: 600,
+                                                    color: '#1e40af'
+                                                  }}
+                                                />
+                                                <button
+                                                  onClick={() => handleAddCollection(addCollectionAmount)}
+                                                  disabled={savingCollection || !addCollectionAmount || parseFloat(addCollectionAmount) <= 0}
+                                                  style={{
+                                                    padding: '0.5rem 1rem',
+                                                    backgroundColor: savingCollection ? '#9ca3af' : '#3b82f6',
+                                                    color: 'white',
+                                                    border: 'none',
+                                                    borderRadius: '0.375rem',
+                                                    fontSize: '0.875rem',
+                                                    fontWeight: 700,
+                                                    cursor: savingCollection || !addCollectionAmount || parseFloat(addCollectionAmount) <= 0 ? 'not-allowed' : 'pointer',
+                                                    whiteSpace: 'nowrap'
+                                                  }}
+                                                >
+                                                  {savingCollection
+                                                    ? (language === 'en' ? 'Adding...' : 'যোগ করা হচ্ছে...')
+                                                    : (language === 'en' ? 'Add' : 'যোগ করুন')}
+                                                </button>
+                                              </div>
+                                            </div>
+
+                                            <div style={{
+                                              padding: '1rem',
+                                              borderRadius: '0.5rem',
+                                              backgroundColor: '#fef2f2',
+                                              border: '1px solid #fecaca'
+                                            }}>
+                                              <div style={{ fontSize: '0.875rem', color: '#b91c1c', fontWeight: 700, marginBottom: '0.5rem' }}>
+                                                {language === 'en' ? 'Return Product' : 'পণ্য ফেরত'}
+                                              </div>
+                                              <div style={{ display: 'flex', gap: '0.5rem', flexDirection: 'column' }}>
+                                                {/* Product Selection Row */}
+                                                <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
+                                                  <select
+                                                    value={returnForm.productId}
+                                                    onChange={(e) => {
+                                                      const prodId = e.target.value
+                                                      const product = products.find(p => p._id === prodId)
+                                                      setReturnForm({ ...returnForm, productId: prodId, variant: product?.variants?.[0]?.productCode || '' })
+                                                    }}
+                                                    style={{
+                                                      flex: '1 1 200px',
+                                                      padding: '0.5rem',
+                                                      border: '1px solid #ef4444',
+                                                      borderRadius: '0.375rem',
+                                                      fontSize: '0.875rem'
+                                                    }}
+                                                  >
+                                                    <option value="">{language === 'en' ? 'Select Product' : 'পণ্য নির্বাচন করুন'}</option>
+                                                    {products.map(p => (
+                                                      <option key={p._id} value={p._id}>{p.name}</option>
+                                                    ))}
+                                                  </select>
+                                                  {returnForm.productId && products.find(p => p._id === returnForm.productId)?.priceCategory === 'per_variant' && (
+                                                    <select
+                                                      value={returnForm.variant}
+                                                      onChange={(e) => setReturnForm({ ...returnForm, variant: e.target.value })}
+                                                      style={{
+                                                        flex: '1 1 150px',
+                                                        padding: '0.5rem',
+                                                        border: '1px solid #ef4444',
+                                                        borderRadius: '0.375rem',
+                                                        fontSize: '0.875rem'
+                                                      }}
+                                                    >
+                                                      {products.find(p => p._id === returnForm.productId).variants.map(v => (
+                                                        <option key={v.productCode} value={v.productCode}>{v.packSize}{v.packUnit}</option>
+                                                      ))}
+                                                    </select>
+                                                  )}
+                                                </div>
+                                                {/* Quantities and Place Row */}
+                                                <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
+                                                  <input
+                                                    type="number"
+                                                    placeholder={language === 'en' ? 'Pack Qty' : 'প্যাক পরিমাণ'}
+                                                    value={returnForm.packQuantity}
+                                                    onChange={(e) => setReturnForm({ ...returnForm, packQuantity: e.target.value })}
+                                                    style={{ flex: '1 1 100px', padding: '0.5rem', border: '1px solid #ef4444', borderRadius: '0.375rem' }}
+                                                  />
+                                                  <input
+                                                    type="number"
+                                                    placeholder={language === 'en' ? 'Carton Qty' : 'কার্টুন পরিমাণ'}
+                                                    value={returnForm.cartonQuantity}
+                                                    onChange={(e) => setReturnForm({ ...returnForm, cartonQuantity: e.target.value })}
+                                                    style={{ flex: '1 1 100px', padding: '0.5rem', border: '1px solid #ef4444', borderRadius: '0.375rem' }}
+                                                  />
+                                                  <select
+                                                    value={returnForm.returnPlace}
+                                                    onChange={(e) => setReturnForm({ ...returnForm, returnPlace: e.target.value })}
+                                                    style={{ flex: '1 1 150px', padding: '0.5rem', border: '1px solid #ef4444', borderRadius: '0.375rem', fontSize: '0.875rem' }}
+                                                  >
+                                                    <option value="">{language === 'en' ? 'Return Place' : 'ফেরত স্থান'}</option>
+                                                    <option value="Customer Point">Customer Point</option>
+                                                    <option value="Salesman Point">Salesman Point</option>
+                                                    <option value="BCCL">BCCL</option>
+                                                  </select>
+                                                  <button
+                                                    onClick={handleReturnProduct}
+                                                    disabled={savingReturn || !returnForm.productId}
+                                                    style={{
+                                                      flex: '0 0 auto',
+                                                      padding: '0.5rem 1rem',
+                                                      backgroundColor: savingReturn ? '#9ca3af' : '#ef4444',
+                                                      color: 'white',
+                                                      border: 'none',
+                                                      borderRadius: '0.375rem',
+                                                      fontWeight: 700,
+                                                      cursor: savingReturn || !returnForm.productId ? 'not-allowed' : 'pointer',
+                                                      whiteSpace: 'nowrap'
+                                                    }}
+                                                  >
+                                                    {savingReturn ? '...' : (language === 'en' ? 'Return' : 'ফেরত')}
+                                                  </button>
+                                                </div>
+                                              </div>
                                             </div>
                                           </div>
                                         )}
-                                      </div>
+                                      </>
                                     )
                                   })()}
 
@@ -8256,7 +9381,8 @@ function AdminPage({ language, toggleLanguage, t }) {
                                   {(() => {
                                     // Flatten all payments from all orders
                                     const allPayments = []
-                                    dealerOrders.forEach(order => {
+                                    const allReturns = []
+                                    filteredDealerOrders.forEach(order => {
                                       const price = parseFloat(order.totalPrice || 0)
                                       const discount = order.discountEnabled && order.discountAmount > 0 ? order.discountAmount : 1
                                       const orderGrandTotal = price * discount
@@ -8270,6 +9396,23 @@ function AdminPage({ language, toggleLanguage, t }) {
                                       sortedHistory.forEach(payment => {
                                         const payAmount = parseFloat(payment.amount) || 0
                                         const commAmount = parseFloat(payment.commission) || 0
+                                        const isReturn = payment.type === 'Return'
+
+                                        if (isReturn) {
+                                          allReturns.push({
+                                            _id: payment._id || Math.random().toString(),
+                                            date: payment.date,
+                                            orderId: customOrderIds[order._id] || order.orderId,
+                                            amount: payAmount,
+                                            productName: payment.metadata?.productName || (payment.note?.split(': ')?.[1]?.split(' - ')?.[0]) || '',
+                                            packQty: payment.metadata?.packQuantity || (payment.note?.split(' - ')?.[1]?.split(' P/B')?.[0]) || 0,
+                                            cartonQty: payment.metadata?.cartonQuantity || (payment.note?.split(', ')?.[1]?.split(' C')?.[0]) || 0,
+                                            returnPlace: payment.metadata?.returnPlace || '',
+                                            note: payment.note || ''
+                                          })
+                                          return // Don't add to collection history
+                                        }
+
                                         const commPercent = payAmount > 0 ? Math.round(((commAmount / payAmount) * 100)) + '%' : '-'
 
                                         runningPaid += payAmount
@@ -8280,20 +9423,24 @@ function AdminPage({ language, toggleLanguage, t }) {
                                         allPayments.push({
                                           _id: payment._id || Math.random().toString(),
                                           date: payment.date,
-                                          orderId: order.orderId,
+                                          orderId: customOrderIds[order._id] || order.orderId,
                                           totalAmount: orderGrandTotal,
                                           runningPaid: totalPaidSoFar, // Total Paid (Cash + Comm) so far
                                           paidAmount: payAmount, // This transaction amount
                                           commissionPercent: commPercent,
                                           commission: commAmount,
                                           totalCommission: runningCommission, // Total Commission so far for this order
-                                          totalDue: runningDue // Total Due after this payment
+                                          totalDue: runningDue, // Total Due after this payment
+                                          note: payment.note || ''
                                         })
                                       })
                                     })
 
-                                    // Sort by Date Descending (Newest First) for display
+                                    // Sort by Date Descending
                                     allPayments.sort((a, b) => new Date(b.date) - new Date(a.date))
+                                    allReturns.sort((a, b) => new Date(b.date) - new Date(a.date))
+
+                                    console.log('Return History Data:', allReturns)
 
                                     return (
                                       <>
@@ -8304,8 +9451,8 @@ function AdminPage({ language, toggleLanguage, t }) {
                                           <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.875rem' }}>
                                             <thead>
                                               <tr style={{ backgroundColor: '#f8fafc', borderBottom: '2px solid #e2e8f0', textAlign: 'left' }}>
-                                                <th style={{ padding: '0.75rem', fontWeight: 600, color: '#475569' }}>{language === 'en' ? 'Date' : 'তারিখ'}</th>
-                                                <th style={{ padding: '0.75rem', fontWeight: 600, color: '#475569' }}>{language === 'en' ? 'Order ID' : 'অর্ডার আইডি'}</th>
+                                                <th style={{ padding: '0.75rem', fontWeight: 600, color: '#475569', textAlign: 'center' }}>{language === 'en' ? 'Date' : 'তারিখ'}</th>
+                                                <th style={{ padding: '0.75rem', fontWeight: 600, color: '#475569', textAlign: 'center' }}>{language === 'en' ? 'Order ID' : 'অর্ডার আইডি'}</th>
                                                 <th style={{ padding: '0.75rem', fontWeight: 600, color: '#475569', textAlign: 'right' }}>{language === 'en' ? 'Total Amount' : 'মোট পরিমাণ'}</th>
                                                 <th style={{ padding: '0.75rem', fontWeight: 600, color: '#475569', textAlign: 'right' }}>{language === 'en' ? 'Total Paid' : 'মোট পরিশোধিত'}</th>
                                                 <th style={{ padding: '0.75rem', fontWeight: 600, color: '#475569', textAlign: 'right' }}>{language === 'en' ? 'Paid' : 'পরিশোধ'}</th>
@@ -8319,10 +9466,10 @@ function AdminPage({ language, toggleLanguage, t }) {
                                               {allPayments.length > 0 ? (
                                                 allPayments.map((payment) => (
                                                   <tr key={payment._id} style={{ borderBottom: '1px solid #e2e8f0' }}>
-                                                    <td style={{ padding: '0.75rem', color: '#334155' }}>
+                                                    <td style={{ padding: '0.75rem', color: '#334155', textAlign: 'center' }}>
                                                       {new Date(payment.date).toLocaleDateString(language === 'en' ? 'en-US' : 'bn-BD')}
                                                     </td>
-                                                    <td style={{ padding: '0.75rem', color: '#334155', fontWeight: 500 }}>
+                                                    <td style={{ padding: '0.75rem', color: '#334155', fontWeight: 500, textAlign: 'center' }}>
                                                       {payment.orderId}
                                                     </td>
                                                     <td style={{ padding: '0.75rem', textAlign: 'right', color: '#334155' }}>
@@ -8350,7 +9497,7 @@ function AdminPage({ language, toggleLanguage, t }) {
                                                 ))
                                               ) : (
                                                 <tr>
-                                                  <td colSpan="9" style={{ padding: '1.5rem', textAlign: 'center', color: '#94a3b8' }}>
+                                                  <td colSpan="10" style={{ padding: '1.5rem', textAlign: 'center', color: '#94a3b8' }}>
                                                     {language === 'en' ? 'No payment history found' : 'কোন পেমেন্ট ইতিহাস পাওয়া যায়নি'}
                                                   </td>
                                                 </tr>
@@ -8410,6 +9557,106 @@ function AdminPage({ language, toggleLanguage, t }) {
                                             ))
                                           )}
                                         </div>
+
+                                        {/* Return History Table */}
+                                        <div className="admin-table-container" style={{ marginTop: '2rem' }}>
+                                          <h4 style={{ fontSize: '1.1rem', fontWeight: 700, color: '#b91c1c', marginBottom: '1rem' }}>
+                                            {language === 'en' ? 'Return History' : 'ফেরত ইতিহাস'}
+                                          </h4>
+                                          <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.875rem' }}>
+                                            <thead>
+                                              <tr style={{ backgroundColor: '#fef2f2', borderBottom: '2px solid #fecaca', textAlign: 'left' }}>
+                                                <th style={{ padding: '0.75rem', fontWeight: 600, color: '#991b1b' }}>{language === 'en' ? 'Date' : 'তারিখ'}</th>
+                                                <th style={{ padding: '0.75rem', fontWeight: 600, color: '#991b1b' }}>{language === 'en' ? 'Product' : 'পণ্য'}</th>
+                                                <th style={{ padding: '0.75rem', fontWeight: 600, color: '#991b1b', textAlign: 'center' }}>P/B</th>
+                                                <th style={{ padding: '0.75rem', fontWeight: 600, color: '#991b1b', textAlign: 'center' }}>Carton</th>
+                                                <th style={{ padding: '0.75rem', fontWeight: 600, color: '#991b1b', textAlign: 'right' }}>{language === 'en' ? 'Return Value' : 'ফেরত মূল্য'}</th>
+                                                <th style={{ padding: '0.75rem', fontWeight: 600, color: '#991b1b' }}>{language === 'en' ? 'Return Place' : 'ফেরত স্থান'}</th>
+                                              </tr>
+                                            </thead>
+                                            <tbody>
+                                              {allReturns.length > 0 ? (
+                                                allReturns.map((ret) => (
+                                                  <tr key={ret._id} style={{ borderBottom: '1px solid #fecaca' }}>
+                                                    <td style={{ padding: '0.75rem', color: '#334155' }}>
+                                                      {new Date(ret.date).toLocaleDateString(language === 'en' ? 'en-US' : 'bn-BD')}
+                                                    </td>
+                                                    <td style={{ padding: '0.75rem', color: '#334155', fontWeight: 500 }}>
+                                                      {ret.productName}
+                                                    </td>
+                                                    <td style={{ padding: '0.75rem', textAlign: 'center', color: '#334155' }}>
+                                                      {ret.packQty}
+                                                    </td>
+                                                    <td style={{ padding: '0.75rem', textAlign: 'center', color: '#334155' }}>
+                                                      {ret.cartonQty}
+                                                    </td>
+                                                    <td style={{ padding: '0.75rem', textAlign: 'right', color: '#b91c1c', fontWeight: 700 }}>
+                                                      ৳{Number(ret.amount).toLocaleString()}
+                                                    </td>
+                                                    <td style={{ padding: '0.75rem', color: '#64748b', fontStyle: 'italic' }}>
+                                                      {ret.returnPlace}
+                                                    </td>
+                                                  </tr>
+                                                ))
+                                              ) : (
+                                                <tr>
+                                                  <td colSpan="6" style={{ padding: '1.5rem', textAlign: 'center', color: '#94a3b8' }}>
+                                                    {language === 'en' ? 'No return history found' : 'কোন ফেরত ইতিহাস পাওয়া যায়নি'}
+                                                  </td>
+                                                </tr>
+                                              )}
+                                            </tbody>
+                                          </table>
+                                        </div>
+
+                                        {/* Mobile Card View for Return History */}
+                                        <div className="mobile-card-container" style={{ marginTop: '2rem' }}>
+                                          <h4 style={{ fontSize: '1.1rem', fontWeight: 700, color: '#b91c1c', marginBottom: '1rem', paddingLeft: '0.5rem' }}>
+                                            {language === 'en' ? 'Return History' : 'ফেরত ইতিহাস'}
+                                          </h4>
+                                          {allReturns.length === 0 ? (
+                                            <div style={{ textAlign: 'center', padding: '2rem', color: '#6b7280' }}>
+                                              {language === 'en' ? 'No return history found' : 'কোন ফেরত ইতিহাস পাওয়া যায়নি'}
+                                            </div>
+                                          ) : (
+                                            allReturns.map((ret) => (
+                                              <div className="mobile-card" key={ret._id} style={{ borderLeft: '4px solid #ef4444' }}>
+                                                <div className="mobile-card-header">
+                                                  <div className="mobile-card-avatar" style={{ backgroundColor: '#fef2f2', color: '#b91c1c' }}>
+                                                    R
+                                                  </div>
+                                                  <div className="mobile-card-header-text">
+                                                    <div className="mobile-card-title">{ret.orderId}</div>
+                                                    <div className="mobile-card-subtitle">
+                                                      {new Date(ret.date).toLocaleDateString(language === 'en' ? 'en-US' : 'bn-BD')}
+                                                    </div>
+                                                  </div>
+                                                </div>
+                                                <div className="mobile-card-body">
+                                                  <div className="mobile-card-row">
+                                                    <span className="mobile-card-label">{language === 'en' ? 'Product' : 'পণ্য'}</span>
+                                                    <span className="mobile-card-value">{ret.productName}</span>
+                                                  </div>
+                                                  <div className="mobile-card-row">
+                                                    <span className="mobile-card-label">P/B | Carton</span>
+                                                    <span className="mobile-card-value">{ret.packQty} | {ret.cartonQty}</span>
+                                                  </div>
+                                                  <div className="mobile-card-row">
+                                                    <span className="mobile-card-label">{language === 'en' ? 'Return Value' : 'ফেরত মূল্য'}</span>
+                                                    <span className="mobile-card-value" style={{ color: '#b91c1c', fontWeight: 700 }}>
+                                                      ৳{Number(ret.amount).toLocaleString()}
+                                                    </span>
+                                                  </div>
+                                                  <div className="mobile-card-row">
+                                                    <span className="mobile-card-label">{language === 'en' ? 'Return Place' : 'ফেরত স্থান'}</span>
+                                                    <span className="mobile-card-value" style={{ fontStyle: 'italic', fontSize: '0.75rem' }}>{ret.returnPlace}</span>
+                                                  </div>
+                                                </div>
+                                              </div>
+                                            ))
+                                          )}
+                                        </div>
+
                                       </>
                                     )
                                   })()}
@@ -8433,113 +9680,155 @@ function AdminPage({ language, toggleLanguage, t }) {
                                         </tr>
                                       </thead>
                                       <tbody>
-                                        {dealerOrders.map((order) => (
-                                          <tr key={order._id}>
-                                            <td style={{ padding: '0.5rem', whiteSpace: 'nowrap', textAlign: 'center' }}>{order.createdAt ? new Date(order.createdAt).toLocaleDateString() : '-'}</td>
-                                            <td style={{ padding: '0.5rem', whiteSpace: 'nowrap', textAlign: 'center' }}>{order.orderId || '-'}</td>
-                                            <td style={{ padding: '0.5rem', whiteSpace: 'nowrap', textAlign: 'center' }}>
-                                              {order.items && order.items.length > 0 ? (
-                                                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.25rem' }}>
-                                                  {order.items.map((item, idx) => (
-                                                    <div key={idx} style={{ borderBottom: idx < order.items.length - 1 ? '1px solid #f1f5f9' : 'none', paddingBottom: '2px', minHeight: '1.2em' }}>
-                                                      {item.productName || item.product?.name || '-'}
+                                        {filteredDealerOrders.map((order) => {
+                                          const isExpandable = order.items && order.items.length > 1;
+                                          const isExpanded = expandedOrderRows.includes(order._id);
+                                          return (
+                                            <tr
+                                              key={order._id}
+                                              onClick={() => isExpandable && toggleOrderRow(order._id)}
+                                              style={{
+                                                cursor: isExpandable ? 'pointer' : 'default',
+                                                transition: 'background-color 0.1s ease'
+                                              }}
+                                              className={isExpandable ? "hover:bg-gray-50" : ""}
+                                            >
+                                              <td style={{ padding: '0.5rem', whiteSpace: 'nowrap', textAlign: 'center' }}>{order.createdAt ? new Date(order.createdAt).toLocaleDateString() : '-'}</td>
+                                              <td style={{ padding: '0.5rem', whiteSpace: 'nowrap', textAlign: 'center', fontWeight: 'bold', color: '#475569' }}>
+                                                {customOrderIds[order._id] || order.orderId || '-'}
+                                              </td>
+                                              <td style={{ padding: '0.5rem', whiteSpace: 'nowrap', textAlign: 'center' }}>
+                                                {isExpandable ? (
+                                                  isExpanded ? (
+                                                    <div style={{ display: 'flex', flexDirection: 'column', gap: '0.25rem' }}>
+                                                      {order.items.map((item, idx) => (
+                                                        <div key={idx} style={{ borderBottom: idx < order.items.length - 1 ? '1px solid #f1f5f9' : 'none', paddingBottom: '2px', minHeight: '1.2em' }}>
+                                                          {item.productName || item.product?.name || '-'}
+                                                        </div>
+                                                      ))}
+
                                                     </div>
-                                                  ))}
-                                                </div>
-                                              ) : (
-                                                order.productName || order.product?.name || '-'
-                                              )}
-                                            </td>
-                                            <td style={{ padding: '0.5rem', whiteSpace: 'nowrap', textAlign: 'center' }}>
-                                              {order.items && order.items.length > 0 ? (
-                                                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.25rem' }}>
-                                                  {order.items.map((item, idx) => (
-                                                    <div key={idx} style={{ borderBottom: idx < order.items.length - 1 ? '1px solid #f1f5f9' : 'none', paddingBottom: '2px', minHeight: '1.2em' }}>
-                                                      {item.variant?.productCode ? `${item.variant.productCode} (${item.variant.packSize} ${item.variant.packUnit || 'ml'}) [${item.variant.cartoonSize || 1} ${item.variant.cartoonUnit || 'Pcs'}]` : '-'}
+                                                  ) : (
+                                                    <div style={{ padding: '0.2rem', color: '#3b82f6', fontWeight: 600 }}>
+                                                      Multiple Products ({order.items.length})
+
                                                     </div>
-                                                  ))}
-                                                </div>
-                                              ) : (
-                                                order.variant?.productCode ? `${order.variant.productCode} (${order.variant.packSize} ${order.variant.packUnit || 'ml'}) [${order.variant.cartoonSize || 1} ${order.variant.cartoonUnit || 'Pcs'}]` : '-'
-                                              )}
-                                            </td>
-                                            <td style={{ padding: '0.5rem', whiteSpace: 'nowrap', textAlign: 'center', fontWeight: 600 }}>
-                                              {order.items && order.items.length > 0 ? (
-                                                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.25rem' }}>
-                                                  {order.items.map((item, idx) => {
-                                                    const itemQty = parseFloat(item.quantity) || 0
-                                                    let freeQty = 0
-                                                    const itemProduct = (products || []).find(p => p._id === (item.product?._id || item.product))
-                                                    if (itemProduct && itemProduct.hasOffer && itemProduct.buyQuantity && itemProduct.freeQuantity) {
-                                                      const buyQty = parseFloat(itemProduct.buyQuantity) || 0
-                                                      const offerFreeQty = parseFloat(itemProduct.freeQuantity) || 0
-                                                      if (buyQty > 0) {
-                                                        const eligibleOffers = Math.floor(itemQty / buyQty)
-                                                        freeQty = eligibleOffers * offerFreeQty
+                                                  )
+                                                ) : (
+                                                  (order.items && order.items.length === 1) ? (
+                                                    order.items[0].productName || order.items[0].product?.name || '-'
+                                                  ) : (
+                                                    order.productName || order.product?.name || '-'
+                                                  )
+                                                )}
+                                              </td>
+                                              <td style={{ padding: '0.5rem', whiteSpace: 'nowrap', textAlign: 'center' }}>
+                                                {isExpandable ? (
+                                                  isExpanded ? (
+                                                    <div style={{ display: 'flex', flexDirection: 'column', gap: '0.25rem' }}>
+                                                      {order.items.map((item, idx) => (
+                                                        <div key={idx} style={{ borderBottom: idx < order.items.length - 1 ? '1px solid #f1f5f9' : 'none', paddingBottom: '2px', minHeight: '1.2em' }}>
+                                                          {item.variant?.productCode ? `${item.variant.productCode} (${item.variant.packSize} ${item.variant.packUnit || 'ml'}) [${item.variant.cartoonSize || 1} ${item.variant.cartoonUnit || 'Pcs'}]` : '-'}
+                                                        </div>
+                                                      ))}
+                                                    </div>
+                                                  ) : (
+                                                    <div style={{ color: '#64748b' }}>-</div>
+                                                  )
+                                                ) : (
+                                                  (order.items && order.items.length === 1) ? (
+                                                    order.items[0].variant?.productCode ? `${order.items[0].variant.productCode} (${order.items[0].variant.packSize} ${order.items[0].variant.packUnit || 'ml'}) [${order.items[0].variant.cartoonSize || 1} ${order.items[0].variant.cartoonUnit || 'Pcs'}]` : '-'
+                                                  ) : (
+                                                    order.variant?.productCode ? `${order.variant.productCode} (${order.variant.packSize} ${order.variant.packUnit || 'ml'}) [${order.variant.cartoonSize || 1} ${order.variant.cartoonUnit || 'Pcs'}]` : '-'
+                                                  )
+                                                )}
+                                              </td>
+                                              <td style={{ padding: '0.5rem', whiteSpace: 'nowrap', textAlign: 'center', fontWeight: 600 }}>
+                                                {isExpandable ? (
+                                                  isExpanded ? (
+                                                    <div style={{ display: 'flex', flexDirection: 'column', gap: '0.25rem' }}>
+                                                      {order.items.map((item, idx) => {
+                                                        const itemQty = parseFloat(item.quantity) || 0
+                                                        let freeQty = 0
+                                                        const itemProduct = (products || []).find(p => p._id === (item.product?._id || item.product))
+                                                        if (itemProduct && itemProduct.hasOffer && itemProduct.buyQuantity && itemProduct.freeQuantity) {
+                                                          const buyQty = parseFloat(itemProduct.buyQuantity) || 0
+                                                          const offerFreeQty = parseFloat(itemProduct.freeQuantity) || 0
+                                                          if (buyQty > 0) {
+                                                            const eligibleOffers = Math.floor(itemQty / buyQty)
+                                                            freeQty = eligibleOffers * offerFreeQty
+                                                          }
+                                                        }
+                                                        return (
+                                                          <div key={idx} style={{ borderBottom: idx < order.items.length - 1 ? '1px solid #f1f5f9' : 'none', paddingBottom: '2px', minHeight: '1.2em' }}>
+                                                            {freeQty > 0 ? `${itemQty + freeQty} (${freeQty})` : itemQty}
+                                                          </div>
+                                                        )
+                                                      })}
+                                                    </div>
+                                                  ) : (
+                                                    (() => {
+                                                      const totalQty = order.items.reduce((sum, item) => sum + (parseFloat(item.quantity) || 0), 0)
+                                                      return <span style={{ color: '#3b82f6', fontWeight: 700 }}>{totalQty} (Total)</span>
+                                                    })()
+                                                  )
+                                                ) : (
+                                                  (() => {
+                                                    const item = (order.items && order.items.length === 1) ? order.items[0] : order;
+                                                    const qty = parseFloat(item.quantity) || 0;
+                                                    let freeQty = 0;
+                                                    const p = (products || []).find(prod => prod._id === (item.product?._id || item.product));
+                                                    if (p && p.hasOffer && p.buyQuantity && p.freeQuantity) {
+                                                      const bQty = parseFloat(p.buyQuantity) || 0;
+                                                      const fQty = parseFloat(p.freeQuantity) || 0;
+                                                      if (bQty > 0) {
+                                                        const offers = Math.floor(qty / bQty);
+                                                        freeQty = offers * fQty;
                                                       }
                                                     }
-                                                    return (
-                                                      <div key={idx} style={{ borderBottom: idx < order.items.length - 1 ? '1px solid #f1f5f9' : 'none', paddingBottom: '2px', minHeight: '1.2em' }}>
-                                                        {freeQty > 0 ? `${itemQty + freeQty} (${freeQty})` : itemQty}
-                                                      </div>
-                                                    )
-                                                  })}
-                                                </div>
-                                              ) : (
-                                                (() => {
-                                                  const totalPurchasedQty = parseFloat(order.quantity) || 0
-                                                  let totalFreeQty = 0
-                                                  const orderProduct = (products || []).find(p => p._id === (order.product?._id || order.product))
-                                                  if (orderProduct && orderProduct.hasOffer && orderProduct.buyQuantity && orderProduct.freeQuantity) {
-                                                    const buyQty = parseFloat(orderProduct.buyQuantity) || 0
-                                                    const freeQty = parseFloat(orderProduct.freeQuantity) || 0
-                                                    if (buyQty > 0) {
-                                                      const eligibleOffers = Math.floor(totalPurchasedQty / buyQty)
-                                                      totalFreeQty = eligibleOffers * freeQty
-                                                    }
-                                                  }
-                                                  return totalFreeQty > 0 ? `${totalPurchasedQty + totalFreeQty} (${totalFreeQty})` : totalPurchasedQty
+                                                    return freeQty > 0 ? `${qty + freeQty} (${freeQty})` : qty;
+                                                  })()
+                                                )}
+                                              </td>
+                                              <td style={{ padding: '0.5rem', whiteSpace: 'nowrap', textAlign: 'center' }}>{order.status || 'Pending'}</td>
+                                              <td style={{ padding: '0.5rem', whiteSpace: 'nowrap', fontWeight: 700, textAlign: 'center' }}>
+                                                ৳{(() => {
+                                                  const price = parseFloat(order.totalPrice || 0)
+                                                  const discount = order.discountEnabled && order.discountAmount > 0 ? order.discountAmount : 1
+                                                  return Math.round((price * discount))
+                                                })()}
+                                              </td>
+                                              <td style={{ padding: '0.5rem', whiteSpace: 'nowrap', fontWeight: 600, color: '#16a34a', textAlign: 'center' }}>
+                                                ৳{(() => {
+                                                  const paid = order.paidAmount ? parseFloat(order.paidAmount) || 0 : 0
+                                                  const commission = (order.paymentHistory || []).reduce((cSum, p) => cSum + (parseFloat(p.commission) || 0), 0)
+                                                  return Math.round((paid + commission))
+                                                })()}
+                                              </td>
+                                              <td style={{
+                                                padding: '0.5rem', whiteSpace: 'nowrap', fontWeight: 600, textAlign: 'center', color: (() => {
+                                                  const price = parseFloat(order.totalPrice || 0)
+                                                  const discount = order.discountEnabled && order.discountAmount > 0 ? order.discountAmount : 1
+                                                  const grandTotal = price * discount
+                                                  const paid = order.paidAmount ? parseFloat(order.paidAmount) || 0 : 0
+                                                  const commission = (order.paymentHistory || []).reduce((cSum, p) => cSum + (parseFloat(p.commission) || 0), 0)
+                                                  const due = Math.max(0, grandTotal - (paid + commission))
+                                                  return due > 0 ? '#dc2626' : '#16a34a'
                                                 })()
-                                              )}
-                                            </td>
-                                            <td style={{ padding: '0.5rem', whiteSpace: 'nowrap', textAlign: 'center' }}>{order.status || 'Pending'}</td>
-                                            <td style={{ padding: '0.5rem', whiteSpace: 'nowrap', fontWeight: 700, textAlign: 'center' }}>
-                                              ৳{(() => {
-                                                const price = parseFloat(order.totalPrice || 0)
-                                                const discount = order.discountEnabled && order.discountAmount > 0 ? order.discountAmount : 1
-                                                return Math.round((price * discount))
-                                              })()}
-                                            </td>
-                                            <td style={{ padding: '0.5rem', whiteSpace: 'nowrap', fontWeight: 600, color: '#16a34a', textAlign: 'center' }}>
-                                              ৳{(() => {
-                                                const paid = order.paidAmount ? parseFloat(order.paidAmount) || 0 : 0
-                                                const commission = (order.paymentHistory || []).reduce((cSum, p) => cSum + (parseFloat(p.commission) || 0), 0)
-                                                return Math.round((paid + commission))
-                                              })()}
-                                            </td>
-                                            <td style={{
-                                              padding: '0.5rem', whiteSpace: 'nowrap', fontWeight: 600, textAlign: 'center', color: (() => {
-                                                const price = parseFloat(order.totalPrice || 0)
-                                                const discount = order.discountEnabled && order.discountAmount > 0 ? order.discountAmount : 1
-                                                const grandTotal = price * discount
-                                                const paid = order.paidAmount ? parseFloat(order.paidAmount) || 0 : 0
-                                                const commission = (order.paymentHistory || []).reduce((cSum, p) => cSum + (parseFloat(p.commission) || 0), 0)
-                                                const due = Math.max(0, grandTotal - (paid + commission))
-                                                return due > 0 ? '#dc2626' : '#16a34a'
-                                              })()
-                                            }}>
-                                              ৳{(() => {
-                                                const price = parseFloat(order.totalPrice || 0)
-                                                const discount = order.discountEnabled && order.discountAmount > 0 ? order.discountAmount : 1
-                                                const grandTotal = price * discount
-                                                const paid = order.paidAmount ? parseFloat(order.paidAmount) || 0 : 0
-                                                const commission = (order.paymentHistory || []).reduce((cSum, p) => cSum + (parseFloat(p.commission) || 0), 0)
-                                                const due = Math.max(0, grandTotal - (paid + commission))
-                                                return Math.round(due)
-                                              })()}
-                                            </td>
-                                          </tr>
-                                        ))}
+                                              }}>
+                                                ৳{(() => {
+                                                  const price = parseFloat(order.totalPrice || 0)
+                                                  const discount = order.discountEnabled && order.discountAmount > 0 ? order.discountAmount : 1
+                                                  const grandTotal = price * discount
+                                                  const paid = order.paidAmount ? parseFloat(order.paidAmount) || 0 : 0
+                                                  const commission = (order.paymentHistory || []).reduce((cSum, p) => cSum + (parseFloat(p.commission) || 0), 0)
+                                                  const due = Math.max(0, grandTotal - (paid + commission))
+                                                  return Math.round(due)
+                                                })()}
+                                              </td>
+                                            </tr>
+                                          );
+                                        })}
                                       </tbody>
                                     </table>
                                   </div>
@@ -8549,12 +9838,12 @@ function AdminPage({ language, toggleLanguage, t }) {
                                     <div style={{ padding: '0 0.5rem 1rem 0.5rem', fontWeight: 700, fontSize: '1.1rem', color: '#1e293b' }}>
                                       {language === 'en' ? 'Dealer Orders' : 'ডিলারের অর্ডার'}
                                     </div>
-                                    {dealerOrders.length === 0 ? (
+                                    {filteredDealerOrders.length === 0 ? (
                                       <div style={{ textAlign: 'center', padding: '2rem', color: '#6b7280' }}>
                                         {language === 'en' ? 'No orders found' : 'কোন অর্ডার পাওয়া যায়নি'}
                                       </div>
                                     ) : (
-                                      dealerOrders.map((order) => {
+                                      filteredDealerOrders.map((order) => {
                                         const paid = order.paidAmount ? parseFloat(order.paidAmount) || 0 : 0
                                         const commission = (order.paymentHistory || []).reduce((cSum, p) => cSum + (parseFloat(p.commission) || 0), 0)
                                         const price = parseFloat(order.totalPrice || 0)
@@ -8562,15 +9851,23 @@ function AdminPage({ language, toggleLanguage, t }) {
                                         const grandTotal = price * discount
                                         const due = Math.max(0, grandTotal - (paid + commission))
 
+                                        const isExpanded = expandedOrderRows.includes(order._id);
+
                                         return (
-                                          <div className="mobile-card" key={order._id}>
-                                            <div className="mobile-card-header">
-                                              <div className="mobile-card-avatar" style={{ backgroundColor: '#e0f2fe', color: '#0369a1' }}>
-                                                {(order.productName || order.product?.name || '?').charAt(0).toUpperCase()}
-                                              </div>
+                                          <div
+                                            className="mobile-card"
+                                            key={order._id}
+                                            onClick={() => {
+                                              setExpandedOrderRows(prev =>
+                                                prev.includes(order._id) ? prev.filter(id => id !== order._id) : [...prev, order._id]
+                                              );
+                                            }}
+                                            style={{ cursor: 'pointer' }}
+                                          >
+                                            <div className="mobile-card-header" style={{ borderBottom: isExpanded ? '1px solid #f1f5f9' : 'none', paddingBottom: isExpanded ? '0.75rem' : '0' }}>
                                               <div className="mobile-card-header-text">
-                                                <div className="mobile-card-title">{order.productName || order.product?.name || 'N/A'}</div>
-                                                <div className="mobile-card-subtitle">{order.orderId || '-'}</div>
+                                                <div className="mobile-card-title" style={{ color: '#0369a1', fontSize: '1.1rem', fontWeight: 700 }}>{customOrderIds[order._id] || order.orderId || '-'}</div>
+                                                <div className="mobile-card-subtitle" style={{ fontSize: '0.9rem', color: '#64748b' }}>{order.createdAt ? new Date(order.createdAt).toLocaleDateString() : '-'}</div>
                                               </div>
                                               <div className="mobile-card-status-badge" style={{
                                                 backgroundColor:
@@ -8586,58 +9883,117 @@ function AdminPage({ language, toggleLanguage, t }) {
                                                       order.status === 'Shipped' ? '#1e40af' :
                                                         order.status === 'Processing' ? '#92400e' :
                                                           order.status === 'Cancelled' ? '#b91c1c' :
-                                                            '#374151'
+                                                            '#374151',
+                                                marginLeft: 'auto',
+                                                alignSelf: 'start',
+                                                marginTop: '4px'
                                               }}>
                                                 {order.status || 'Pending'}
                                               </div>
                                             </div>
-                                            <div className="mobile-card-body">
-                                              <div className="mobile-card-row">
-                                                <span className="mobile-card-label">{language === 'en' ? 'Date' : 'তারিখ'}</span>
-                                                <span className="mobile-card-value">{order.createdAt ? new Date(order.createdAt).toLocaleDateString() : '-'}</span>
+
+                                            {isExpanded && (
+                                              <div className="mobile-card-body" style={{ marginTop: '0.75rem' }}>
+
+                                                {order.items && order.items.length > 0 ? (
+                                                  order.items.map((item, idx) => (
+                                                    <div key={idx} style={{
+                                                      marginTop: '0.75rem',
+                                                      padding: '0.5rem',
+                                                      backgroundColor: '#f8fafc',
+                                                      borderRadius: '4px',
+                                                      border: '1px solid #f1f5f9'
+                                                    }}>
+                                                      <div className="mobile-card-row" style={{ borderBottom: '1px solid #f1f5f9', paddingBottom: '4px', marginBottom: '4px' }}>
+                                                        <span className="mobile-card-label" style={{ fontWeight: 700 }}>{language === 'en' ? `Item ${idx + 1}` : `আইটেম ${idx + 1}`}</span>
+                                                      </div>
+                                                      <div className="mobile-card-row">
+                                                        <span className="mobile-card-label">{language === 'en' ? 'Product' : 'পণ্য'}</span>
+                                                        <span className="mobile-card-value" style={{ fontWeight: 600 }}>{item.productName || item.product?.name || '-'}</span>
+                                                      </div>
+                                                      <div className="mobile-card-row">
+                                                        <span className="mobile-card-label">{language === 'en' ? 'Variant' : 'ভ্যারিয়েন্ট'}</span>
+                                                        <span className="mobile-card-value">{item.variant?.productCode ? `${item.variant.productCode} (${item.variant.packSize} ${item.variant.packUnit || 'ml'})` : '-'}</span>
+                                                      </div>
+                                                      <div className="mobile-card-row">
+                                                        <span className="mobile-card-label">{language === 'en' ? 'Qty' : 'পরিমাণ'}</span>
+                                                        <span className="mobile-card-value" style={{ fontWeight: 600 }}>
+                                                          {(() => {
+                                                            const purchased = parseFloat(item.quantity) || 0
+                                                            const free = parseFloat(item.freeQuantity) || 0
+                                                            return free > 0 ? `${purchased + free} (${free})` : purchased
+                                                          })()}
+                                                        </span>
+                                                      </div>
+                                                      <div className="mobile-card-row">
+                                                        <span className="mobile-card-label">{language === 'en' ? 'Price' : 'দাম'}</span>
+                                                        <span className="mobile-card-value">৳{Math.round(parseFloat(item.unitPrice || item.variant?.price || 0))}</span>
+                                                      </div>
+                                                      <div className="mobile-card-row">
+                                                        <span className="mobile-card-label">{language === 'en' ? 'Subtotal' : 'উপ-মোট'}</span>
+                                                        <span className="mobile-card-value" style={{ fontWeight: 700, color: '#16a34a' }}>৳{Math.round(parseFloat(item.totalPrice || (parseFloat(item.quantity || 0) * parseFloat(item.unitPrice || item.variant?.price || 0))))}</span>
+                                                      </div>
+                                                    </div>
+                                                  ))
+                                                ) : (
+                                                  <>
+                                                    <div className="mobile-card-row">
+                                                      <span className="mobile-card-label">{language === 'en' ? 'Product' : 'পণ্য'}</span>
+                                                      <span className="mobile-card-value" style={{ fontWeight: 600 }}>{order.productName || order.product?.name || '-'}</span>
+                                                    </div>
+                                                    <div className="mobile-card-row">
+                                                      <span className="mobile-card-label">{language === 'en' ? 'Variant' : 'ভ্যারিয়েন্ট'}</span>
+                                                      <span className="mobile-card-value">{order.variant?.productCode ? `${order.variant.productCode} (${order.variant.packSize} ${order.variant.packUnit || 'ml'}) [${order.variant.cartoonSize || 1} ${order.variant.cartoonUnit || 'Pcs'}]` : '-'}</span>
+                                                    </div>
+                                                    <div className="mobile-card-row">
+                                                      <span className="mobile-card-label">{language === 'en' ? 'Qty' : 'পরিমাণ'}</span>
+                                                      <span className="mobile-card-value" style={{ fontWeight: 600 }}>
+                                                        {(() => {
+                                                          const totalPurchasedQty = parseFloat(order.quantity) || 0
+                                                          let totalFreeQty = 0
+                                                          const orderProduct = (products || []).find(p => p._id === (order.product?._id || order.product))
+                                                          if (orderProduct && orderProduct.hasOffer && orderProduct.buyQuantity && orderProduct.freeQuantity) {
+                                                            const buyQty = parseFloat(orderProduct.buyQuantity) || 0
+                                                            const freeQty = parseFloat(orderProduct.freeQuantity) || 0
+                                                            if (buyQty > 0) {
+                                                              const eligibleOffers = Math.floor(totalPurchasedQty / buyQty)
+                                                              totalFreeQty = eligibleOffers * freeQty
+                                                            }
+                                                          }
+                                                          return totalFreeQty > 0 ? `${totalPurchasedQty + totalFreeQty} (${totalFreeQty})` : totalPurchasedQty
+                                                        })()}
+                                                      </span>
+                                                    </div>
+                                                    <div className="mobile-card-row">
+                                                      <span className="mobile-card-label">{language === 'en' ? 'Price' : 'দাম'}</span>
+                                                      <span className="mobile-card-value">৳{Math.round(parseFloat(order.price || order.variant?.price || 0))}</span>
+                                                    </div>
+                                                    <div className="mobile-card-row">
+                                                      <span className="mobile-card-label">{language === 'en' ? 'Subtotal' : 'উপ-মোট'}</span>
+                                                      <span className="mobile-card-value" style={{ fontWeight: 700, color: '#16a34a' }}>৳{Math.round(parseFloat(order.totalPrice || (parseFloat(order.quantity || 0) * parseFloat(order.price || order.variant?.price || 0))))}</span>
+                                                    </div>
+                                                  </>
+                                                )}
+                                                <div className="mobile-card-row">
+                                                  <span className="mobile-card-label">{language === 'en' ? 'Grand total' : 'সর্বমোট'}</span>
+                                                  <span className="mobile-card-value" style={{ fontWeight: 700 }}>
+                                                    ৳{Math.round(grandTotal)}
+                                                  </span>
+                                                </div>
+                                                <div className="mobile-card-row">
+                                                  <span className="mobile-card-label">{language === 'en' ? 'Paid' : 'পরিশোধিত'}</span>
+                                                  <span className="mobile-card-value" style={{ color: '#16a34a' }}>
+                                                    ৳{Math.round((paid + commission))}
+                                                  </span>
+                                                </div>
+                                                <div className="mobile-card-row">
+                                                  <span className="mobile-card-label">{language === 'en' ? 'Due' : 'বাকি'}</span>
+                                                  <span className="mobile-card-value" style={{ color: due > 0 ? '#dc2626' : '#16a34a', fontWeight: 700 }}>
+                                                    ৳{Math.round(due)}
+                                                  </span>
+                                                </div>
                                               </div>
-                                              <div className="mobile-card-row">
-                                                <span className="mobile-card-label">{language === 'en' ? 'Variant' : 'ভ্যারিয়েন্ট'}</span>
-                                                <span className="mobile-card-value">{order.variant?.productCode ? `${order.variant.productCode} (${order.variant.packSize} ${order.variant.packUnit || 'ml'}) [${order.variant.cartoonSize || 1} ${order.variant.cartoonUnit || 'Pcs'}]` : '-'}</span>
-                                              </div>
-                                              <div className="mobile-card-row">
-                                                <span className="mobile-card-label">{language === 'en' ? 'Quantity' : 'পরিমাণ'}</span>
-                                                <span className="mobile-card-value" style={{ fontWeight: 600 }}>
-                                                  {(() => {
-                                                    const totalPurchasedQty = parseFloat(order.quantity) || 0
-                                                    let totalFreeQty = 0
-                                                    const orderProduct = (products || []).find(p => p._id === (order.product?._id || order.product))
-                                                    if (orderProduct && orderProduct.hasOffer && orderProduct.buyQuantity && orderProduct.freeQuantity) {
-                                                      const buyQty = parseFloat(orderProduct.buyQuantity) || 0
-                                                      const freeQty = parseFloat(orderProduct.freeQuantity) || 0
-                                                      if (buyQty > 0) {
-                                                        const eligibleOffers = Math.floor(totalPurchasedQty / buyQty)
-                                                        totalFreeQty = eligibleOffers * freeQty
-                                                      }
-                                                    }
-                                                    return totalFreeQty > 0 ? `${totalPurchasedQty + totalFreeQty} (${totalFreeQty})` : totalPurchasedQty
-                                                  })()}
-                                                </span>
-                                              </div>
-                                              <div className="mobile-card-row">
-                                                <span className="mobile-card-label">{language === 'en' ? 'Grand total' : 'সর্বমোট'}</span>
-                                                <span className="mobile-card-value" style={{ fontWeight: 700 }}>
-                                                  ৳{Math.round(grandTotal)}
-                                                </span>
-                                              </div>
-                                              <div className="mobile-card-row">
-                                                <span className="mobile-card-label">{language === 'en' ? 'Paid' : 'পরিশোধিত'}</span>
-                                                <span className="mobile-card-value" style={{ color: '#16a34a' }}>
-                                                  ৳{Math.round((paid + commission))}
-                                                </span>
-                                              </div>
-                                              <div className="mobile-card-row">
-                                                <span className="mobile-card-label">{language === 'en' ? 'Due' : 'বাকি'}</span>
-                                                <span className="mobile-card-value" style={{ color: due > 0 ? '#dc2626' : '#16a34a', fontWeight: 700 }}>
-                                                  ৳{Math.round(due)}
-                                                </span>
-                                              </div>
-                                            </div>
+                                            )}
                                           </div>
                                         )
                                       })
@@ -8662,6 +10018,9 @@ function AdminPage({ language, toggleLanguage, t }) {
                       }}
                     >
                       {[
+                        { key: 'regionId', label: language === 'en' ? 'Region ID' : 'অঞ্চল আইডি' },
+                        { key: 'areaId', label: language === 'en' ? 'Area ID' : 'এলাকা আইডি' },
+                        { key: 'territoryId', label: adminContent.territoryId },
                         { key: 'dealerId', label: language === 'en' ? 'CID' : 'সিআইডি' },
                         { key: 'shopName', label: language === 'en' ? 'Shop Name' : 'দোকানের নাম' },
                         { key: 'name', label: language === 'en' ? 'Customer Name' : 'কাস্টমারের নাম' },
@@ -9228,8 +10587,61 @@ function AdminPage({ language, toggleLanguage, t }) {
                                 <input type="text" value={newEmployee.designation} onChange={(e) => setNewEmployee({ ...newEmployee, designation: e.target.value })} />
                               </div>
                               <div className="admin-form-group">
+                                <label>{language === 'en' ? 'Region ID' : 'অঞ্চল আইডি'}</label>
+                                <select
+                                  value={newEmployee.regionId}
+                                  onChange={(e) => setNewEmployee({ ...newEmployee, regionId: e.target.value, areaId: '', territoryId: '', postingArea: '' })}
+                                  style={{ width: '100%', padding: '0.5rem', border: '1px solid #d1d5db', borderRadius: '0.375rem', fontSize: '0.875rem' }}
+                                >
+                                  <option value="">{language === 'en' ? 'Select Region' : 'অঞ্চল নির্বাচন করুন'}</option>
+                                  {uniqueRegionIds.map(id => <option key={id} value={id}>{id}</option>)}
+                                </select>
+                              </div>
+                              <div className="admin-form-group">
+                                <label>{language === 'en' ? 'Area ID' : 'এলাকা আইডি'}</label>
+                                <select
+                                  value={newEmployee.areaId}
+                                  onChange={(e) => setNewEmployee({ ...newEmployee, areaId: e.target.value, territoryId: '', postingArea: '' })}
+                                  disabled={!newEmployee.regionId}
+                                  style={{ width: '100%', padding: '0.5rem', border: '1px solid #d1d5db', borderRadius: '0.375rem', fontSize: '0.875rem' }}
+                                >
+                                  <option value="">{language === 'en' ? 'Select Area' : 'এলাকা নির্বাচন করুন'}</option>
+                                  {employeeAvailableAreaIds.map(id => <option key={id} value={id}>{id}</option>)}
+                                </select>
+                              </div>
+                              <div className="admin-form-group">
+                                <label>{language === 'en' ? 'Territory ID' : 'টেরিটরি আইডি'}</label>
+                                <select
+                                  value={newEmployee.territoryId}
+                                  onChange={(e) => {
+                                    const tid = e.target.value;
+                                    const found = territories.find(t => t.territoryId === tid);
+                                    let fullArea = '';
+                                    if (found) {
+                                      fullArea = `${found.division}, ${found.zilla}, ${found.area}`;
+                                    }
+                                    setNewEmployee({
+                                      ...newEmployee,
+                                      territoryId: tid,
+                                      postingArea: fullArea
+                                    });
+                                  }}
+                                  disabled={!newEmployee.areaId}
+                                  style={{ width: '100%', padding: '0.5rem', border: '1px solid #d1d5db', borderRadius: '0.375rem', fontSize: '0.875rem' }}
+                                >
+                                  <option value="">{language === 'en' ? 'Select Territory' : 'টেরিটরি নির্বাচন করুন'}</option>
+                                  {employeeAvailableTerritoryIds.map(id => <option key={id} value={id}>{id}</option>)}
+                                </select>
+                              </div>
+                              <div className="admin-form-group">
                                 <label>{language === 'en' ? 'Posting Area' : 'পোস্টিং এরিয়া'}</label>
-                                <input type="text" value={newEmployee.postingArea} onChange={(e) => setNewEmployee({ ...newEmployee, postingArea: e.target.value })} />
+                                <input
+                                  type="text"
+                                  value={newEmployee.postingArea}
+                                  readOnly
+                                  placeholder={language === 'en' ? 'Select Territory to see info' : 'তথ্য দেখতে টেরিটরি নির্বাচন করুন'}
+                                  style={{ backgroundColor: '#f9fafb', cursor: 'not-allowed' }}
+                                />
                               </div>
                               <div className="admin-form-group">
                                 <label>{language === 'en' ? 'Upload Photo' : 'ছবি আপলোড করুন'}</label>
@@ -9277,6 +10689,9 @@ function AdminPage({ language, toggleLanguage, t }) {
                                     bankBranch: newEmployee.bankBranch || '',
                                     accountNumber: newEmployee.accountNumber || '',
                                     department: newEmployee.department || '',
+                                    regionId: newEmployee.regionId || '',
+                                    areaId: newEmployee.areaId || '',
+                                    territoryId: newEmployee.territoryId || '',
                                     postingArea: newEmployee.postingArea || '',
                                     role: newEmployee.role || '',
                                     designation: newEmployee.designation || '',
@@ -9321,7 +10736,7 @@ function AdminPage({ language, toggleLanguage, t }) {
                                     setEmployeeStatus(language === 'en' ? 'Saved to database' : 'ডাটাবেজে সংরক্ষিত')
                                   }
 
-                                  setNewEmployee({ name: '', email: '', phone: '', address: '', nid: '', document: '', emergencyContactName: '', emergencyContact: '', salary: '', salesTarget: '', bankName: '', bankBranch: '', accountNumber: '', department: '', postingArea: '', role: '', designation: '', photo: '', status: 'Unpaid' })
+                                  setNewEmployee({ name: '', email: '', phone: '', address: '', nid: '', document: '', emergencyContactName: '', emergencyContact: '', salary: '', salesTarget: '', bankName: '', bankBranch: '', accountNumber: '', department: '', regionId: '', areaId: '', territoryId: '', postingArea: '', role: '', designation: '', photo: '', status: 'Unpaid' })
                                   // Don't close form if credentials are shown
                                   if (!data.data.generatedPassword) {
                                     setShowEmployeeForm(false)
@@ -10105,7 +11520,7 @@ function AdminPage({ language, toggleLanguage, t }) {
                                                   {sale.date ? new Date(sale.date).toLocaleDateString() : (sale.createdAt ? new Date(sale.createdAt).toLocaleDateString() : (order.createdAt ? new Date(order.createdAt).toLocaleDateString() : '-'))}
                                                 </td>
                                                 <td style={{ padding: '0.75rem', fontSize: '0.875rem', color: '#111827', fontFamily: 'monospace' }}>
-                                                  {order.orderId || sale.orderId || '-'}
+                                                  {customOrderIds[order._id] || order.orderId || sale.orderId || '-'}
                                                 </td>
                                                 <td style={{ padding: '0.75rem', fontSize: '0.875rem', color: '#111827' }}>
                                                   {order.dealerName || (order.dealer && order.dealer.name) || sale.dealerName || '-'}
@@ -10248,7 +11663,7 @@ function AdminPage({ language, toggleLanguage, t }) {
                                               </div>
                                               <div className="mobile-card-header-text">
                                                 <div className="mobile-card-title">
-                                                  {order.orderId || sale.orderId || 'N/A'}
+                                                  {customOrderIds[order._id] || order.orderId || sale.orderId || 'N/A'}
                                                 </div>
                                                 <div className="mobile-card-subtitle">
                                                   {sale.date ? new Date(sale.date).toLocaleDateString() : (sale.createdAt ? new Date(sale.createdAt).toLocaleDateString() : (order.createdAt ? new Date(order.createdAt).toLocaleDateString() : '-'))}
@@ -10981,16 +12396,15 @@ function AdminPage({ language, toggleLanguage, t }) {
                             )}
                           </div>
 
-                          {/* Posting Area */}
+                          {/* Posting Area - Region */}
                           <div style={{ padding: '1rem', backgroundColor: '#f9fafb', borderRadius: '0.375rem' }}>
                             <label style={{ fontSize: '0.875rem', color: '#6b7280', fontWeight: 600 }}>
-                              {language === 'en' ? 'Posting Area' : 'পোস্টিং এরিয়া'}
+                              {language === 'en' ? 'Region ID' : 'অঞ্চল আইডি'}
                             </label>
                             {isEditingEmployee ? (
-                              <input
-                                type="text"
-                                value={editingEmployeeData?.postingArea || ''}
-                                onChange={(e) => setEditingEmployeeData({ ...editingEmployeeData, postingArea: e.target.value })}
+                              <select
+                                value={editingEmployeeData?.regionId || ''}
+                                onChange={(e) => setEditingEmployeeData({ ...editingEmployeeData, regionId: e.target.value, areaId: '', territoryId: '', postingArea: '' })}
                                 style={{
                                   marginTop: '0.5rem',
                                   width: '100%',
@@ -10999,12 +12413,109 @@ function AdminPage({ language, toggleLanguage, t }) {
                                   borderRadius: '0.375rem',
                                   fontSize: '1rem'
                                 }}
-                              />
+                              >
+                                <option value="">{language === 'en' ? 'Select Region' : 'অঞ্চল নির্বাচন করুন'}</option>
+                                {uniqueRegionIds.map(id => <option key={id} value={id}>{id}</option>)}
+                              </select>
                             ) : (
                               <p style={{ margin: '0.5rem 0 0 0', fontSize: '1rem', color: '#111827' }}>
-                                {viewingEmployee.postingArea || 'N/A'}
+                                {viewingEmployee.regionId || 'N/A'}
                               </p>
                             )}
+                          </div>
+
+                          {/* Posting Area - Area */}
+                          <div style={{ padding: '1rem', backgroundColor: '#f9fafb', borderRadius: '0.375rem' }}>
+                            <label style={{ fontSize: '0.875rem', color: '#6b7280', fontWeight: 600 }}>
+                              {language === 'en' ? 'Area ID' : 'এলাকা আইডি'}
+                            </label>
+                            {isEditingEmployee ? (
+                              <select
+                                value={editingEmployeeData?.areaId || ''}
+                                onChange={(e) => setEditingEmployeeData({ ...editingEmployeeData, areaId: e.target.value, territoryId: '', postingArea: '' })}
+                                disabled={!editingEmployeeData?.regionId}
+                                style={{
+                                  marginTop: '0.5rem',
+                                  width: '100%',
+                                  padding: '0.5rem',
+                                  border: '1px solid #d1d5db',
+                                  borderRadius: '0.375rem',
+                                  fontSize: '1rem',
+                                  backgroundColor: !editingEmployeeData?.regionId ? '#f3f4f6' : 'white'
+                                }}
+                              >
+                                <option value="">{language === 'en' ? 'Select Area' : 'এলাকা নির্বাচন করুন'}</option>
+                                {editEmployeeAvailableAreaIds.map(id => <option key={id} value={id}>{id}</option>)}
+                              </select>
+                            ) : (
+                              <p style={{ margin: '0.5rem 0 0 0', fontSize: '1rem', color: '#111827' }}>
+                                {viewingEmployee.areaId || 'N/A'}
+                              </p>
+                            )}
+                          </div>
+
+                          {/* Posting Area - Territory */}
+                          <div style={{ padding: '1rem', backgroundColor: '#f9fafb', borderRadius: '0.375rem' }}>
+                            <label style={{ fontSize: '0.875rem', color: '#6b7280', fontWeight: 600 }}>
+                              {language === 'en' ? 'Territory ID' : 'টেরিটরি আইডি'}
+                            </label>
+                            {isEditingEmployee ? (
+                              <select
+                                value={editingEmployeeData?.territoryId || ''}
+                                onChange={(e) => {
+                                  const tid = e.target.value;
+                                  const found = territories.find(t => t.territoryId === tid);
+                                  let fullArea = '';
+                                  if (found) {
+                                    fullArea = `${found.division}, ${found.zilla}, ${found.area}`;
+                                  }
+                                  setEditingEmployeeData({
+                                    ...editingEmployeeData,
+                                    territoryId: tid,
+                                    postingArea: fullArea
+                                  });
+                                }}
+                                disabled={!editingEmployeeData?.areaId}
+                                style={{
+                                  marginTop: '0.5rem',
+                                  width: '100%',
+                                  padding: '0.5rem',
+                                  border: '1px solid #d1d5db',
+                                  borderRadius: '0.375rem',
+                                  fontSize: '1rem',
+                                  backgroundColor: !editingEmployeeData?.areaId ? '#f3f4f6' : 'white'
+                                }}
+                              >
+                                <option value="">{language === 'en' ? 'Select Territory' : 'টেরিটরি নির্বাচন করুন'}</option>
+                                {editEmployeeAvailableTerritoryIds.map(id => <option key={id} value={id}>{id}</option>)}
+                              </select>
+                            ) : (
+                              <p style={{ margin: '0.5rem 0 0 0', fontSize: '1rem', color: '#111827' }}>
+                                {viewingEmployee.territoryId || 'N/A'}
+                              </p>
+                            )}
+                          </div>
+
+                          {/* Combined Posting Area */}
+                          <div style={{ padding: '1rem', backgroundColor: '#f9fafb', borderRadius: '0.375rem' }}>
+                            <label style={{ fontSize: '0.875rem', color: '#6b7280', fontWeight: 600 }}>
+                              {language === 'en' ? 'Posting Area Info' : 'পোস্টিং এরিয়া তথ্য'}
+                            </label>
+                            <input
+                              type="text"
+                              value={(isEditingEmployee ? editingEmployeeData?.postingArea : viewingEmployee.postingArea) || 'N/A'}
+                              readOnly
+                              style={{
+                                marginTop: '0.5rem',
+                                width: '100%',
+                                padding: '0.5rem',
+                                border: '1px solid #d1d5db',
+                                borderRadius: '0.375rem',
+                                fontSize: '1rem',
+                                backgroundColor: '#f3f4f6',
+                                cursor: 'not-allowed'
+                              }}
+                            />
                           </div>
 
                           {/* Role */}
@@ -11291,7 +12802,8 @@ function AdminPage({ language, toggleLanguage, t }) {
                             )}
                           </div>
                         </div>
-                      )}
+                      )
+                      }
 
 
                       <div style={{ marginTop: '1.5rem', display: 'flex', justifyContent: 'flex-end', gap: '0.5rem' }}>
@@ -11756,6 +13268,76 @@ function AdminPage({ language, toggleLanguage, t }) {
                                 resize: 'vertical'
                               }}
                             />
+                          </div>
+
+                          {/* Target Half and Year Selection */}
+                          <div className="admin-form-group">
+                            <label>{language === 'en' ? 'Target Half *' : 'লক্ষ্য অর্ধ *'}</label>
+                            <select
+                              value={orderForm.targetHalf}
+                              onChange={(e) => setOrderForm({ ...orderForm, targetHalf: e.target.value })}
+                              required
+                              style={{
+                                width: '100%',
+                                padding: '0.5rem',
+                                border: '1px solid #d1d5db',
+                                borderRadius: '0.375rem',
+                                fontSize: '0.875rem'
+                              }}
+                            >
+                              <option value="H1">{language === 'en' ? '1st Half (Jan-Jun)' : '১ম অর্ধ (জানু-জুন)'}</option>
+                              <option value="H2">{language === 'en' ? '2nd Half (Jul-Dec)' : '২য় অর্ধ (জুলাই-ডিসে)'}</option>
+                            </select>
+                          </div>
+
+                          <div className="admin-form-group">
+                            <label>{language === 'en' ? 'Target Year *' : 'লক্ষ্য বছর *'}</label>
+                            <select
+                              value={orderForm.targetYear}
+                              onChange={(e) => setOrderForm({ ...orderForm, targetYear: parseInt(e.target.value) })}
+                              required
+                              style={{
+                                width: '100%',
+                                padding: '0.5rem',
+                                border: '1px solid #d1d5db',
+                                borderRadius: '0.375rem',
+                                fontSize: '0.875rem'
+                              }}
+                            >
+                              {Array.from({ length: 6 }, (_, i) => new Date().getFullYear() - 2 + i).map(year => (
+                                <option key={year} value={year}>{year}</option>
+                              ))}
+                            </select>
+                          </div>
+
+                          {/* Target Month Selection */}
+                          <div className="admin-form-group">
+                            <label>{language === 'en' ? 'Target Month *' : 'লক্ষ্য মাস *'}</label>
+                            <select
+                              value={orderForm.targetMonth}
+                              onChange={(e) => setOrderForm({ ...orderForm, targetMonth: parseInt(e.target.value) })}
+                              required
+                              style={{
+                                width: '100%',
+                                padding: '0.5rem',
+                                border: '1px solid #d1d5db',
+                                borderRadius: '0.375rem',
+                                fontSize: '0.875rem'
+                              }}
+                            >
+                              <option value={0}>{language === 'en' ? 'January' : 'জানুয়ারি'}</option>
+                              <option value={1}>{language === 'en' ? 'February' : 'ফেব্রুয়ারি'}</option>
+                              <option value={2}>{language === 'en' ? 'March' : 'মার্চ'}</option>
+                              <option value={3}>{language === 'en' ? 'April' : 'এপ্রিল'}</option>
+                              <option value={4}>{language === 'en' ? 'May' : 'মে'}</option>
+                              <option value={5}>{language === 'en' ? 'June' : 'জুন'}</option>
+                              <option value={6}>{language === 'en' ? 'July' : 'জুলাই'}</option>
+                              <option value={7}>{language === 'en' ? 'August' : 'আগস্ট'}</option>
+                              <option value={8}>{language === 'en' ? 'September' : 'সেপ্টেম্বর'}</option>
+                              <option value={9}>{language === 'en' ? 'October' : 'অক্টোবর'}</option>
+                              <option value={10}>{language === 'en' ? 'November' : 'নভেম্বর'}</option>
+                              <option value={11}>{language === 'en' ? 'December' : 'ডিসেম্বর'}</option>
+                            </select>
                           </div>
 
                           {/* Paid Amount and Status - Only show when editing */}
@@ -12321,7 +13903,7 @@ function AdminPage({ language, toggleLanguage, t }) {
                                                           variant: it.variant,
                                                           quantity: it.quantity,
                                                           notes: it.notes,
-                                                          status: it.status || 'Pending'
+                                                          status: ((userRole || '').toLowerCase() === 'admin' && (it.status || 'Pending') === 'Pending') ? 'Processing' : (it.status || 'Pending')
                                                         })))
                                                         setOrderForm({
                                                           dealer: order.dealer?._id || order.dealer || '',
@@ -12329,7 +13911,7 @@ function AdminPage({ language, toggleLanguage, t }) {
                                                           variant: existingItems[0]?.variant || { productCode: '', packSize: '', packUnit: 'ml', cartoonSize: 1, cartoonUnit: 'Pcs', price: 0 },
                                                           quantity: existingItems[0]?.quantity || 1,
                                                           notes: existingItems[0]?.notes || '',
-                                                          status: existingItems[0]?.status || 'Pending'
+                                                          status: ((userRole || '').toLowerCase() === 'admin' && (existingItems[0]?.status || 'Pending') === 'Pending') ? 'Processing' : (existingItems[0]?.status || 'Pending')
                                                         })
                                                         setShowOrderForm(true)
                                                         setShowOrderCart(true)
@@ -12423,7 +14005,7 @@ function AdminPage({ language, toggleLanguage, t }) {
                                             </div>
                                             <div className="mobile-card-header-text">
                                               <div className="mobile-card-title">{order.productName || order.product?.name || 'N/A'}</div>
-                                              <div className="mobile-card-subtitle">{order.orderId || '-'}</div>
+                                              <div className="mobile-card-subtitle">{customOrderIds[order._id] || order.orderId || '-'}</div>
                                             </div>
 
                                             <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', marginLeft: 'auto', alignSelf: 'stretch', justifyContent: 'space-between', flexShrink: 0, paddingBottom: 0 }}>
@@ -12641,7 +14223,7 @@ function AdminPage({ language, toggleLanguage, t }) {
                                                         },
                                                         quantity: order.quantity || item.quantity || 1,
                                                         notes: order.notes || '',
-                                                        status: 'Pending',
+                                                        status: ((userRole || '').toLowerCase() === 'admin' && (order.status || 'Pending') === 'Pending') ? 'Processing' : (order.status || 'Pending'),
                                                         paidAmount: order.paidAmount || 0
                                                       })
                                                       if (order.product?.variants) setSelectedProductVariants(order.product.variants)
@@ -12683,56 +14265,180 @@ function AdminPage({ language, toggleLanguage, t }) {
                             style={{ flex: 1, minWidth: '200px' }}
                           />
                           <div className="admin-orders-filter-buttons" style={{ display: 'flex', gap: '0.5rem', alignItems: 'center', flexWrap: 'wrap' }}>
-                            <button
-                              onClick={() => setOrderFilter('rejected')}
-                              style={{
-                                padding: '0.5rem 1rem',
-                                backgroundColor: orderFilter === 'rejected' ? '#ef4444' : '#e2e8f0',
-                                color: orderFilter === 'rejected' ? 'white' : '#0f172a',
-                                border: 'none',
-                                borderRadius: '0.375rem',
-                                cursor: 'pointer',
-                                fontWeight: 600,
-                                fontSize: '0.875rem',
-                                whiteSpace: 'nowrap'
-                              }}
-                            >
-                              {language === 'en' ? 'Rejected Orders' : 'প্রত্যাখ্যাত অর্ডার'}
-                            </button>
-                            <button
-                              onClick={() => setOrderFilter('cancelled')}
-                              style={{
-                                padding: '0.5rem 1rem',
-                                backgroundColor: orderFilter === 'cancelled' ? '#f59e0b' : '#e2e8f0',
-                                color: orderFilter === 'cancelled' ? 'white' : '#0f172a',
-                                border: 'none',
-                                borderRadius: '0.375rem',
-                                cursor: 'pointer',
-                                fontWeight: 600,
-                                fontSize: '0.875rem',
-                                whiteSpace: 'nowrap'
-                              }}
-                            >
-                              {language === 'en' ? 'Cancelled Orders' : 'বাতিল অর্ডার'}
-                            </button>
-                            {orderFilter !== 'all' && (
+                            {/* Consolidated Filter Dropdown Button */}
+                            <div style={{ position: 'relative', display: 'inline-block' }}>
                               <button
-                                onClick={() => setOrderFilter('all')}
+                                onClick={() => setShowOrderFilterDropdown(!showOrderFilterDropdown)}
                                 style={{
                                   padding: '0.5rem 1rem',
-                                  backgroundColor: '#3b82f6',
-                                  color: 'white',
-                                  border: 'none',
+                                  border: '1px solid #d1d5db',
                                   borderRadius: '0.375rem',
-                                  cursor: 'pointer',
-                                  fontWeight: 600,
                                   fontSize: '0.875rem',
-                                  whiteSpace: 'nowrap'
+                                  fontWeight: 600,
+                                  cursor: 'pointer',
+                                  backgroundColor: 'white',
+                                  display: 'flex',
+                                  alignItems: 'center',
+                                  gap: '0.5rem',
+                                  minWidth: '120px',
+                                  justifyContent: 'center'
                                 }}
                               >
-                                {language === 'en' ? 'All Orders' : 'সব অর্ডার'}
+                                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                                  <polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"></polygon>
+                                </svg>
+                                {language === 'en' ? 'Filters' : 'ফিল্টার'}
+                                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ marginLeft: 'auto' }}>
+                                  <polyline points="6 9 12 15 18 9"></polyline>
+                                </svg>
                               </button>
-                            )}
+
+                              {/* Dropdown Menu */}
+                              {showOrderFilterDropdown && (
+                                <div
+                                  style={{
+                                    position: 'absolute',
+                                    top: '100%',
+                                    left: 0,
+                                    marginTop: '0.5rem',
+                                    backgroundColor: 'white',
+                                    border: '1px solid #d1d5db',
+                                    borderRadius: '0.5rem',
+                                    boxShadow: '0 10px 15px -3px rgba(0, 0, 0, 0.1)',
+                                    padding: '1rem',
+                                    minWidth: '280px',
+                                    zIndex: 1000
+                                  }}
+                                >
+                                  {/* Order Status Filter */}
+                                  <div style={{ marginBottom: '1rem' }}>
+                                    <label style={{ display: 'block', marginBottom: '0.5rem', fontSize: '0.875rem', fontWeight: 600 }}>
+                                      {language === 'en' ? 'Order Status' : 'অর্ডার স্ট্যাটাস'}
+                                    </label>
+                                    <select
+                                      value={orderFilter}
+                                      onChange={(e) => setOrderFilter(e.target.value)}
+                                      style={{
+                                        width: '100%',
+                                        padding: '0.5rem',
+                                        border: '1px solid #d1d5db',
+                                        borderRadius: '0.375rem',
+                                        fontSize: '0.875rem',
+                                        cursor: 'pointer'
+                                      }}
+                                    >
+                                      <option value="all">{language === 'en' ? 'Active Orders' : 'সক্রিয় অর্ডার'}</option>
+                                      <option value="rejected">{language === 'en' ? 'Rejected Orders' : 'প্রত্যাখ্যাত অর্ডার'}</option>
+                                      <option value="cancelled">{language === 'en' ? 'Cancelled Orders' : 'বাতিল অর্ডার'}</option>
+                                    </select>
+                                  </div>
+
+                                  {/* Time Filter Type */}
+                                  <div style={{ marginBottom: '1rem' }}>
+                                    <label style={{ display: 'block', marginBottom: '0.5rem', fontSize: '0.875rem', fontWeight: 600 }}>
+                                      {language === 'en' ? 'Time Period' : 'সময়কাল'}
+                                    </label>
+                                    <select
+                                      value={orderTimeFilter}
+                                      onChange={(e) => setOrderTimeFilter(e.target.value)}
+                                      style={{
+                                        width: '100%',
+                                        padding: '0.5rem',
+                                        border: '1px solid #d1d5db',
+                                        borderRadius: '0.375rem',
+                                        fontSize: '0.875rem',
+                                        cursor: 'pointer'
+                                      }}
+                                    >
+                                      <option value="monthly">{language === 'en' ? 'Monthly' : 'মাসিক'}</option>
+                                      <option value="yearly">{language === 'en' ? 'Yearly' : 'বার্ষিক'}</option>
+                                      <option value="all">{language === 'en' ? 'All Time' : 'সব সময়'}</option>
+                                    </select>
+                                  </div>
+
+                                  {/* Month Selector */}
+                                  {orderTimeFilter === 'monthly' && (
+                                    <div style={{ marginBottom: '1rem' }}>
+                                      <label style={{ display: 'block', marginBottom: '0.5rem', fontSize: '0.875rem', fontWeight: 600 }}>
+                                        {language === 'en' ? 'Month' : 'মাস'}
+                                      </label>
+                                      <select
+                                        value={orderSelectedMonth}
+                                        onChange={(e) => setOrderSelectedMonth(parseInt(e.target.value))}
+                                        style={{
+                                          width: '100%',
+                                          padding: '0.5rem',
+                                          border: '1px solid #d1d5db',
+                                          borderRadius: '0.375rem',
+                                          fontSize: '0.875rem',
+                                          cursor: 'pointer'
+                                        }}
+                                      >
+                                        <option value={0}>{language === 'en' ? 'January' : 'জানুয়ারি'}</option>
+                                        <option value={1}>{language === 'en' ? 'February' : 'ফেব্রুয়ারি'}</option>
+                                        <option value={2}>{language === 'en' ? 'March' : 'মার্চ'}</option>
+                                        <option value={3}>{language === 'en' ? 'April' : 'এপ্রিল'}</option>
+                                        <option value={4}>{language === 'en' ? 'May' : 'মে'}</option>
+                                        <option value={5}>{language === 'en' ? 'June' : 'জুন'}</option>
+                                        <option value={6}>{language === 'en' ? 'July' : 'জুলাই'}</option>
+                                        <option value={7}>{language === 'en' ? 'August' : 'আগস্ট'}</option>
+                                        <option value={8}>{language === 'en' ? 'September' : 'সেপ্টেম্বর'}</option>
+                                        <option value={9}>{language === 'en' ? 'October' : 'অক্টোবর'}</option>
+                                        <option value={10}>{language === 'en' ? 'November' : 'নভেম্বর'}</option>
+                                        <option value={11}>{language === 'en' ? 'December' : 'ডিসেম্বর'}</option>
+                                      </select>
+                                    </div>
+                                  )}
+
+                                  {/* Year Selector */}
+                                  {(orderTimeFilter === 'monthly' || orderTimeFilter === 'yearly') && (
+                                    <div style={{ marginBottom: '1rem' }}>
+                                      <label style={{ display: 'block', marginBottom: '0.5rem', fontSize: '0.875rem', fontWeight: 600 }}>
+                                        {language === 'en' ? 'Year' : 'বছর'}
+                                      </label>
+                                      <select
+                                        value={orderSelectedYear}
+                                        onChange={(e) => setOrderSelectedYear(parseInt(e.target.value))}
+                                        style={{
+                                          width: '100%',
+                                          padding: '0.5rem',
+                                          border: '1px solid #d1d5db',
+                                          borderRadius: '0.375rem',
+                                          fontSize: '0.875rem',
+                                          cursor: 'pointer'
+                                        }}
+                                      >
+                                        {Array.from({ length: 6 }, (_, i) => new Date().getFullYear() + 1 - i).map(year => (
+                                          <option key={year} value={year}>{year}</option>
+                                        ))}
+                                      </select>
+                                    </div>
+                                  )}
+
+                                  {/* Apply/Close Button */}
+                                  <button
+                                    onClick={() => setShowOrderFilterDropdown(false)}
+                                    style={{
+                                      width: '100%',
+                                      padding: '0.5rem',
+                                      backgroundColor: '#3b82f6',
+                                      color: 'white',
+                                      border: 'none',
+                                      borderRadius: '0.375rem',
+                                      fontSize: '0.875rem',
+                                      fontWeight: 600,
+                                      cursor: 'pointer'
+                                    }}
+                                  >
+                                    {language === 'en' ? 'Apply Filters' : 'ফিল্টার প্রয়োগ করুন'}
+                                  </button>
+                                </div>
+                              )}
+                            </div>
+
+
+
+
                             <button
                               onClick={handleExportOrders}
                               style={{
@@ -12850,19 +14556,30 @@ function AdminPage({ language, toggleLanguage, t }) {
                               const discount = order.discountEnabled && order.discountAmount > 0 ? order.discountAmount : 1
                               const grandTotal = parseFloat(order.totalPrice || 0) * discount
                               return (
-                                <tr key={order._id}>
+                                <tr
+                                  key={order._id}
+                                  onClick={() => {
+                                    if (order.items && order.items.length > 1) {
+                                      toggleOrderRow(order._id)
+                                    }
+                                  }}
+                                  style={{
+                                    cursor: (order.items && order.items.length > 1) ? 'pointer' : 'default',
+                                    transition: 'background-color 0.1s ease'
+                                  }}
+                                  className={order.items && order.items.length > 1 ? "hover:bg-gray-50" : ""}
+                                >
                                   <td style={{ textAlign: 'center' }}>{order.createdAt ? new Date(order.createdAt).toLocaleDateString() : '-'}</td>
-                                  <td style={{ textAlign: 'center' }}>{order.orderId || '-'}</td>
+                                  <td style={{ textAlign: 'center', fontWeight: 'bold', color: '#475569' }}>
+                                    {customOrderIds[order._id] || order.orderId || '-'}
+                                  </td>
                                   <td style={{ textAlign: 'center' }}>
                                     {(() => {
                                       const dealer = dealers.find(d => d._id === (order.dealer?._id || order.dealer)) || order.dealer;
                                       const shopName = dealer?.shopName || order.dealer?.shopName;
                                       const name = order.dealerName || dealer?.name || order.dealer?.name;
                                       return shopName ? (
-                                        <div style={{ display: 'flex', flexDirection: 'column' }}>
-                                          <span style={{ fontWeight: 600 }}>{shopName}</span>
-                                          <span style={{ fontSize: '0.8em', color: '#64748b' }}>{name}</span>
-                                        </div>
+                                        <span style={{ fontWeight: 600 }}>{shopName}</span>
                                       ) : (
                                         name || '-'
                                       );
@@ -12870,39 +14587,94 @@ function AdminPage({ language, toggleLanguage, t }) {
                                   </td>
                                   <td style={{ textAlign: 'center' }}>{order.dealerId || order.dealer?.dealerId || '-'}</td>
                                   <td style={{ textAlign: 'center' }}>
-                                    {order.items && order.items.length > 0 ? (
-                                      <div style={{ display: 'flex', flexDirection: 'column', gap: '0.25rem' }}>
-                                        {order.items.map((item, idx) => (
-                                          <div key={idx} style={{ borderBottom: idx < order.items.length - 1 ? '1px solid #f1f5f9' : 'none', padding: '6px 4px', minHeight: '45px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                                            {item.productName || item.product?.name || '-'}
-                                          </div>
-                                        ))}
-                                      </div>
+                                    {order.items && order.items.length > 1 ? (
+                                      expandedOrderRows.includes(order._id) ? (
+                                        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.25rem' }}>
+                                          {order.items.map((item, idx) => (
+                                            <div key={idx} style={{ borderBottom: idx < order.items.length - 1 ? '1px solid #f1f5f9' : 'none', padding: '6px 4px', minHeight: '45px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                                              {item.productName || item.product?.name || '-'}
+                                            </div>
+                                          ))}
+
+                                        </div>
+                                      ) : (
+                                        <div style={{ padding: '0.5rem', color: '#3b82f6', fontWeight: 600 }}>
+                                          Multiple Products ({order.items.length})
+
+                                        </div>
+                                      )
                                     ) : (
-                                      order.productName || order.product?.name || '-'
+                                      (order.items && order.items.length === 1) ? (
+                                        order.items[0].productName || order.items[0].product?.name || '-'
+                                      ) : (
+                                        order.productName || order.product?.name || '-'
+                                      )
                                     )}
                                   </td>
                                   <td style={{ textAlign: 'center' }}>
-                                    {order.items && order.items.length > 0 ? (
-                                      <div style={{ display: 'flex', flexDirection: 'column', gap: '0.25rem' }}>
-                                        {order.items.map((item, idx) => (
-                                          <div key={idx} style={{ borderBottom: idx < order.items.length - 1 ? '1px solid #f1f5f9' : 'none', padding: '6px 4px', minHeight: '45px', display: 'flex', alignItems: 'center', justifyContent: 'center', whiteSpace: 'nowrap' }}>
-                                            {item.variant && item.variant.packSize
-                                              ? `${item.variant.packSize} ${item.variant.packUnit || 'ml'} (${item.variant.cartoonSize || 1} ${item.variant.cartoonUnit || 'Pcs'})`
-                                              : '-'}
-                                          </div>
-                                        ))}
-                                      </div>
+                                    {order.items && order.items.length > 1 ? (
+                                      expandedOrderRows.includes(order._id) ? (
+                                        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.25rem' }}>
+                                          {order.items.map((item, idx) => (
+                                            <div key={idx} style={{ borderBottom: idx < order.items.length - 1 ? '1px solid #f1f5f9' : 'none', padding: '6px 4px', minHeight: '45px', display: 'flex', alignItems: 'center', justifyContent: 'center', whiteSpace: 'nowrap' }}>
+                                              {item.variant && item.variant.packSize
+                                                ? `${item.variant.packSize} ${item.variant.packUnit || 'ml'} (${item.variant.cartoonSize || 1} ${item.variant.cartoonUnit || 'Pcs'})`
+                                                : '-'}
+                                            </div>
+                                          ))}
+                                        </div>
+                                      ) : (
+                                        <div style={{ padding: '0.5rem', color: '#64748b' }}>
+                                          -
+                                        </div>
+                                      )
                                     ) : (
-                                      order.variant && order.variant.packSize
-                                        ? `${order.variant.packSize} ${order.variant.packUnit || 'ml'} (${order.variant.cartoonSize || 1} ${order.variant.cartoonUnit || 'Pcs'})`
-                                        : '-'
+                                      (order.items && order.items.length === 1) ? (
+                                        (order.items[0].variant && order.items[0].variant.packSize)
+                                          ? `${order.items[0].variant.packSize} ${order.items[0].variant.packUnit || 'ml'} (${order.items[0].variant.cartoonSize || 1} ${order.items[0].variant.cartoonUnit || 'Pcs'})`
+                                          : '-'
+                                      ) : (
+                                        order.variant && order.variant.packSize
+                                          ? `${order.variant.packSize} ${order.variant.packUnit || 'ml'} (${order.variant.cartoonSize || 1} ${order.variant.cartoonUnit || 'Pcs'})`
+                                          : '-'
+                                      )
                                     )}
                                   </td>
                                   <td style={{ fontWeight: 700, color: '#0f172a', textAlign: 'center' }}>
-                                    {order.items && order.items.length > 0 ? (
-                                      <div style={{ display: 'flex', flexDirection: 'column', gap: '0.25rem' }}>
-                                        {order.items.map((item, idx) => {
+                                    {order.items && order.items.length > 1 ? (
+                                      expandedOrderRows.includes(order._id) ? (
+                                        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.25rem' }}>
+                                          {order.items.map((item, idx) => {
+                                            const itemQty = parseFloat(item.quantity) || 0
+                                            let freeQty = 0
+                                            const itemProduct = products.find(p => p._id === item.product || p._id === item.product?._id)
+                                            if (itemProduct && itemProduct.hasOffer && itemProduct.buyQuantity && itemProduct.freeQuantity) {
+                                              const buyQty = parseFloat(itemProduct.buyQuantity) || 0
+                                              const offerFreeQty = parseFloat(itemProduct.freeQuantity) || 0
+                                              if (buyQty > 0) {
+                                                const eligibleOffers = Math.floor(itemQty / buyQty)
+                                                freeQty = eligibleOffers * offerFreeQty
+                                              }
+                                            }
+                                            return (
+                                              <div key={idx} style={{ borderBottom: idx < order.items.length - 1 ? '1px solid #f1f5f9' : 'none', padding: '6px 4px', minHeight: '45px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                                                {freeQty > 0 ? `${itemQty}+${freeQty}=${itemQty + freeQty}` : itemQty}
+                                              </div>
+                                            )
+                                          })}
+                                        </div>
+                                      ) : (
+                                        <div style={{ padding: '0.5rem' }}>
+                                          {(() => {
+                                            const totalQty = order.items.reduce((sum, item) => sum + (parseFloat(item.quantity) || 0), 0)
+                                            return <span style={{ color: '#3b82f6', fontWeight: 700 }}>{totalQty} (Total)</span>
+                                          })()}
+                                        </div>
+                                      )
+                                    ) : (
+                                      (order.items && order.items.length === 1) ? (
+                                        (() => {
+                                          const item = order.items[0]
                                           const itemQty = parseFloat(item.quantity) || 0
                                           let freeQty = 0
                                           const itemProduct = products.find(p => p._id === item.product || p._id === item.product?._id)
@@ -12915,32 +14687,32 @@ function AdminPage({ language, toggleLanguage, t }) {
                                             }
                                           }
                                           return (
-                                            <div key={idx} style={{ borderBottom: idx < order.items.length - 1 ? '1px solid #f1f5f9' : 'none', padding: '6px 4px', minHeight: '45px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                                            <span>
                                               {freeQty > 0 ? `${itemQty}+${freeQty}=${itemQty + freeQty}` : itemQty}
-                                            </div>
+                                            </span>
                                           )
-                                        })}
-                                      </div>
-                                    ) : (
-                                      (() => {
-                                        // Single item order logic
-                                        const totalPurchasedQty = parseFloat(order.quantity) || 0
-                                        let totalFreeQty = 0
-                                        const orderProduct = products.find(p => p._id === order.product || p._id === order.product?._id)
-                                        if (orderProduct && orderProduct.hasOffer && orderProduct.buyQuantity && orderProduct.freeQuantity) {
-                                          const buyQty = parseFloat(orderProduct.buyQuantity) || 0
-                                          const freeQty = parseFloat(orderProduct.freeQuantity) || 0
-                                          if (buyQty > 0) {
-                                            const eligibleOffers = Math.floor(totalPurchasedQty / buyQty)
-                                            totalFreeQty = eligibleOffers * freeQty
+                                        })()
+                                      ) : (
+                                        (() => {
+                                          // Single item order logic (legacy)
+                                          const totalPurchasedQty = parseFloat(order.quantity) || 0
+                                          let totalFreeQty = 0
+                                          const orderProduct = products.find(p => p._id === order.product || p._id === order.product?._id)
+                                          if (orderProduct && orderProduct.hasOffer && orderProduct.buyQuantity && orderProduct.freeQuantity) {
+                                            const buyQty = parseFloat(orderProduct.buyQuantity) || 0
+                                            const freeQty = parseFloat(orderProduct.freeQuantity) || 0
+                                            if (buyQty > 0) {
+                                              const eligibleOffers = Math.floor(totalPurchasedQty / buyQty)
+                                              totalFreeQty = eligibleOffers * freeQty
+                                            }
                                           }
-                                        }
-                                        return (
-                                          <span>
-                                            {totalFreeQty > 0 ? `${totalPurchasedQty}+${totalFreeQty}=${totalPurchasedQty + totalFreeQty}` : totalPurchasedQty}
-                                          </span>
-                                        )
-                                      })()
+                                          return (
+                                            <span>
+                                              {totalFreeQty > 0 ? `${totalPurchasedQty}+${totalFreeQty}=${totalPurchasedQty + totalFreeQty}` : totalPurchasedQty}
+                                            </span>
+                                          )
+                                        })()
+                                      )
                                     )}
                                   </td>
                                   <td style={{ textAlign: 'center' }}>{order.requestedByName || order.requestedByRole || '-'}</td>
@@ -13004,14 +14776,19 @@ function AdminPage({ language, toggleLanguage, t }) {
                                       <button
                                         className="admin-action-btn edit"
                                         style={{ backgroundColor: '#e0e7ff', color: '#1d4ed8', width: '100%' }}
-                                        onClick={() => setViewingOrder(order)}
+                                        onClick={(e) => { e.stopPropagation(); setViewingOrder(order); }}
                                       >
                                         {language === 'en' ? 'View' : 'দেখুন'}
                                       </button>
                                       <button
                                         className="admin-action-btn"
-                                        style={{ backgroundColor: '#f3f4f6', color: '#374151', width: '100%' }}
-                                        onClick={() => handlePrintOrder(order)}
+                                        style={{
+                                          backgroundColor: '#f3f4f6',
+                                          color: '#374151',
+                                          width: '100%',
+                                          display: window.innerWidth > 768 ? 'none' : 'block'
+                                        }}
+                                        onClick={(e) => { e.stopPropagation(); handlePrintOrder(order); }}
                                       >
                                         {language === 'en' ? 'Print Invoice' : 'ইনভয়েস প্রিন্ট'}
                                       </button>
@@ -13161,7 +14938,7 @@ function AdminPage({ language, toggleLanguage, t }) {
                                     <div className="mobile-card-subtitle" style={{ marginTop: '0.15rem' }}>
                                       {order.dealerName || order.dealer?.name || 'N/A'}
                                     </div>
-                                    <div className="mobile-card-subtitle">{order.orderId || '-'}</div>
+                                    <div className="mobile-card-subtitle">{customOrderIds[order._id] || order.orderId || '-'}</div>
                                   </div>
 
                                   <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', marginLeft: 'auto', alignSelf: 'stretch', justifyContent: 'space-between', flexShrink: 0, paddingBottom: 0 }}>
@@ -13432,7 +15209,7 @@ function AdminPage({ language, toggleLanguage, t }) {
                               {language === 'en' ? 'Order Details' : 'অর্ডার বিবরণ'}
                             </h2>
                             <p style={{ margin: '0.25rem 0 0 0', color: '#475569', fontWeight: 600 }}>
-                              {viewingOrder.orderId || 'N/A'}
+                              {customOrderIds[viewingOrder._id] || viewingOrder.orderId || 'N/A'}
                             </p>
                           </div>
                           <button
@@ -13458,7 +15235,7 @@ function AdminPage({ language, toggleLanguage, t }) {
                               {language === 'en' ? 'Order ID' : 'অর্ডার আইডি'}
                             </label>
                             <p style={{ margin: '0.5rem 0 0 0', fontSize: '1rem', fontWeight: 600, color: '#111827' }}>
-                              {viewingOrder.orderId || 'N/A'}
+                              {customOrderIds[viewingOrder._id] || viewingOrder.orderId || 'N/A'}
                             </p>
                           </div>
 
@@ -14282,6 +16059,21 @@ function AdminPage({ language, toggleLanguage, t }) {
                                   {adminContent.delete}
                                 </button>
                               )}
+                              <button
+                                onClick={() => handlePrintOrder(viewingOrder)}
+                                style={{
+                                  padding: '0.5rem 1.5rem',
+                                  backgroundColor: '#f3f4f6',
+                                  color: '#374151',
+                                  border: 'none',
+                                  borderRadius: '0.5rem',
+                                  cursor: 'pointer',
+                                  fontWeight: 700,
+                                  boxShadow: '0 10px 20px rgba(0,0,0,0.1)'
+                                }}
+                              >
+                                {language === 'en' ? 'Print Invoice' : 'ইনভয়েস প্রিন্ট'}
+                              </button>
                             </>
                           )}
                           <button
@@ -14316,7 +16108,79 @@ function AdminPage({ language, toggleLanguage, t }) {
             activeTab === 'inventory' && (
               <div className="admin-tab-content">
                 <div className="admin-tab-header">
-                  <h1 className="admin-page-title">{adminContent.inventory}</h1>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '1.5rem', flexWrap: 'wrap' }}>
+                    <h1 className="admin-page-title" style={{ margin: 0 }}>{adminContent.inventory}</h1>
+
+                    {/* Inventory Filter Controls */}
+                    <div style={{ display: 'flex', gap: '0.6rem', alignItems: 'center', backgroundColor: '#f8fafc', padding: '0.4rem', borderRadius: '0.5rem', border: '1px solid #e2e8f0' }}>
+                      <div style={{ display: 'flex', borderRadius: '0.375rem', overflow: 'hidden', border: '1px solid #cbd5e1' }}>
+                        {['all', 'monthly', 'half', 'yearly'].map((type) => (
+                          <button
+                            key={type}
+                            onClick={() => setInventoryFilter(type)}
+                            style={{
+                              padding: '0.4rem 0.8rem',
+                              border: 'none',
+                              backgroundColor: inventoryFilter === type ? '#3b82f6' : 'white',
+                              color: inventoryFilter === type ? 'white' : '#64748b',
+                              fontSize: '0.75rem',
+                              fontWeight: 700,
+                              cursor: 'pointer',
+                              borderRight: type !== 'yearly' ? '1px solid #cbd5e1' : 'none',
+                              transition: 'all 0.2s'
+                            }}
+                          >
+                            {type === 'all' ? (language === 'en' ? 'All' : 'সব') :
+                              type === 'monthly' ? (language === 'en' ? 'Monthly' : 'মাসিক') :
+                                type === 'half' ? (language === 'en' ? 'Half' : 'অর্ধ-বার্ষিক') :
+                                  (language === 'en' ? 'Yearly' : 'বার্ষিক')}
+                          </button>
+                        ))}
+                      </div>
+
+                      {/* Period Selection Details */}
+                      {inventoryFilter !== 'all' && (
+                        <div style={{ display: 'flex', gap: '0.4rem', borderLeft: '1px solid #e2e8f0', paddingLeft: '0.6rem' }}>
+                          {inventoryFilter === 'monthly' && (
+                            <select
+                              value={inventorySelectedMonth}
+                              onChange={(e) => setInventorySelectedMonth(parseInt(e.target.value))}
+                              style={{ padding: '0.35rem 0.6rem', borderRadius: '0.375rem', border: '1px solid #cbd5e1', fontSize: '0.75rem', fontWeight: 600, backgroundColor: 'white' }}
+                            >
+                              {Array.from({ length: 12 }, (_, i) => (
+                                <option key={i} value={i}>
+                                  {new Date(0, i).toLocaleString('en-US', { month: 'short' })}
+                                </option>
+                              ))}
+                            </select>
+                          )}
+
+                          {inventoryFilter === 'half' && (
+                            <select
+                              value={inventorySelectedHalf}
+                              onChange={(e) => setInventorySelectedHalf(e.target.value)}
+                              style={{ padding: '0.35rem 0.6rem', borderRadius: '0.375rem', border: '1px solid #cbd5e1', fontSize: '0.75rem', fontWeight: 600, backgroundColor: 'white' }}
+                            >
+                              <option value="H1">H1 (Jan-Jun)</option>
+                              <option value="H2">H2 (Jul-Dec)</option>
+                            </select>
+                          )}
+
+                          {['monthly', 'half', 'yearly'].includes(inventoryFilter) && (
+                            <select
+                              value={inventorySelectedYear}
+                              onChange={(e) => setInventorySelectedYear(parseInt(e.target.value))}
+                              style={{ padding: '0.35rem 0.6rem', borderRadius: '0.375rem', border: '1px solid #cbd5e1', fontSize: '0.75rem', fontWeight: 600, backgroundColor: 'white' }}
+                            >
+                              {[2024, 2025, 2026].map(y => (
+                                <option key={y} value={y}>{y}</option>
+                              ))}
+                            </select>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  </div>
                   <button className="admin-add-btn" onClick={() => { setShowInventoryForm(true); resetInventoryForm(); }}>
                     <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
                       <line x1="12" y1="5" x2="12" y2="19" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
@@ -14367,19 +16231,54 @@ function AdminPage({ language, toggleLanguage, t }) {
                     <div className="admin-table-container" style={{ marginTop: '2rem' }}>
                       <table className="admin-table">
                         <thead>
-                          <tr>
-                            <th>{language === 'en' ? 'Product Name' : 'পণ্যের নাম'}</th>
-                            <th>{language === 'en' ? 'Product ID' : 'পণ্য আইডি'}</th>
-                            <th>{language === 'en' ? 'Quantity' : 'পরিমাণ'}</th>
-                            <th>{language === 'en' ? 'Required' : 'প্রয়োজন'}</th>
-                            <th>{language === 'en' ? 'Delivered' : 'সরবরাহকৃত'}</th>
+                          <tr style={{ cursor: 'pointer' }}>
+                            <th onClick={() => handleSortInventory('productName')}>
+                              <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+                                {language === 'en' ? 'Product Name' : 'পণ্যের নাম'}
+                                {inventorySortField === 'productName' && (
+                                  <span>{inventorySortDirection === 'asc' ? '↑' : '↓'}</span>
+                                )}
+                              </div>
+                            </th>
+                            <th onClick={() => handleSortInventory('productCode')}>
+                              <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+                                {language === 'en' ? 'Variant Details' : 'ভ্যারিয়েন্ট বিস্তারিত'}
+                                {inventorySortField === 'productCode' && (
+                                  <span>{inventorySortDirection === 'asc' ? '↑' : '↓'}</span>
+                                )}
+                              </div>
+                            </th>
+                            <th onClick={() => handleSortInventory('quantity')}>
+                              <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+                                {language === 'en' ? 'Quantity' : 'পরিমাণ'}
+                                {inventorySortField === 'quantity' && (
+                                  <span>{inventorySortDirection === 'asc' ? '↑' : '↓'}</span>
+                                )}
+                              </div>
+                            </th>
+                            <th onClick={() => handleSortInventory('required')}>
+                              <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+                                {language === 'en' ? 'Required' : 'প্রয়োজন'}
+                                {inventorySortField === 'required' && (
+                                  <span>{inventorySortDirection === 'asc' ? '↑' : '↓'}</span>
+                                )}
+                              </div>
+                            </th>
+                            <th onClick={() => handleSortInventory('delivered')}>
+                              <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+                                {language === 'en' ? 'Delivered' : 'সরবরাহকৃত'}
+                                {inventorySortField === 'delivered' && (
+                                  <span>{inventorySortDirection === 'asc' ? '↑' : '↓'}</span>
+                                )}
+                              </div>
+                            </th>
                             <th>{language === 'en' ? 'Status' : 'অবস্থা'}</th>
                             <th>{language === 'en' ? 'Actions' : 'কার্যক্রম'}</th>
                           </tr>
                         </thead>
                         <tbody>
-                          {inventory.length > 0 ? (
-                            inventory.map((item) => (
+                          {sortedInventory.length > 0 ? (
+                            sortedInventory.map((item) => (
                               <tr key={item._id}>
                                 <td>
                                   <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
@@ -14387,7 +16286,7 @@ function AdminPage({ language, toggleLanguage, t }) {
                                     <span>{item.product?.name || 'Unknown'}</span>
                                   </div>
                                 </td>
-                                <td>{item.variant?.productCode || '-'}</td>
+                                <td>{item.variant?.productCode ? `${item.variant.productCode} (${item.variant.packSize} ${item.variant.packUnit || 'ml'}) [${item.variant.cartoonSize || 1} ${item.variant.cartoonUnit || 'Pcs'}]` : '-'}</td>
                                 <td style={{
                                   color: ((item.requiredQuantity > item.quantity) || (item.quantity <= (item.minStockLevel || 10))) ? '#ef4444' : 'inherit',
                                   fontWeight: ((item.requiredQuantity > item.quantity) || (item.quantity <= (item.minStockLevel || 10))) ? 700 : 400
@@ -14475,7 +16374,7 @@ function AdminPage({ language, toggleLanguage, t }) {
                                 </div>
                                 <div className="mobile-card-header-text">
                                   <div className="mobile-card-title">{item.product?.name || 'Unknown'}</div>
-                                  <div className="mobile-card-subtitle">{item.variant?.productCode || '-'}</div>
+                                  <div className="mobile-card-subtitle">{item.variant?.productCode ? `${item.variant.productCode} (${item.variant.packSize} ${item.variant.packUnit || 'ml'}) [${item.variant.cartoonSize || 1} ${item.variant.cartoonUnit || 'Pcs'}]` : '-'}</div>
                                 </div>
                                 <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', marginLeft: 'auto' }}>
                                   <div className="mobile-card-status-badge" style={{
@@ -14561,6 +16460,188 @@ function AdminPage({ language, toggleLanguage, t }) {
             )
           }
 
+          {/* Territory Management Tab */}
+          {
+            activeTab === 'territory' && (
+              <div className="admin-tab-content">
+                <div className="admin-tab-header">
+                  <h1 className="admin-page-title" style={{ margin: 0 }}>{adminContent.territory}</h1>
+                  <button
+                    className="admin-add-btn"
+                    onClick={() => {
+                      resetTerritoryForm()
+                      setShowTerritoryForm(true)
+                    }}
+                  >
+                    <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                      <line x1="12" y1="5" x2="12" y2="19" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+                      <line x1="5" y1="12" x2="19" y2="12" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+                    </svg>
+                    {language === 'en' ? 'Add Territory' : 'টেরিটরি যোগ করুন'}
+                  </button>
+                </div>
+
+                {loadingTerritories ? (
+                  <LoadingSpinner text={language === 'en' ? 'Loading territories...' : 'টেরিটরি লোড হচ্ছে...'} />
+                ) : (
+                  <>
+                    {/* Desktop Table View */}
+                    <div className="admin-table-container desktop-only">
+                      <table className="admin-table">
+                        <thead>
+                          <tr>
+                            <th onClick={() => handleSortTerritory('regionId')} style={{ cursor: 'pointer' }}>
+                              {language === 'en' ? 'Region ID' : 'অঞ্চল আইডি'}
+                              {territorySortField === 'regionId' && (
+                                <span style={{ marginLeft: '0.5rem' }}>{territorySortDirection === 'asc' ? '↑' : '↓'}</span>
+                              )}
+                            </th>
+                            <th onClick={() => handleSortTerritory('areaId')} style={{ cursor: 'pointer' }}>
+                              {language === 'en' ? 'Area ID' : 'এলাকা আইডি'}
+                              {territorySortField === 'areaId' && (
+                                <span style={{ marginLeft: '0.5rem' }}>{territorySortDirection === 'asc' ? '↑' : '↓'}</span>
+                              )}
+                            </th>
+                            <th onClick={() => handleSortTerritory('territoryId')} style={{ cursor: 'pointer' }}>
+                              {adminContent.territoryId}
+                              {territorySortField === 'territoryId' && (
+                                <span style={{ marginLeft: '0.5rem' }}>{territorySortDirection === 'asc' ? '↑' : '↓'}</span>
+                              )}
+                            </th>
+                            <th onClick={() => handleSortTerritory('division')} style={{ cursor: 'pointer' }}>
+                              {language === 'en' ? 'Division' : 'বিভাগ'}
+                              {territorySortField === 'division' && (
+                                <span style={{ marginLeft: '0.5rem' }}>{territorySortDirection === 'asc' ? '↑' : '↓'}</span>
+                              )}
+                            </th>
+                            <th onClick={() => handleSortTerritory('zilla')} style={{ cursor: 'pointer' }}>
+                              {language === 'en' ? 'Zilla' : 'জেলা'}
+                              {territorySortField === 'zilla' && (
+                                <span style={{ marginLeft: '0.5rem' }}>{territorySortDirection === 'asc' ? '↑' : '↓'}</span>
+                              )}
+                            </th>
+                            <th onClick={() => handleSortTerritory('area')} style={{ cursor: 'pointer' }}>
+                              {language === 'en' ? 'Area' : 'এলাকা'}
+                              {territorySortField === 'area' && (
+                                <span style={{ marginLeft: '0.5rem' }}>{territorySortDirection === 'asc' ? '↑' : '↓'}</span>
+                              )}
+                            </th>
+                            <th>{language === 'en' ? 'Actions' : 'কার্যক্রম'}</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {sortedTerritories.length > 0 ? (
+                            sortedTerritories.map((territory) => (
+                              <tr key={territory._id}>
+                                <td>{territory.regionId}</td>
+                                <td>{territory.areaId}</td>
+                                <td>{territory.territoryId}</td>
+                                <td>{territory.division}</td>
+                                <td>{territory.zilla}</td>
+                                <td>{territory.area}</td>
+                                <td>
+                                  <div style={{ display: 'flex', gap: '0.5rem' }}>
+                                    <button
+                                      className="admin-action-btn edit"
+                                      onClick={() => {
+                                        setTerritoryForm(territory)
+                                        setShowTerritoryForm(true)
+                                      }}
+                                      title={language === 'en' ? 'Edit' : 'সম্পাদনা'}
+                                    >
+                                      <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                                        <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+                                        <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+                                      </svg>
+                                    </button>
+                                    <button
+                                      className="admin-action-btn delete"
+                                      onClick={() => handleDeleteTerritory(territory._id)}
+                                      title={language === 'en' ? 'Delete' : 'মুছুন'}
+                                    >
+                                      <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                                        <polyline points="3 6 5 6 21 6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+                                        <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+                                      </svg>
+                                    </button>
+                                  </div>
+                                </td>
+                              </tr>
+                            ))
+                          ) : (
+                            <tr>
+                              <td colSpan="6" style={{ textAlign: 'center', padding: '2rem' }}>
+                                {adminContent.noData}
+                              </td>
+                            </tr>
+                          )}
+                        </tbody>
+                      </table>
+                    </div>
+
+                    {/* Mobile Card View */}
+                    <div className="mobile-card-container">
+                      {sortedTerritories.length === 0 ? (
+                        <div style={{ textAlign: 'center', padding: '2rem', color: '#6b7280' }}>
+                          {adminContent.noData}
+                        </div>
+                      ) : (
+                        sortedTerritories.map((territory) => (
+                          <div className="mobile-card" key={territory._id}>
+                            <div className="mobile-card-header">
+                              <div className="mobile-card-avatar" style={{ backgroundColor: '#3b82f6' }}>
+                                <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" style={{ width: '20px', height: '20px' }}>
+                                  <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+                                  <circle cx="12" cy="10" r="3" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+                                </svg>
+                              </div>
+                              <div className="mobile-card-header-text">
+                                <div className="mobile-card-title">{territory.division} - {territory.zilla}</div>
+                                <div className="mobile-card-subtitle">{territory.area}</div>
+                              </div>
+                            </div>
+                            <div className="mobile-card-body">
+                              <div className="mobile-card-row">
+                                <span className="mobile-card-label">{language === 'en' ? 'Region ID' : 'অঞ্চল আইডি'}:</span>
+                                <span className="mobile-card-value">{territory.regionId}</span>
+                              </div>
+                              <div className="mobile-card-row">
+                                <span className="mobile-card-label">{language === 'en' ? 'Area ID' : 'এলাকা আইডি'}:</span>
+                                <span className="mobile-card-value">{territory.areaId}</span>
+                              </div>
+                              <div className="mobile-card-row">
+                                <span className="mobile-card-label">{adminContent.territoryId}:</span>
+                                <span className="mobile-card-value">{territory.territoryId}</span>
+                              </div>
+                            </div>
+                            <div className="mobile-card-actions">
+                              <button
+                                className="mobile-action-btn"
+                                onClick={() => {
+                                  setTerritoryForm(territory)
+                                  setShowTerritoryForm(true)
+                                }}
+                              >
+                                {language === 'en' ? 'Edit' : 'সম্পাদনা'}
+                              </button>
+                              <button
+                                className="mobile-action-btn delete"
+                                onClick={() => handleDeleteTerritory(territory._id)}
+                                style={{ backgroundColor: '#fee2e2', color: '#dc2626', marginLeft: '0.5rem' }}
+                              >
+                                {language === 'en' ? 'Delete' : 'মুছুন'}
+                              </button>
+                            </div>
+                          </div>
+                        ))
+                      )}
+                    </div>
+                  </>
+                )}
+              </div>
+            )
+          }
+
           {/* Revenue Tab */}
           {
             activeTab === 'revenue' && (
@@ -14587,6 +16668,7 @@ function AdminPage({ language, toggleLanguage, t }) {
                         >
                           <option value="all">{language === 'en' ? 'All Time' : 'সব সময়'}</option>
                           <option value="monthly">{language === 'en' ? 'Monthly' : 'মাসিক'}</option>
+                          <option value="half-yearly">{language === 'en' ? 'Half Yearly' : 'অর্ধ-বার্ষিক'}</option>
                           <option value="yearly">{language === 'en' ? 'Yearly' : 'বার্ষিক'}</option>
                         </select>
 
@@ -14622,7 +16704,41 @@ function AdminPage({ language, toggleLanguage, t }) {
                                 backgroundColor: 'white'
                               }}
                             >
-                              {Array.from({ length: 5 }, (_, i) => new Date().getFullYear() - i).map(year => (
+                              {Array.from({ length: 6 }, (_, i) => new Date().getFullYear() + 1 - i).map(year => (
+                                <option key={year} value={year}>{year}</option>
+                              ))}
+                            </select>
+                          </div>
+                        )}
+
+                        {revenueFilterType === 'half-yearly' && (
+                          <div style={{ display: 'flex', gap: '0.5rem' }}>
+                            <select
+                              value={revenueSelectedHalf}
+                              onChange={(e) => setRevenueSelectedHalf(e.target.value)}
+                              style={{
+                                padding: '0.5rem',
+                                borderRadius: '0.375rem',
+                                border: '1px solid #cbd5e1',
+                                fontSize: '0.875rem',
+                                backgroundColor: 'white'
+                              }}
+                            >
+                              <option value="H1">{language === 'en' ? '1st Half (Jan-Jun)' : '১ম অর্ধ (জানু-জুন)'}</option>
+                              <option value="H2">{language === 'en' ? '2nd Half (Jul-Dec)' : '২য় অর্ধ (জুলাই-ডিসে)'}</option>
+                            </select>
+                            <select
+                              value={revenueSelectedYear}
+                              onChange={(e) => setRevenueSelectedYear(parseInt(e.target.value))}
+                              style={{
+                                padding: '0.5rem',
+                                borderRadius: '0.375rem',
+                                border: '1px solid #cbd5e1',
+                                fontSize: '0.875rem',
+                                backgroundColor: 'white'
+                              }}
+                            >
+                              {Array.from({ length: 6 }, (_, i) => new Date().getFullYear() + 1 - i).map(year => (
                                 <option key={year} value={year}>{year}</option>
                               ))}
                             </select>
@@ -14641,7 +16757,7 @@ function AdminPage({ language, toggleLanguage, t }) {
                               backgroundColor: 'white'
                             }}
                           >
-                            {Array.from({ length: 5 }, (_, i) => new Date().getFullYear() - i).map(year => (
+                            {Array.from({ length: 6 }, (_, i) => new Date().getFullYear() + 1 - i).map(year => (
                               <option key={year} value={year}>{year}</option>
                             ))}
                           </select>
@@ -14962,6 +17078,15 @@ function AdminPage({ language, toggleLanguage, t }) {
                               if (revenueFilterType === 'monthly') {
                                 const t = (salesTargets || []).find(t => t.year === revenueSelectedYear && t.month === revenueSelectedMonth)
                                 target = t ? t.amount : 0
+                              } else if (revenueFilterType === 'half-yearly') {
+                                // Sum targets for the selected half (6 months)
+                                const startMonth = revenueSelectedHalf === 'H1' ? 0 : 6
+                                const endMonth = startMonth + 6
+                                target = (salesTargets || []).filter(t =>
+                                  t.year === revenueSelectedYear &&
+                                  t.month >= startMonth &&
+                                  t.month < endMonth
+                                ).reduce((sum, t) => sum + (t.amount || 0), 0)
                               } else if (revenueFilterType === 'yearly') {
                                 target = (salesTargets || []).filter(t => t.year === revenueSelectedYear).reduce((sum, t) => sum + (t.amount || 0), 0)
                               } else {
@@ -14986,19 +17111,33 @@ function AdminPage({ language, toggleLanguage, t }) {
                           <h3>{language === 'en' ? 'Achieve Amount' : 'অর্জিত পরিমাণ'}</h3>
                           <p>
                             ৳{(() => {
-                              const { start, end } = getRevenueDateRange(revenueFilterType, revenueSelectedDate, revenueSelectedMonth, revenueSelectedYear)
-
                               const achieveAmount = (orders || []).reduce((sum, order) => {
-                                // Date Filter
-                                if (start && end) {
-                                  const d = new Date(order.createdAt)
-                                  if (d < start || d > end) return sum
-                                }
-
                                 // Exclude cancelled/rejected
                                 if (order.status === 'Cancelled' || order.approvalStatus === 'Rejected') {
                                   return sum
                                 }
+
+                                // Filter based on filter type
+                                if (revenueFilterType === 'half-yearly') {
+                                  // For half-yearly, check targetHalf and targetYear fields
+                                  if (order.targetHalf !== revenueSelectedHalf || order.targetYear !== revenueSelectedYear) {
+                                    return sum
+                                  }
+                                } else if (revenueFilterType === 'monthly') {
+                                  // For monthly, check if order's targetYear and targetMonth match
+                                  const orderTargetMonth = order.targetMonth !== undefined ? order.targetMonth : new Date(order.createdAt).getMonth()
+                                  const orderTargetYear = order.targetYear || new Date(order.createdAt).getFullYear()
+                                  if (orderTargetYear !== revenueSelectedYear || orderTargetMonth !== revenueSelectedMonth) {
+                                    return sum
+                                  }
+                                } else if (revenueFilterType === 'yearly') {
+                                  // For yearly, check targetYear
+                                  const orderYear = order.targetYear || new Date(order.createdAt).getFullYear()
+                                  if (orderYear !== revenueSelectedYear) {
+                                    return sum
+                                  }
+                                }
+                                // For 'all', no date filtering needed
 
                                 // Count approved orders with discount
                                 if (order.approvalStatus === 'Approved') {
@@ -15040,11 +17179,219 @@ function AdminPage({ language, toggleLanguage, t }) {
                       </div>
 
                     </div >
-                    <div className="admin-settings-section" style={{ marginTop: '2rem' }}>
+                    <div className="revenue-location-filters-section">
+                      <div className="revenue-location-filters">
+                        <select
+                          className="revenue-filter-select"
+                          value={revenueSelectedRegion}
+                          onChange={(e) => {
+                            setRevenueSelectedRegion(e.target.value)
+                            setRevenueSelectedArea('')
+                            setRevenueSelectedTerritory('')
+                          }}
+                        >
+                          <option value="">{language === 'en' ? 'All Regions' : 'সব অঞ্চল'}</option>
+                          {revenueUniqueRegionIds.map(id => (
+                            <option key={id} value={id}>{id}</option>
+                          ))}
+                        </select>
+
+                        <select
+                          className="revenue-filter-select"
+                          value={revenueSelectedArea}
+                          onChange={(e) => {
+                            setRevenueSelectedArea(e.target.value)
+                            setRevenueSelectedTerritory('')
+                          }}
+                          disabled={!revenueSelectedRegion}
+                        >
+                          <option value="">{language === 'en' ? 'All Areas' : 'সব এলাকা'}</option>
+                          {revenueAvailableAreaIds.map(id => (
+                            <option key={id} value={id}>{id}</option>
+                          ))}
+                        </select>
+
+                        <select
+                          className="revenue-filter-select"
+                          value={revenueSelectedTerritory}
+                          onChange={(e) => setRevenueSelectedTerritory(e.target.value)}
+                          disabled={!revenueSelectedArea}
+                        >
+                          <option value="">{language === 'en' ? 'All Territories' : 'সব টেরিটরি'}</option>
+                          {revenueAvailableTerritoryIds.map(id => {
+                            const t = territories.find(tObj => tObj.territoryId === id && tObj.regionId === revenueSelectedRegion && tObj.areaId === revenueSelectedArea);
+                            return <option key={id} value={id}>{id}{t?.area ? ` (${t.area})` : ''}</option>;
+                          })}
+                        </select>
+
+                        {(revenueSelectedRegion || revenueSelectedArea || revenueSelectedTerritory) && (
+                          <button
+                            onClick={() => {
+                              setRevenueSelectedRegion('')
+                              setRevenueSelectedArea('')
+                              setRevenueSelectedTerritory('')
+                            }}
+                            className="revenue-clear-btn"
+                          >
+                            {language === 'en' ? 'Clear' : 'মুছুন'}
+                          </button>
+                        )}
+                      </div>
+                    </div>
+
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(450px, 1fr))', gap: '2rem' }}>
+
+                      {/* Product-wise Sale Summary */}
                       <div className="admin-settings-card">
-                        <h3>{language === 'en' ? 'Revenue Chart' : 'রাজস্ব চার্ট'}</h3>
-                        <div style={{ padding: '2rem', textAlign: 'center', color: '#6b7280' }}>
-                          {language === 'en' ? 'Chart will be displayed here' : 'চার্ট এখানে প্রদর্শিত হবে'}
+                        <h3>{language === 'en' ? 'Product Wise Sale Summary' : 'পণ্য অনুযায়ী বিক্রয় সারাংশ'}</h3>
+                        <div className="admin-table-container.no-horizontal-scroll" style={{ maxHeight: '500px', overflowY: 'auto' }}>
+                          <table className="admin-table">
+                            <thead style={{ position: 'sticky', top: 0, zIndex: 10 }}>
+                              <tr>
+                                <th>{language === 'en' ? 'ID' : 'আইডি'}</th>
+                                <th>{language === 'en' ? 'Product Name' : 'পণ্যের নাম'}</th>
+                                <th>{language === 'en' ? 'Variant' : 'ভ্যারিয়েন্ট'}</th>
+                                <th>{language === 'en' ? 'Sold Qty' : 'বিক্রিত সংখ্যা'}</th>
+                                <th>{language === 'en' ? 'Total Value' : 'মোট মূল্য'}</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {productSalesSummary.items.length > 0 ? (
+                                <>
+                                  {productSalesSummary.items.map((item, index) => (
+                                    <tr key={index}>
+                                      <td>{item.variant?.productCode || '-'}</td>
+                                      <td>
+                                        <div style={{ fontWeight: 500 }}>{item.productName}</div>
+                                      </td>
+                                      <td>{item.variantDisplay || '-'}</td>
+                                      <td>{item.quantity}</td>
+                                      <td>{language === 'en' ? '৳' : '৳'} {Math.round(item.totalValue).toLocaleString()}</td>
+                                    </tr>
+                                  ))}
+                                  {/* Footer for Totals */}
+                                  <tr style={{ backgroundColor: '#f8fafc', fontWeight: 800, borderTop: '2px solid #e2e8f0', position: 'sticky', bottom: 0, zIndex: 10 }}>
+                                    <td colSpan="3" style={{ textAlign: 'right' }}>{language === 'en' ? 'Grand Total:' : 'সর্বমোট:'}</td>
+                                    <td>{productSalesSummary.totals.quantity}</td>
+                                    <td>{language === 'en' ? '৳' : '৳'} {Math.round(productSalesSummary.totals.totalValue).toLocaleString()}</td>
+                                  </tr>
+                                </>
+                              ) : (
+                                <tr>
+                                  <td colSpan="5" style={{ textAlign: 'center', padding: '2rem', color: '#6b7280' }}>
+                                    {language === 'en' ? 'No sales data found' : 'কোন বিক্রয় তথ্য পাওয়া যায়নি'}
+                                  </td>
+                                </tr>
+                              )}
+                            </tbody>
+                          </table>
+                        </div>
+                      </div>
+
+                      {/* Ledger (formerly Customer Wise Sale Summary) */}
+                      <div className="admin-settings-card">
+                        <div style={{ marginBottom: '1.5rem' }}>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: ledgerEmployeeInfo ? '1.5rem' : 0, flexWrap: 'wrap', gap: '1rem' }}>
+                            <h3 style={{ margin: 0 }}>{language === 'en' ? 'Ledger' : 'লেজার'}</h3>
+                          </div>
+
+                          {ledgerEmployeeInfo && (
+                            <div style={{ display: 'flex', justifyContent: 'center', width: '100%' }}>
+                              <div className="employee-details-box" style={{
+                                display: 'flex',
+                                flexWrap: 'wrap',
+                                justifyContent: 'center',
+                                gap: '1.5rem',
+                                padding: '0.75rem 1.25rem',
+                                backgroundColor: '#f0f9ff',
+                                borderRadius: '10px',
+                                border: '1px solid #bae6fd',
+                                fontSize: '0.9rem',
+                                color: '#0369a1',
+                                boxShadow: '0 2px 4px rgba(0,0,0,0.02)',
+                                width: 'fit-content'
+                              }}>
+                                <div>
+                                  <span style={{ fontWeight: 600, color: '#0284c7' }}>{language === 'en' ? 'Employee:' : 'কর্মকর্তা:'} </span>
+                                  {ledgerEmployeeInfo.name}
+                                </div>
+                                <div>
+                                  <span style={{ fontWeight: 600, color: '#0284c7' }}>{language === 'en' ? 'Mobile:' : 'মোবাইল:'} </span>
+                                  {ledgerEmployeeInfo.phone}
+                                </div>
+                                <div>
+                                  <span style={{ fontWeight: 600, color: '#0284c7' }}>{language === 'en' ? 'Area:' : 'এলাকা:'} </span>
+                                  {ledgerEmployeeInfo.postingArea}
+                                </div>
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                        <div className="admin-table-container.no-horizontal-scroll" style={{ maxHeight: '500px', overflowY: 'auto' }}>
+                          <table className="admin-table">
+                            <thead style={{ position: 'sticky', top: 0, zIndex: 10 }}>
+                              <tr>
+                                {customerSalesSummary.viewMode === 'region' && (
+                                  <>
+                                    <th>{language === 'en' ? 'Region ID' : 'অঞ্চল আইডি'}</th>
+                                    <th>{language === 'en' ? 'Zilla' : 'জেলা'}</th>
+                                    <th>{language === 'en' ? 'total Amount' : 'মোট পরিমাণ'}</th>
+                                    <th>{language === 'en' ? 'Due' : 'বাকি'}</th>
+                                  </>
+                                )}
+                                {customerSalesSummary.viewMode === 'area' && (
+                                  <>
+                                    <th>{language === 'en' ? 'Area ID' : 'এলাকা আইডি'}</th>
+                                    <th>{language === 'en' ? 'Area' : 'এলাকা'}</th>
+                                    <th>{language === 'en' ? 'total Amount' : 'মোট পরিমাণ'}</th>
+                                    <th>{language === 'en' ? 'Due' : 'বাকি'}</th>
+                                  </>
+                                )}
+                                {customerSalesSummary.viewMode === 'territory' && (
+                                  <>
+                                    <th>{language === 'en' ? 'Territory ID' : 'টেরিটরি আইডি'}</th>
+                                    <th>{language === 'en' ? 'Area' : 'এলাকা'}</th>
+                                    <th>{language === 'en' ? 'total Amount' : 'মোট পরিমাণ'}</th>
+                                    <th>{language === 'en' ? 'Due' : 'বাকি'}</th>
+                                  </>
+                                )}
+                                {customerSalesSummary.viewMode === 'dealer' && (
+                                  <>
+                                    <th>{language === 'en' ? 'CID' : 'সিআইডি'}</th>
+                                    <th>{language === 'en' ? 'Customer' : 'কাস্টমার'}</th>
+                                    <th>{language === 'en' ? 'Grand Total' : 'মোট পরিমাণ'}</th>
+                                    <th>{language === 'en' ? 'Due' : 'বাকি'}</th>
+                                  </>
+                                )}
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {customerSalesSummary.items.length > 0 ? (
+                                <>
+                                  {customerSalesSummary.items.map((item, index) => (
+                                    <tr key={index}>
+                                      <td>{item.id}</td>
+                                      <td>{customerSalesSummary.viewMode === 'dealer' ? item.shopName : item.label}</td>
+                                      <td>{language === 'en' ? '৳' : '৳'} {Math.round(item.revenue).toLocaleString()}</td>
+                                      <td>{language === 'en' ? '৳' : '৳'} {Math.round(item.due).toLocaleString()}</td>
+                                    </tr>
+                                  ))}
+                                  {/* Footer for Totals */}
+                                  <tr style={{ backgroundColor: '#f8fafc', fontWeight: 800, borderTop: '2px solid #e2e8f0', position: 'sticky', bottom: 0, zIndex: 10 }}>
+                                    <td colSpan="2" style={{ textAlign: 'right' }}>{language === 'en' ? 'Total:' : 'মোট:'}</td>
+                                    <td>{language === 'en' ? '৳' : '৳'} {Math.round(customerSalesSummary.totals.revenue).toLocaleString()}</td>
+                                    <td>{language === 'en' ? '৳' : '৳'} {Math.round(customerSalesSummary.totals.due).toLocaleString()}</td>
+                                  </tr>
+                                </>
+                              ) : (
+                                <tr>
+                                  <td colSpan="4" style={{ textAlign: 'center', padding: '2rem', color: '#6b7280' }}>
+                                    {language === 'en' ? 'No data found' : 'কোন তথ্য পাওয়া যায়নি'}
+                                  </td>
+                                </tr>
+                              )}
+                            </tbody>
+                          </table>
                         </div>
                       </div>
                     </div>
@@ -15176,13 +17523,15 @@ function AdminPage({ language, toggleLanguage, t }) {
           }
         </div >
         {
-          printingOrder && (
+          printingOrder && createPortal(
             <OrderInvoice
               order={printingOrder}
               dealers={dealers}
               products={products}
               language={language}
-            />
+              customOrderId={customOrderIds[printingOrder._id]}
+            />,
+            document.body
           )
         }
 
@@ -15239,7 +17588,9 @@ function AdminPage({ language, toggleLanguage, t }) {
                       >
                         <option value="">Select Variant</option>
                         {products.find(p => p._id === inventoryForm.product)?.variants?.map(v => (
-                          <option key={v.productCode} value={v.productCode}>{v.productCode} ({v.packSize}{v.packUnit})</option>
+                          <option key={v.productCode} value={v.productCode}>
+                            {v.productCode} ({v.packSize} {v.packUnit || 'ml'}) [{v.cartoonSize || 1} {v.cartoonUnit || 'Pcs'}]
+                          </option>
                         ))}
                       </select>
                     </div>
@@ -15304,12 +17655,128 @@ function AdminPage({ language, toggleLanguage, t }) {
             </div>
           )
         }
+
+        {/* Territory Form Modal */}
+        {
+          showTerritoryForm && (
+            <div className="admin-employee-view-overlay" style={{
+              position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
+              backgroundColor: 'rgba(0, 0, 0, 0.5)', display: 'flex',
+              alignItems: 'center', justifyContent: 'center', zIndex: 2000
+            }}>
+              <div className="admin-modal-content" style={{ maxWidth: '600px', width: '90%', position: 'relative', borderRadius: '1rem', padding: '2rem' }}>
+                <button
+                  onClick={() => setShowTerritoryForm(false)}
+                  className="close-modal"
+                  style={{ position: 'absolute', top: '1rem', right: '1rem', background: 'none', border: 'none', fontSize: '1.5rem', cursor: 'pointer' }}
+                >
+                  ×
+                </button>
+                <h2 style={{ marginBottom: '1.5rem', color: '#1e293b' }}>
+                  {territoryForm._id ? (language === 'en' ? 'Edit Territory' : 'টেরিটরি সম্পাদন') : (language === 'en' ? 'Add Territory' : 'টেরিটরি যোগ করুন')}
+                </h2>
+                <form onSubmit={handleSaveTerritory} style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+                  <div className="admin-form-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '1rem' }}>
+                    <div className="admin-form-group">
+                      <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: 600 }}>{language === 'en' ? 'Region ID' : 'অঞ্চল আইডি'}</label>
+                      <input
+                        type="text"
+                        value={territoryForm.regionId}
+                        onChange={(e) => setTerritoryForm({ ...territoryForm, regionId: e.target.value })}
+                        required
+                        style={{ width: '100%', padding: '0.75rem', borderRadius: '0.5rem', border: '1px solid #e2e8f0' }}
+                      />
+                    </div>
+                    <div className="admin-form-group">
+                      <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: 600 }}>{language === 'en' ? 'Area ID' : 'এলাকা আইডি'}</label>
+                      <input
+                        type="text"
+                        value={territoryForm.areaId}
+                        onChange={(e) => setTerritoryForm({ ...territoryForm, areaId: e.target.value })}
+                        required
+                        style={{ width: '100%', padding: '0.75rem', borderRadius: '0.5rem', border: '1px solid #e2e8f0' }}
+                      />
+                    </div>
+                    <div className="admin-form-group">
+                      <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: 600 }}>{adminContent.territoryId}</label>
+                      <input
+                        type="text"
+                        value={territoryForm.territoryId}
+                        onChange={(e) => setTerritoryForm({ ...territoryForm, territoryId: e.target.value })}
+                        required
+                        style={{ width: '100%', padding: '0.75rem', borderRadius: '0.5rem', border: '1px solid #e2e8f0' }}
+                      />
+                    </div>
+                    <div className="admin-form-group">
+                      <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: 600 }}>{language === 'en' ? 'Division' : 'বিভাগ'}</label>
+                      <input
+                        type="text"
+                        value={territoryForm.division}
+                        onChange={(e) => setTerritoryForm({ ...territoryForm, division: e.target.value })}
+                        required
+                        style={{ width: '100%', padding: '0.75rem', borderRadius: '0.5rem', border: '1px solid #e2e8f0' }}
+                      />
+                    </div>
+                    <div className="admin-form-group">
+                      <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: 600 }}>{language === 'en' ? 'Zilla' : 'জেলা'}</label>
+                      <input
+                        type="text"
+                        value={territoryForm.zilla}
+                        onChange={(e) => setTerritoryForm({ ...territoryForm, zilla: e.target.value })}
+                        required
+                        style={{ width: '100%', padding: '0.75rem', borderRadius: '0.5rem', border: '1px solid #e2e8f0' }}
+                      />
+                    </div>
+                    <div className="admin-form-group">
+                      <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: 600 }}>{language === 'en' ? 'Area' : 'এলাকা'}</label>
+                      <input
+                        type="text"
+                        value={territoryForm.area}
+                        onChange={(e) => setTerritoryForm({ ...territoryForm, area: e.target.value })}
+                        required
+                        style={{ width: '100%', padding: '0.75rem', borderRadius: '0.5rem', border: '1px solid #e2e8f0' }}
+                      />
+                    </div>
+                  </div>
+                  {territoryStatus && (
+                    <div style={{
+                      padding: '0.75rem',
+                      borderRadius: '0.5rem',
+                      backgroundColor: territoryStatus.includes('Error') ? '#fee2e2' : '#ecfdf5',
+                      color: territoryStatus.includes('Error') ? '#dc2626' : '#10b981',
+                      fontWeight: 600
+                    }}>
+                      {territoryStatus}
+                    </div>
+                  )}
+                  <div className="admin-form-actions" style={{ display: 'flex', gap: '1rem', marginTop: '1rem' }}>
+                    <button
+                      type="submit"
+                      className="admin-save-btn"
+                      disabled={savingTerritory}
+                      style={{ flex: 1, padding: '1rem', backgroundColor: '#3b82f6', color: 'white', border: 'none', borderRadius: '0.5rem', fontWeight: 700, cursor: savingTerritory ? 'not-allowed' : 'pointer' }}
+                    >
+                      {savingTerritory ? (language === 'en' ? 'Saving...' : 'সংরক্ষণ হচ্ছে...') : (language === 'en' ? 'Save' : 'সংরক্ষণ করুন')}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setShowTerritoryForm(false)}
+                      style={{ flex: 1, padding: '1rem', backgroundColor: '#64748b', color: 'white', border: 'none', borderRadius: '0.5rem', fontWeight: 700, cursor: 'pointer' }}
+                    >
+                      {language === 'en' ? 'Cancel' : 'বাতিল'}
+                    </button>
+                  </div>
+                </form>
+              </div>
+            </div>
+          )
+        }
       </main >
     </div >
   )
 }
 
-const OrderInvoice = ({ order, dealers, products, language }) => {
+const OrderInvoice = ({ order, dealers, products, language, customOrderId }) => {
   if (!order) return null;
   const dealer = dealers.find(d => d._id === (order.dealer?._id || order.dealer)) || order.dealer;
 
@@ -15356,15 +17823,15 @@ const OrderInvoice = ({ order, dealers, products, language }) => {
     <div className="invoice-print-wrapper">
       <div className="invoice-print-container">
         <div className="invoice-top-header">
-          <div>Ref.</div>
-          <div>Date: {new Date(order.createdAt).toLocaleDateString()}</div>
+          <div></div>
+          <div>{new Date(order.createdAt).toLocaleDateString()}</div>
         </div>
-        <h1 className="invoice-title">INVOICE NO. {new Date(order.createdAt).getFullYear()} {order.orderId}</h1>
+        <h1 className="invoice-title">INVOICE NO. {customOrderId || order.orderId}</h1>
         <div className="invoice-customer-info">
           <div>
             <div className="info-row">
               <div className="info-label">Customer Name</div>
-              <div className="info-value">: {dealer?.shopName || order.dealerName} {dealer?.name || ''}</div>
+              <div className="info-value">: {dealer?.shopName ? `${dealer.shopName} (${dealer.name})` : (dealer?.name || order.dealerName)}</div>
             </div>
             <div className="info-row">
               <div className="info-label">Address</div>

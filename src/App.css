@@ -7715,7 +7715,8 @@ html {
 /* Admin Dashboard */
 .admin-main {
   display: flex;
-  min-height: 100vh;
+  height: 100vh;
+  overflow: hidden;
 }
 
 .admin-sidebar {
@@ -7725,9 +7726,7 @@ html {
   display: flex;
   flex-direction: column;
   padding: 1.5rem;
-  position: sticky;
-  top: 0;
-  height: 100vh;
+  height: 100%;
   overflow-y: auto;
   -webkit-overflow-scrolling: touch;
 }
@@ -7820,8 +7819,10 @@ html {
 .admin-content {
   flex: 1;
   padding: 2rem;
+  height: 100%;
   overflow-y: auto;
   -webkit-overflow-scrolling: touch;
+  background: #f8fafc;
 }
 
 .admin-welcome-section {
@@ -10318,6 +10319,59 @@ html {
   gap: 0.75rem;
 }
 
+.revenue-location-filters-section {
+  background: white;
+  padding: 1rem 1.5rem;
+  border-radius: 0.5rem;
+  margin-bottom: 2rem;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+  border: 1px solid #e2e8f0;
+}
+
+.revenue-location-filters {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+}
+
+.revenue-filter-select {
+  padding: 0.5rem;
+  border-radius: 0.375rem;
+  border: 1px solid #cbd5e1;
+  font-size: 0.875rem;
+  background-color: white;
+  min-width: 150px;
+  outline: none;
+  transition: border-color 0.2s;
+}
+
+.revenue-filter-select:focus {
+  border-color: #0ea5e9;
+}
+
+.revenue-filter-select:disabled {
+  background-color: #f8fafc;
+  cursor: not-allowed;
+  opacity: 0.7;
+}
+
+.revenue-clear-btn {
+  padding: 0.5rem 1rem;
+  border-radius: 0.375rem;
+  border: 1px solid #ef4444;
+  font-size: 0.875rem;
+  background-color: white;
+  color: #ef4444;
+  cursor: pointer;
+  font-weight: 500;
+  transition: all 0.2s ease;
+}
+
+.revenue-clear-btn:hover {
+  background-color: #fef2f2;
+}
+
 
 
 /* Responsive Admin Buttons */
@@ -10409,7 +10463,7 @@ html {
     left: 0;
     top: 0;
     width: 100%;
-    padding: 150px 40px;
+    padding: 90px 50px;
     background: white;
     font-family: 'Inter', sans-serif !important;
     color: black !important;
@@ -10458,8 +10512,8 @@ html {
 }
 
 .invoice-customer-info {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
+  display: flex;
+  justify-content: center;
   gap: 40px;
   margin-bottom: 25px;
   font-size: 0.95rem;

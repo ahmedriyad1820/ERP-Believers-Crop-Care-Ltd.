@@ -9,6 +9,26 @@ const router = express.Router()
 // Get all inventory records with required quantity from orders
 router.get('/', async (req, res) => {
     try {
+        const { period, selectedMonth, selectedYear, selectedHalf } = req.query
+
+        // Build date filter for order aggregations
+        let dateFilter = {}
+        if (period === 'monthly' && selectedMonth && selectedYear) {
+            const start = new Date(selectedYear, selectedMonth, 1)
+            const end = new Date(selectedYear, parseInt(selectedMonth) + 1, 0, 23, 59, 59, 999)
+            dateFilter = { createdAt: { $gte: start, $lte: end } }
+        } else if (period === 'yearly' && selectedYear) {
+            const start = new Date(selectedYear, 0, 1)
+            const end = new Date(selectedYear, 11, 31, 23, 59, 59, 999)
+            dateFilter = { createdAt: { $gte: start, $lte: end } }
+        } else if (period === 'half' && selectedYear && selectedHalf) {
+            const startMonth = selectedHalf === 'H1' ? 0 : 6
+            const endMonth = selectedHalf === 'H1' ? 5 : 11
+            const start = new Date(selectedYear, startMonth, 1)
+            const end = new Date(selectedYear, endMonth + 1, 0, 23, 59, 59, 999)
+            dateFilter = { createdAt: { $gte: start, $lte: end } }
+        }
+
         const inventory = await Inventory.find()
             .populate('product', 'name image')
             .sort({ lastUpdated: -1 })
@@ -19,7 +39,8 @@ router.get('/', async (req, res) => {
             {
                 $match: {
                     approvalStatus: 'Approved',
-                    status: { $in: ['Processing', 'Shipped'] }
+                    status: { $in: ['Processing', 'Shipped'] },
+                    ...dateFilter
                 }
             },
             { $unwind: '$items' },
@@ -38,7 +59,8 @@ router.get('/', async (req, res) => {
         const deliveredQuantities = await Order.aggregate([
             {
                 $match: {
-                    status: 'Delivered'
+                    status: 'Delivered',
+                    ...dateFilter
                 }
             },
             { $unwind: '$items' },
