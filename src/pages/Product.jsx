@@ -221,12 +221,12 @@ function ProductPage({ language, toggleLanguage, t, editedContent = {} }) {
     <div className="app product-page">
       <SiteHeader language={language} toggleLanguage={toggleLanguage} t={t} />
       <main className="product-page-main">
-        <section className="product-hero-banner fade-section">
+        <section className="product-hero-banner">
           <div
             className="product-hero-banner-content"
             style={{
               fontWeight: 700,
-              background: `linear-gradient(135deg, rgba(9, 17, 31, 0.40), rgba(19, 56, 98, 0.40)), url(${pageImages.productHero || '/hero-image.jpg'}) center 40% / cover no-repeat`
+              background: `linear-gradient(135deg, rgba(9, 17, 31, 0.20), rgba(19, 56, 98, 0.20)), url(${pageImages.productHero || '/hero-image.jpg'}) center 40% / cover no-repeat`
             }}
           >
             <h1 className="product-hero-heading">{heroContent.title}</h1>
@@ -234,7 +234,7 @@ function ProductPage({ language, toggleLanguage, t, editedContent = {} }) {
           </div>
         </section>
 
-        <section className="products-grid-section fade-section">
+        <section className="products-grid-section">
           <div className="products-grid-container">
             {/* Search and Category Filter */}
             <div className="product-filters-wrapper">

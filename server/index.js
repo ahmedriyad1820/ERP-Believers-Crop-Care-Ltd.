@@ -15,15 +15,53 @@ import settingsRoutes from './routes/settingsRoutes.js'
 import inventoryRoutes from './routes/inventoryRoutes.js'
 import territoryRoutes from './routes/territoryRoutes.js'
 
+import helmet from 'helmet'
+import xss from 'xss-clean'
+import mongoSanitize from 'mongo-sanitize'
+import hpp from 'hpp'
+import rateLimit from 'express-rate-limit'
+
 // Load environment variables
 dotenv.config()
 
 const app = express()
 
 // Middleware
+// Enable CORS first to handle preflight and errors correctly
 app.use(cors())
+
+// Set security HTTP headers
+app.use(helmet())
+
+// Limit requests from same API
+const limiter = rateLimit({
+  max: 5000, // Increased limit for dev/admin usage
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  message: 'Too many requests from this IP, please try again later!'
+})
+app.use('/api', limiter)
 app.use(express.json({ limit: '15mb' }))
 app.use(express.urlencoded({ extended: true, limit: '15mb' }))
+
+// Data sanitization against NoSQL query injection
+// Note: mongo-sanitize is a function that sanitizes inputs, not an express middleware by default in some versions,
+// but usually used as middleware wrapper or manually.
+// Checking package: "mongo-sanitize": "^1.1.0" - this package exports a function.
+// Using express-mongo-sanitize would be easier as middleware, but let's see if we can use a wrapper.
+// Actually commonly used "express-mongo-sanitize" is different.
+// "mongo-sanitize" strips keys starting with $.
+app.use((req, res, next) => {
+  req.body = mongoSanitize(req.body)
+  req.query = mongoSanitize(req.query)
+  req.params = mongoSanitize(req.params)
+  next()
+})
+
+// Data sanitization against XSS
+app.use(xss())
+
+// Prevent parameter pollution
+app.use(hpp())
 
 // Routes
 app.get('/', (req, res) => {

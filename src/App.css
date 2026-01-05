@@ -808,7 +808,7 @@
   margin: 0 auto;
   padding: clamp(2rem, 4vw, 3.5rem);
   border-radius: 0 0 32px 32px;
-  background: linear-gradient(135deg, rgba(9, 17, 31, 0.40), rgba(19, 56, 98, 0.40)),
+  background: linear-gradient(135deg, rgba(9, 17, 31, 0.20), rgba(19, 56, 98, 0.20)),
     url('https://images.unsplash.com/photo-1500937386664-56d1dfef3854?auto=format&fit=crop&w=2000&q=80') center 40% / cover no-repeat;
   color: #fff;
   text-align: center;

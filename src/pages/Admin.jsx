@@ -23,6 +23,34 @@ const resolveApiBase = () => {
 }
 
 const API_BASE = resolveApiBase()
+
+// Authenticated Fetch Helper
+const authFetch = async (url, options = {}) => {
+  const token = localStorage.getItem('authToken')
+  const headers = {
+    'Content-Type': 'application/json',
+    ...options.headers
+  }
+
+  if (token) {
+    headers['Authorization'] = `Bearer ${token}`
+  }
+
+  const response = await fetch(url, { ...options, headers })
+
+  if (response.status === 401) {
+    // If we receive a 401 and we have ANY auth indicators, it means session is invalid.
+    // We must clear it and reload to show login screen.
+    if (localStorage.getItem('authToken') || localStorage.getItem('adminAuth')) {
+      localStorage.removeItem('adminAuth')
+      localStorage.removeItem('authToken')
+      window.location.reload()
+    }
+  }
+
+  return response
+}
+
 import { useNavigate } from 'react-router-dom'
 import logoImage from '../assets/logo.png'
 
@@ -138,7 +166,41 @@ function AdminPage({ language, toggleLanguage, t }) {
       visionImage: '/hero-image.jpg',
       missionImage: '/hero-image.jpg',
       aboutValuesBackground: 'https://images.stockcake.com/public/e/6/e/e6e4865c-08b7-4633-b428-f5658462485e_large/farmers-tending-crops-stockcake.jpg',
-      careerValuesBackground: 'https://images.stockcake.com/public/e/6/e/e6e4865c-08b7-4633-b428-f5658462485e_large/farmers-tending-crops-stockcake.jpg'
+      careerValuesBackground: 'https://images.stockcake.com/public/e/6/e/e6e4865c-08b7-4633-b428-f5658462485e_large/farmers-tending-crops-stockcake.jpg',
+      teamMembers: [
+        {
+          id: 'team-' + Date.now() + '-1',
+          name: { en: 'Abdul Latif', bn: 'আব্দুল লতিফ' },
+          role: { en: 'Chairman', bn: 'চেয়ারম্যান' },
+          expertise: { en: 'Provides strategic vision and governance for sustainable agribusiness growth nationwide.', bn: 'সারা দেশে টেকসই কৃষি ব্যবসার প্রবৃদ্ধির জন্য কৌশলগত ভিশন ও তত্ত্বাবধান দেন।' },
+          photo: 'https://images.unsplash.com/photo-1504593811423-6dd665756598?auto=format&fit=crop&w=800&q=80',
+          group: 'chairman'
+        },
+        {
+          id: 'team-' + Date.now() + '-2',
+          name: { en: 'Md. Alif Ahmed', bn: 'মো. আলিফ আহমেদ' },
+          role: { en: 'Managing Director', bn: 'ম্যানেজিং ডিরেক্টর' },
+          expertise: { en: '17+ years in agri-distribution and sustainable supply chain operations.', bn: '১৭+ বছরের কৃষি বিতরণ এবং টেকসই সাপ্লাই চেইন পরিচালনার অভিজ্ঞতা।' },
+          photo: 'https://images.unsplash.com/photo-1544723795-3fb6469f5b39?auto=format&fit=crop&w=800&q=80',
+          group: 'board'
+        },
+        {
+          id: 'team-' + Date.now() + '-3',
+          name: { en: 'Md. Arafat Ahmed', bn: 'মো. আরাফাত আহমেদ' },
+          role: { en: 'Director', bn: 'ডিরেক্টর' },
+          expertise: { en: 'Builds nationwide dealer partnerships and farmer service programs.', bn: 'সারা দেশে ডিলার অংশীদারিত্ব ও কৃষক সেবা প্রোগ্রাম গড়ে তোলেন।' },
+          photo: 'https://images.unsplash.com/photo-1524504388940-b1c1722653e1?auto=format&fit=crop&w=800&q=80',
+          group: 'board'
+        },
+        {
+          id: 'team-' + Date.now() + '-4',
+          name: { en: 'Dr. Nusrat Rahman', bn: 'ডা. নুসরাত রহমান' },
+          role: { en: 'Head of Sales', bn: 'হেড অব সেলস' },
+          expertise: { en: 'Leads regional sales teams and on-ground activation to keep farmers supported year-round.', bn: 'বিভাগীয় সেলস টিম ও মাঠ পর্যায়ের কার্যক্রম তদারকি করে কৃষকদের সার্বক্ষণিক সহায়তা নিশ্চিত করেন।' },
+          photo: 'https://images.unsplash.com/photo-1544005313-94ddf0286df2?auto=format&fit=crop&w=800&q=80',
+          group: 'management'
+        }
+      ]
     }
   })
   const [editedContent, setEditedContent] = useState(() => {
@@ -150,12 +212,32 @@ function AdminPage({ language, toggleLanguage, t }) {
   const [editMode, setEditMode] = useState(false)
   const navigate = useNavigate()
   const [employees, setEmployees] = useState([])
+  const nextEmployeeId = useMemo(() => {
+    if (!employees || employees.length === 0) return 'bcc001'
+    const numericIds = employees
+      .map(emp => {
+        const match = (emp.employeeId || '').match(/bcc(\d+)/i)
+        return match ? parseInt(match[1], 10) : null
+      })
+      .filter(id => id !== null)
+    const maxId = numericIds.length > 0 ? Math.max(...numericIds) : 0
+    return `bcc${String(maxId + 1).padStart(3, '0')}`
+  }, [employees])
   const [showEmployeeForm, setShowEmployeeForm] = useState(false)
   const [dealers, setDealers] = useState([])
   const [products, setProducts] = useState([])
   const [orders, setOrders] = useState([])
   const [orderRequests, setOrderRequests] = useState([])
   const [showOrderRequests, setShowOrderRequests] = useState(false)
+  const [selectedCollectionOrderId, setSelectedCollectionOrderId] = useState('')
+  const [selectedReturnOrderId, setSelectedReturnOrderId] = useState('')
+  const [returnForm, setReturnForm] = useState({
+    productId: '',
+    variant: null,
+    packQuantity: '',
+    cartonQuantity: '',
+    returnPlace: ''
+  })
   const [viewingOrder, setViewingOrder] = useState(null)
   const [isEditingOrderDetails, setIsEditingOrderDetails] = useState(false)
   const [editingOrderDetails, setEditingOrderDetails] = useState(null)
@@ -179,6 +261,47 @@ function AdminPage({ language, toggleLanguage, t }) {
       return (orderYear == dealerFilterYear) && (orderHalf === dealerFilterHalf)
     })
   }, [dealerOrders, dealerFilterHalf, dealerFilterYear])
+
+  const filteredDealerOrdersTotals = useMemo(() => {
+    return filteredDealerOrders.reduce((acc, order) => {
+      const price = parseFloat(order.totalPrice || 0)
+      const discount = order.discountEnabled && order.discountAmount > 0 ? order.discountAmount : 1
+      const grandTotal = Math.round(price * discount)
+      const paid = order.paidAmount ? parseFloat(order.paidAmount) || 0 : 0
+      const commission = (order.paymentHistory || []).reduce((cSum, p) => cSum + (parseFloat(p.commission) || 0), 0)
+      const totalPaid = Math.round(paid + commission)
+      const due = Math.max(0, grandTotal - totalPaid)
+
+      return {
+        totalGrandTotal: acc.totalGrandTotal + grandTotal,
+        totalPaidAmount: acc.totalPaidAmount + totalPaid,
+        totalDueAmount: acc.totalDueAmount + due
+      }
+    }, { totalGrandTotal: 0, totalPaidAmount: 0, totalDueAmount: 0 })
+  }, [filteredDealerOrders])
+
+  const filteredReturnProducts = useMemo(() => {
+    if (!selectedReturnOrderId) return products
+    const order = filteredDealerOrders.find(o => o._id === selectedReturnOrderId)
+    if (!order) return products
+    const orderProductIds = new Set()
+    if (order.product) orderProductIds.add(typeof order.product === 'object' ? order.product._id : order.product)
+    if (order.items) {
+      order.items.forEach(item => {
+        if (item.product) orderProductIds.add(typeof item.product === 'object' ? item.product._id : item.product)
+      })
+    }
+    return products.filter(p => orderProductIds.has(p._id))
+  }, [selectedReturnOrderId, products, filteredDealerOrders])
+
+  useEffect(() => {
+    if (selectedReturnOrderId && returnForm.productId) {
+      const isStillValid = filteredReturnProducts.some(p => p._id === returnForm.productId)
+      if (!isStillValid) {
+        setReturnForm(prev => ({ ...prev, productId: '', variant: null }))
+      }
+    }
+  }, [selectedReturnOrderId, filteredReturnProducts, returnForm.productId])
 
   const customOrderIds = useMemo(() => {
     const ids = {}
@@ -233,6 +356,14 @@ function AdminPage({ language, toggleLanguage, t }) {
   const [savingTotalPaid, setSavingTotalPaid] = useState(false)
   const [addCollectionAmount, setAddCollectionAmount] = useState('')
   const [addCollectionCommission, setAddCollectionCommission] = useState('')
+
+  // Dynamic Collection Payment States
+  const [collectionPaymentMethod, setCollectionPaymentMethod] = useState('') // 'Bank' | 'Mobile Banking'
+  const [collectionBankName, setCollectionBankName] = useState('')
+  const [collectionBranch, setCollectionBranch] = useState('')
+  const [collectionReceiptNo, setCollectionReceiptNo] = useState('')
+  const [collectionMobileProvider, setCollectionMobileProvider] = useState('') // 'Bkash' | 'Nagad' | 'Rocket'
+  const [collectionTrxId, setCollectionTrxId] = useState('')
   const [commissionRates, setCommissionRates] = useState(['7%', '8%', '9%', '10%', '11%']) // Default fallback
   const [showManageCommissions, setShowManageCommissions] = useState(false)
   const [newCommissionRate, setNewCommissionRate] = useState('')
@@ -254,13 +385,6 @@ function AdminPage({ language, toggleLanguage, t }) {
   }
   const [savingCollection, setSavingCollection] = useState(false)
   const [showReturnForm, setShowReturnForm] = useState(false)
-  const [returnForm, setReturnForm] = useState({
-    productId: '',
-    variant: null,
-    packQuantity: '',
-    cartonQuantity: '',
-    returnPlace: ''
-  })
   const [savingReturn, setSavingReturn] = useState(false)
 
   // Revenue Filtering State
@@ -287,6 +411,15 @@ function AdminPage({ language, toggleLanguage, t }) {
   const [loadingOrders, setLoadingOrders] = useState(false)
   const [loadingDealers, setLoadingDealers] = useState(false)
   const [loadingProducts, setLoadingProducts] = useState(false)
+  const [showTeamModal, setShowTeamModal] = useState(false)
+  const [editingTeamMember, setEditingTeamMember] = useState(null)
+  const [teamMemberForm, setTeamMemberForm] = useState({
+    nameEn: '', nameBn: '',
+    roleEn: '', roleBn: '',
+    expertiseEn: '', expertiseBn: '',
+    photo: '',
+    group: 'management'
+  })
   const [loadingEmployees, setLoadingEmployees] = useState(false)
   const [loadingInventory, setLoadingInventory] = useState(false)
   const [loadingOrderRequests, setLoadingOrderRequests] = useState(false)
@@ -322,6 +455,34 @@ function AdminPage({ language, toggleLanguage, t }) {
   const [territorySortDirection, setTerritorySortDirection] = useState('asc')
 
 
+  // Idle Timeout Logic (30 minutes)
+  useEffect(() => {
+    if (!isAuthenticated) return
+
+    let timeoutId
+    const IDLE_TIMEOUT = 30 * 60 * 1000 // 30 minutes
+
+    const resetTimer = () => {
+      clearTimeout(timeoutId)
+      timeoutId = setTimeout(() => {
+        handleLogout()
+        alert(language === 'en' ? 'Session expired due to inactivity' : 'অক্রিয়তার কারণে সেশন শেষ হয়ে গেছে')
+      }, IDLE_TIMEOUT)
+    }
+
+    // Events to track activity
+    const events = ['mousemove', 'keydown', 'click', 'scroll', 'touchstart']
+    events.forEach(event => window.addEventListener(event, resetTimer))
+
+    // Initialize timer
+    resetTimer()
+
+    return () => {
+      clearTimeout(timeoutId)
+      events.forEach(event => window.removeEventListener(event, resetTimer))
+    }
+  }, [isAuthenticated, language]) // Re-run if auth state changes
+
   // Fetch settings on mount
   useEffect(() => {
     fetchSettings()
@@ -329,7 +490,7 @@ function AdminPage({ language, toggleLanguage, t }) {
 
   const fetchSettings = async () => {
     try {
-      const res = await fetch(`${API_BASE}/api/settings`)
+      const res = await authFetch(`${API_BASE}/api/settings`)
       const data = await res.json()
       if (data.success && data.data) {
         setCommissionRates(data.data.commissionRates || ['7%', '8%', '9%', '10%', '11%'])
@@ -398,7 +559,7 @@ function AdminPage({ language, toggleLanguage, t }) {
     }
 
     try {
-      const res = await fetch(`${API_BASE}/api/settings`, {
+      const res = await authFetch(`${API_BASE}/api/settings`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ salesTargets: newTargets, commissionRates }) // Keep rates
@@ -422,7 +583,7 @@ function AdminPage({ language, toggleLanguage, t }) {
         const rsms = employees.filter(e => (e.role || '').toUpperCase() === 'RSM')
         if (rsms.length > 0) {
           await Promise.all(rsms.map(rsm =>
-            fetch(`${API_BASE}/api/employees/${rsm._id}`, {
+            authFetch(`${API_BASE}/api/employees/${rsm._id}`, {
               method: 'PUT',
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({ ...rsm, salesTarget: syncAmount })
@@ -451,7 +612,7 @@ function AdminPage({ language, toggleLanguage, t }) {
     const newRates = [...commissionRates, rate].sort((a, b) => parseFloat(a) - parseFloat(b))
 
     try {
-      const res = await fetch(`${API_BASE}/api/settings`, {
+      const res = await authFetch(`${API_BASE}/api/settings`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ commissionRates: newRates })
@@ -469,7 +630,7 @@ function AdminPage({ language, toggleLanguage, t }) {
   const handleRemoveCommissionRate = async (rateToRemove) => {
     const newRates = commissionRates.filter(r => r !== rateToRemove)
     try {
-      const res = await fetch(`${API_BASE}/api/settings`, {
+      const res = await authFetch(`${API_BASE}/api/settings`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ commissionRates: newRates })
@@ -493,7 +654,7 @@ function AdminPage({ language, toggleLanguage, t }) {
         discountEnabled
       }
       console.log('Saving discount settings:', payload)
-      const res = await fetch(`${API_BASE}/api/settings`, {
+      const res = await authFetch(`${API_BASE}/api/settings`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload)
@@ -1244,7 +1405,7 @@ function AdminPage({ language, toggleLanguage, t }) {
   const loadDealers = async () => {
     setLoadingDealers(true)
     try {
-      const res = await fetch(`${API_BASE}/api/dealers`)
+      const res = await authFetch(`${API_BASE}/api/dealers`)
       if (res.ok) {
         const data = await res.json()
         setDealers(data.data || [])
@@ -1299,7 +1460,7 @@ function AdminPage({ language, toggleLanguage, t }) {
     setLoadingProducts(true)
     try {
       setProductStatus('')
-      const res = await fetch(`${API_BASE}/api/products`)
+      const res = await authFetch(`${API_BASE}/api/products`)
       if (!res.ok) {
         throw new Error('Failed to load products')
       }
@@ -1323,7 +1484,7 @@ function AdminPage({ language, toggleLanguage, t }) {
   const loadOrderRequests = async () => {
     setLoadingOrderRequests(true)
     try {
-      const res = await fetch(`${API_BASE}/api/orders?approvalStatus=Pending`)
+      const res = await authFetch(`${API_BASE}/api/orders?approvalStatus=Pending`)
       if (res.ok) {
         const data = await res.json()
         const pending = data.data || []
@@ -1358,7 +1519,7 @@ function AdminPage({ language, toggleLanguage, t }) {
         await loadDealers()
       }
 
-      const res = await fetch(`${API_BASE}/api/orders`)
+      const res = await authFetch(`${API_BASE}/api/orders`)
       if (res.ok) {
         const data = await res.json()
         // Exclude pending orders - only show approved orders (and rejected/cancelled if viewing those filters)
@@ -1412,7 +1573,7 @@ function AdminPage({ language, toggleLanguage, t }) {
         selectedYear: inventorySelectedYear,
         selectedHalf: inventorySelectedHalf
       })
-      const res = await fetch(`${API_BASE}/api/inventory?${params}`)
+      const res = await authFetch(`${API_BASE}/api/inventory?${params}`)
       if (res.ok) {
         const data = await res.json()
         setInventory(data.data || [])
@@ -1427,7 +1588,7 @@ function AdminPage({ language, toggleLanguage, t }) {
   const loadEmployees = async () => {
     setLoadingEmployees(true)
     try {
-      const res = await fetch(`${API_BASE}/api/employees`)
+      const res = await authFetch(`${API_BASE}/api/employees`)
       if (res.ok) {
         const empData = await res.json()
         setEmployees((empData.data || []).map((e) => ({
@@ -1445,7 +1606,7 @@ function AdminPage({ language, toggleLanguage, t }) {
   const loadTerritories = async () => {
     setLoadingTerritories(true)
     try {
-      const res = await fetch(`${API_BASE}/api/territories`)
+      const res = await authFetch(`${API_BASE}/api/territories`)
       if (res.ok) {
         const data = await res.json()
         setTerritories(data.data || [])
@@ -1469,7 +1630,7 @@ function AdminPage({ language, toggleLanguage, t }) {
     try {
       const method = territoryForm._id ? 'PUT' : 'POST'
       const url = territoryForm._id ? `${API_BASE}/api/territories/${territoryForm._id}` : `${API_BASE}/api/territories`
-      const res = await fetch(url, {
+      const res = await authFetch(url, {
         method,
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(territoryForm)
@@ -1495,7 +1656,7 @@ function AdminPage({ language, toggleLanguage, t }) {
   const handleDeleteTerritory = async (id) => {
     if (!window.confirm(language === 'en' ? 'Are you sure you want to delete this territory?' : 'আপনি কি নিশ্চিত যে আপনি এই টেরিটরি মুছে ফেলতে চান?')) return
     try {
-      const res = await fetch(`${API_BASE}/api/territories/${id}`, { method: 'DELETE' })
+      const res = await authFetch(`${API_BASE}/api/territories/${id}`, { method: 'DELETE' })
       if (res.ok) {
         loadTerritories()
       }
@@ -1515,7 +1676,7 @@ function AdminPage({ language, toggleLanguage, t }) {
         : `${API_BASE}/api/inventory`
       const method = inventoryForm.id ? 'PUT' : 'POST'
 
-      const res = await fetch(url, {
+      const res = await authFetch(url, {
         method,
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(inventoryForm)
@@ -1543,7 +1704,7 @@ function AdminPage({ language, toggleLanguage, t }) {
     if (!window.confirm(language === 'en' ? 'Are you sure you want to delete this inventory item?' : 'আপনি কি নিশ্চিত যে আপনি এই ইনভেন্টরি আইটেমটি মুছতে চান?')) return
 
     try {
-      const res = await fetch(`${API_BASE}/api/inventory/${id}`, {
+      const res = await authFetch(`${API_BASE}/api/inventory/${id}`, {
         method: 'DELETE'
       })
       if (res.ok) {
@@ -1892,6 +2053,7 @@ function AdminPage({ language, toggleLanguage, t }) {
             id: rid,
             label: t?.zilla || 'N/A',
             revenue: 0,
+            paid: 0,
             due: 0,
             orderCount: 0
           }
@@ -1932,6 +2094,7 @@ function AdminPage({ language, toggleLanguage, t }) {
             label: d.name || 'Unknown',
             shopName: d.shopName || 'N/A',
             revenue: 0,
+            paid: 0,
             due: 0,
             orderCount: 0
           }
@@ -1965,6 +2128,7 @@ function AdminPage({ language, toggleLanguage, t }) {
             label: d?.name || order.dealerName || 'Unknown',
             shopName: d?.shopName || 'N/A',
             revenue: 0,
+            paid: 0,
             due: 0,
             orderCount: 0
           }
@@ -1973,6 +2137,7 @@ function AdminPage({ language, toggleLanguage, t }) {
             id: groupKey,
             label: 'N/A',
             revenue: 0,
+            paid: 0,
             due: 0,
             orderCount: 0
           }
@@ -1985,15 +2150,19 @@ function AdminPage({ language, toggleLanguage, t }) {
 
       summary[groupKey].revenue += grandTotal
       summary[groupKey].due += Number(order.dueAmount || 0)
+      summary[groupKey].paid += (grandTotal - Number(order.dueAmount || 0))
       summary[groupKey].orderCount += 1
     })
 
-    const summaryArray = Object.values(summary).sort((a, b) => b.revenue - a.revenue)
+    const summaryArray = Object.values(summary).sort((a, b) => {
+      return String(a.id).localeCompare(String(b.id), undefined, { numeric: true })
+    })
 
     const totals = summaryArray.reduce((acc, curr) => ({
       revenue: acc.revenue + curr.revenue,
+      paid: acc.paid + curr.paid,
       due: acc.due + curr.due
-    }), { revenue: 0, due: 0 })
+    }), { revenue: 0, paid: 0, due: 0 })
 
     return {
       items: summaryArray,
@@ -2186,7 +2355,7 @@ function AdminPage({ language, toggleLanguage, t }) {
         ? `${API_BASE}/api/orders/${editingOrderId}`
         : `${API_BASE}/api/orders`
 
-      const res = await fetch(url, {
+      const res = await authFetch(url, {
         method,
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(orderData)
@@ -2256,7 +2425,7 @@ function AdminPage({ language, toggleLanguage, t }) {
     }
 
     try {
-      const res = await fetch(`${API_BASE}/api/orders/${id}`, {
+      const res = await authFetch(`${API_BASE}/api/orders/${id}`, {
         method: 'DELETE'
       })
 
@@ -2270,7 +2439,7 @@ function AdminPage({ language, toggleLanguage, t }) {
 
       // If viewing an employee, refresh their data
       if (viewingEmployee) {
-        const empRes = await fetch(`${API_BASE}/api/employees/${viewingEmployee._id}`)
+        const empRes = await authFetch(`${API_BASE}/api/employees/${viewingEmployee._id}`)
         if (empRes.ok) {
           const empData = await empRes.json()
           if (empData.success && empData.data) {
@@ -2347,7 +2516,7 @@ function AdminPage({ language, toggleLanguage, t }) {
     try {
       setDealerOrdersLoading(true)
       setDealerOrdersStatus('')
-      const res = await fetch(`${API_BASE}/api/orders`)
+      const res = await authFetch(`${API_BASE}/api/orders`)
       if (!res.ok) {
         throw new Error('Failed to fetch orders')
       }
@@ -2433,7 +2602,7 @@ function AdminPage({ language, toggleLanguage, t }) {
       const existingComm = (order.paymentHistory || []).reduce((sum, p) => sum + (parseFloat(p.commission) || 0), 0)
       const dueAmount = Math.max(0, grandTotal - (paidAmount + existingComm))
 
-      const res = await fetch(`${API_BASE}/api/orders/${orderId}`, {
+      const res = await authFetch(`${API_BASE}/api/orders/${orderId}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -2509,7 +2678,7 @@ function AdminPage({ language, toggleLanguage, t }) {
           const newPaidAmount = currentPaid + amountToAdd
           const newDueAmount = Math.max(0, grandTotal - (newPaidAmount + currentComm))
 
-          const res = await fetch(`${API_BASE}/api/orders/${order._id}`, {
+          const res = await authFetch(`${API_BASE}/api/orders/${order._id}`, {
             method: 'PUT',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
@@ -2529,7 +2698,7 @@ function AdminPage({ language, toggleLanguage, t }) {
           const newPaidAmount = Math.max(0, currentPaid - amountToReduce)
           const newDueAmount = Math.max(0, grandTotal - (newPaidAmount + currentComm))
 
-          const res = await fetch(`${API_BASE}/api/orders/${order._id}`, {
+          const res = await authFetch(`${API_BASE}/api/orders/${order._id}`, {
             method: 'PUT',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
@@ -2571,17 +2740,33 @@ function AdminPage({ language, toggleLanguage, t }) {
     try {
       setSavingCollection(true)
 
-      const sortedOrders = [...filteredDealerOrders].map(order => {
-        const totalPrice = parseFloat(order.totalPrice || 0)
-        const discount = order.discountEnabled && order.discountAmount > 0 ? order.discountAmount : 1
-        const grandTotal = totalPrice * discount
-        const paidAmount = parseFloat(order.paidAmount || 0)
-        const commission = (order.paymentHistory || []).reduce((cSum, p) => cSum + (parseFloat(p.commission) || 0), 0)
-        const dueAmount = order.dueAmount !== undefined
-          ? parseFloat(order.dueAmount)
-          : Math.max(0, grandTotal - (paidAmount + commission))
-        return { ...order, calculatedDue: dueAmount }
-      }).sort((a, b) => b.calculatedDue - a.calculatedDue)
+      let sortedOrders = []
+      if (selectedCollectionOrderId) {
+        const targetOrder = filteredDealerOrders.find(o => o._id === selectedCollectionOrderId)
+        if (targetOrder) {
+          const totalPrice = parseFloat(targetOrder.totalPrice || 0)
+          const discount = targetOrder.discountEnabled && targetOrder.discountAmount > 0 ? targetOrder.discountAmount : 1
+          const grandTotal = totalPrice * discount
+          const paidAmount = parseFloat(targetOrder.paidAmount || 0)
+          const commission = (targetOrder.paymentHistory || []).reduce((cSum, p) => cSum + (parseFloat(p.commission) || 0), 0)
+          const dueAmount = targetOrder.dueAmount !== undefined
+            ? parseFloat(targetOrder.dueAmount)
+            : Math.max(0, grandTotal - (paidAmount + commission))
+          sortedOrders = [{ ...targetOrder, calculatedDue: dueAmount }]
+        }
+      } else {
+        sortedOrders = [...filteredDealerOrders].map(order => {
+          const totalPrice = parseFloat(order.totalPrice || 0)
+          const discount = order.discountEnabled && order.discountAmount > 0 ? order.discountAmount : 1
+          const grandTotal = totalPrice * discount
+          const paidAmount = parseFloat(order.paidAmount || 0)
+          const commission = (order.paymentHistory || []).reduce((cSum, p) => cSum + (parseFloat(p.commission) || 0), 0)
+          const dueAmount = order.dueAmount !== undefined
+            ? parseFloat(order.dueAmount)
+            : Math.max(0, grandTotal - (paidAmount + commission))
+          return { ...order, calculatedDue: dueAmount }
+        }).sort((a, b) => b.calculatedDue - a.calculatedDue)
+      }
 
       let remainingAmount = amount
 
@@ -2608,7 +2793,7 @@ function AdminPage({ language, toggleLanguage, t }) {
         const totalComm = currentHistComm + commissionAmount
         const newDueAmount = Math.max(0, grandTotal - (newPaidAmount + totalComm))
 
-        const res = await fetch(`${API_BASE}/api/orders/${order._id}`, {
+        const res = await authFetch(`${API_BASE}/api/orders/${order._id}`, {
           method: 'PUT',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
@@ -2617,7 +2802,15 @@ function AdminPage({ language, toggleLanguage, t }) {
             newPayment: {
               amount: amountToAdd,
               commission: commissionAmount,
-              date: new Date()
+              date: new Date(),
+              metadata: {
+                method: collectionPaymentMethod,
+                bankName: collectionPaymentMethod === 'Bank' ? collectionBankName : undefined,
+                branch: collectionPaymentMethod === 'Bank' ? collectionBranch : undefined,
+                receiptNo: collectionPaymentMethod === 'Bank' ? collectionReceiptNo : undefined,
+                provider: collectionPaymentMethod === 'Mobile Banking' ? collectionMobileProvider : undefined,
+                trxId: collectionPaymentMethod === 'Mobile Banking' ? collectionTrxId : undefined
+              }
             }
           })
         })
@@ -2633,6 +2826,15 @@ function AdminPage({ language, toggleLanguage, t }) {
       await loadOrders()
       setAddCollectionAmount('')
       setAddCollectionCommission('')
+      setSelectedCollectionOrderId('')
+      // Reset payment fields
+      setCollectionPaymentMethod('')
+      setCollectionBankName('')
+      setCollectionBranch('')
+      setCollectionReceiptNo('')
+      setCollectionMobileProvider('')
+      setCollectionTrxId('')
+
       alert(language === 'en' ? 'Collection added successfully!' : 'সংগ্রহ সফলভাবে যোগ করা হয়েছে!')
     } catch (err) {
       console.error('Failed to add collection:', err)
@@ -2687,17 +2889,33 @@ function AdminPage({ language, toggleLanguage, t }) {
 
       if (baseReturnAmount <= 0) return
 
-      const sortedOrders = [...filteredDealerOrders].map(order => {
-        const totalPrice = parseFloat(order.totalPrice || 0)
-        const discount = order.discountEnabled && order.discountAmount > 0 ? order.discountAmount : 1
-        const grandTotal = totalPrice * discount
-        const paidAmount = parseFloat(order.paidAmount || 0)
-        const commission = (order.paymentHistory || []).reduce((cSum, p) => cSum + (parseFloat(p.commission) || 0), 0)
-        const dueAmount = order.dueAmount !== undefined
-          ? parseFloat(order.dueAmount)
-          : Math.max(0, grandTotal - (paidAmount + commission))
-        return { ...order, calculatedDue: dueAmount }
-      }).sort((a, b) => b.calculatedDue - a.calculatedDue)
+      let sortedOrders = []
+      if (selectedReturnOrderId) {
+        const targetOrder = filteredDealerOrders.find(o => o._id === selectedReturnOrderId)
+        if (targetOrder) {
+          const totalPrice = parseFloat(targetOrder.totalPrice || 0)
+          const discount = targetOrder.discountEnabled && targetOrder.discountAmount > 0 ? targetOrder.discountAmount : 1
+          const grandTotal = totalPrice * discount
+          const paidAmount = parseFloat(targetOrder.paidAmount || 0)
+          const commission = (targetOrder.paymentHistory || []).reduce((cSum, p) => cSum + (parseFloat(p.commission) || 0), 0)
+          const dueAmount = targetOrder.dueAmount !== undefined
+            ? parseFloat(targetOrder.dueAmount)
+            : Math.max(0, grandTotal - (paidAmount + commission))
+          sortedOrders = [{ ...targetOrder, calculatedDue: dueAmount }]
+        }
+      } else {
+        sortedOrders = [...filteredDealerOrders].map(order => {
+          const totalPrice = parseFloat(order.totalPrice || 0)
+          const discount = order.discountEnabled && order.discountAmount > 0 ? order.discountAmount : 1
+          const grandTotal = totalPrice * discount
+          const paidAmount = parseFloat(order.paidAmount || 0)
+          const commission = (order.paymentHistory || []).reduce((cSum, p) => cSum + (parseFloat(p.commission) || 0), 0)
+          const dueAmount = order.dueAmount !== undefined
+            ? parseFloat(order.dueAmount)
+            : Math.max(0, grandTotal - (paidAmount + commission))
+          return { ...order, calculatedDue: dueAmount }
+        }).sort((a, b) => b.calculatedDue - a.calculatedDue)
+      }
 
       let remainingBaseReturn = baseReturnAmount
 
@@ -2735,7 +2953,7 @@ function AdminPage({ language, toggleLanguage, t }) {
           newDueAmount: newDueAmount
         })
 
-        const res = await fetch(`${API_BASE}/api/orders/${order._id}`, {
+        const res = await authFetch(`${API_BASE}/api/orders/${order._id}`, {
           method: 'PUT',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
@@ -2767,6 +2985,7 @@ function AdminPage({ language, toggleLanguage, t }) {
       await handleShowDealerOrders(viewingDealer)
       await loadOrders()
       setReturnForm({ productId: '', variant: null, packQuantity: '', cartonQuantity: '', returnPlace: '' })
+      setSelectedReturnOrderId('')
       setShowReturnForm(false)
       alert(language === 'en' ? 'Product return processed successfully!' : 'পণ্য ফেরত সফলভাবে সম্পন্ন হয়েছে!')
     } catch (err) {
@@ -2906,7 +3125,7 @@ function AdminPage({ language, toggleLanguage, t }) {
         ? `${API_BASE}/api/orders/${editingOrderId}`
         : `${API_BASE}/api/orders`
 
-      const res = await fetch(url, {
+      const res = await authFetch(url, {
         method,
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload)
@@ -3018,7 +3237,7 @@ function AdminPage({ language, toggleLanguage, t }) {
         }
       })
 
-      const res = await fetch(url, {
+      const res = await authFetch(url, {
         method,
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(dataToSend)
@@ -3111,7 +3330,7 @@ function AdminPage({ language, toggleLanguage, t }) {
     const confirmed = window.confirm(language === 'en' ? 'Delete this product?' : 'এই পণ্যটি মুছবেন?')
     if (!confirmed) return
     try {
-      const res = await fetch(`${API_BASE}/api/products/${productId}`, { method: 'DELETE' })
+      const res = await authFetch(`${API_BASE}/api/products/${productId}`, { method: 'DELETE' })
       if (!res.ok) {
         throw new Error('Failed to delete product')
       }
@@ -3139,7 +3358,7 @@ function AdminPage({ language, toggleLanguage, t }) {
 
     try {
       setSavingEmployee(true)
-      const res = await fetch(`${API_BASE}/api/employees/${viewingEmployee._id}`, {
+      const res = await authFetch(`${API_BASE}/api/employees/${viewingEmployee._id}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -3175,7 +3394,7 @@ function AdminPage({ language, toggleLanguage, t }) {
       setViewingEmployee({ ...updatedData.data, status: normalizeSalaryStatus(updatedData.data.status) })
 
       // Refresh employee list
-      const resEmployees = await fetch(`${API_BASE}/api/employees`)
+      const resEmployees = await authFetch(`${API_BASE}/api/employees`)
       if (resEmployees.ok) {
         const empData = await resEmployees.json()
         setEmployees((empData.data || []).map((e) => ({
@@ -3204,7 +3423,7 @@ function AdminPage({ language, toggleLanguage, t }) {
     try {
       setDealerStatus(language === 'en' ? 'Saving...' : 'সংরক্ষণ করা হচ্ছে...')
       const selectedEmp = employees.find((emp) => String(emp._id) === String(newDealer.assignedTo))
-      const res = await fetch(`${API_BASE}/api/dealers`, {
+      const res = await authFetch(`${API_BASE}/api/dealers`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -3264,7 +3483,7 @@ function AdminPage({ language, toggleLanguage, t }) {
     try {
       setSavingDealer(true)
       const selectedEmp = employees.find((emp) => String(emp._id) === String(editingDealerData.assignedTo))
-      const res = await fetch(`${API_BASE}/api/dealers/${viewingDealer._id}`, {
+      const res = await authFetch(`${API_BASE}/api/dealers/${viewingDealer._id}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -3308,7 +3527,7 @@ function AdminPage({ language, toggleLanguage, t }) {
     if (!window.confirm(language === 'en' ? 'Delete this dealer?' : 'এই ডিলারকে মুছবেন?')) return
 
     try {
-      const res = await fetch(`${API_BASE}/api/dealers/${viewingDealer._id}`, {
+      const res = await authFetch(`${API_BASE}/api/dealers/${viewingDealer._id}`, {
         method: 'DELETE'
       })
       if (!res.ok) throw new Error('Failed to delete dealer')
@@ -3329,7 +3548,7 @@ function AdminPage({ language, toggleLanguage, t }) {
         // Only load admin profile on initial load if not authenticated yet
         // Profile will be loaded after login
         if (!isAuthenticated) {
-          const resProfile = await fetch(`${API_BASE}/api/admin/profile`)
+          const resProfile = await authFetch(`${API_BASE}/api/admin/profile`)
           if (resProfile.ok) {
             const data = await resProfile.json()
             setProfileData({
@@ -3343,12 +3562,12 @@ function AdminPage({ language, toggleLanguage, t }) {
             })
           }
         }
-        const resPassword = await fetch(`${API_BASE}/api/admin/password`)
+        const resPassword = await authFetch(`${API_BASE}/api/admin/password`)
         if (resPassword.ok) {
           const pwd = await resPassword.json()
           setAdminPassword(pwd.password || 'admin123')
         }
-        const resImages = await fetch(`${API_BASE}/api/page-images`)
+        const resImages = await authFetch(`${API_BASE}/api/page-images`)
         if (resImages.ok) {
           const imgs = await resImages.json()
           setPageImages({ ...defaultPageImages, ...(imgs?.data || {}) })
@@ -5023,9 +5242,37 @@ function AdminPage({ language, toggleLanguage, t }) {
     }
   }
 
+  const handleSaveTeamMember = () => {
+    const members = [...(pageImages.teamMembers || [])]
+    const memberData = {
+      id: editingTeamMember ? editingTeamMember.id : 'team-' + Date.now(),
+      name: { en: teamMemberForm.nameEn, bn: teamMemberForm.nameBn },
+      role: { en: teamMemberForm.roleEn, bn: teamMemberForm.roleBn },
+      expertise: { en: teamMemberForm.expertiseEn, bn: teamMemberForm.expertiseBn },
+      photo: teamMemberForm.photo,
+      group: teamMemberForm.group
+    }
+
+    if (editingTeamMember) {
+      const idx = members.findIndex(m => m.id === editingTeamMember.id)
+      if (idx !== -1) members[idx] = memberData
+    } else {
+      members.push(memberData)
+    }
+
+    handleImageChange('teamMembers', members)
+    setShowTeamModal(false)
+    setEditingTeamMember(null)
+  }
+
   const savePageImages = (updated) => {
     setPageImages(updated)
-    fetch(`${API_BASE}/api/page-images`, {
+
+    // Sync to localStorage for immediate preview
+    localStorage.setItem('pageImages', JSON.stringify(updated))
+    window.dispatchEvent(new Event('contentUpdated'))
+
+    authFetch(`${API_BASE}/api/page-images`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ data: updated })
@@ -5041,7 +5288,7 @@ function AdminPage({ language, toggleLanguage, t }) {
 
       if (isEmployee && loggedInUserId) {
         // Save employee profile
-        const res = await fetch(`${API_BASE}/api/employees/${loggedInUserId}`, {
+        const res = await authFetch(`${API_BASE}/api/employees/${loggedInUserId}`, {
           method: 'PUT',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
@@ -5061,7 +5308,7 @@ function AdminPage({ language, toggleLanguage, t }) {
         loadUserProfile('employee', loggedInUserId)
       } else {
         // Save admin profile
-        const res = await fetch(`${API_BASE}/api/admin/profile`, {
+        const res = await authFetch(`${API_BASE}/api/admin/profile`, {
           method: 'PUT',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(profileData)
@@ -5108,7 +5355,7 @@ function AdminPage({ language, toggleLanguage, t }) {
       ? { id: loggedInUserId, current, next }
       : { current, next }
 
-    fetch(endpoint, {
+    authFetch(endpoint, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(requestBody)
@@ -5123,7 +5370,7 @@ function AdminPage({ language, toggleLanguage, t }) {
       } else {
         // If employee changed password, refresh employee list to show updated password
         try {
-          const resEmployees = await fetch(`${API_BASE}/api/employees`)
+          const resEmployees = await authFetch(`${API_BASE}/api/employees`)
           if (resEmployees.ok) {
             const empData = await resEmployees.json()
             const updatedEmployees = empData.data || []
@@ -5152,7 +5399,7 @@ function AdminPage({ language, toggleLanguage, t }) {
     setLoginError('')
 
     // Try admin login first
-    fetch(`${API_BASE}/api/admin/login`, {
+    authFetch(`${API_BASE}/api/admin/login`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ username, password })
@@ -5180,6 +5427,7 @@ function AdminPage({ language, toggleLanguage, t }) {
           // Load admin profile
           loadUserProfile('admin')
           setIsAuthenticated(true)
+          if (data.token) localStorage.setItem('authToken', data.token)
           persistAuthState({
             isEmployee: false,
             userRole: 'Admin',
@@ -5189,7 +5437,7 @@ function AdminPage({ language, toggleLanguage, t }) {
           return Promise.resolve(null) // Return resolved promise to skip employee login
         }
         // If admin login fails, try employee login
-        return fetch(`${API_BASE}/api/employees/login`, {
+        return authFetch(`${API_BASE}/api/employees/login`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ username, password })
@@ -5208,6 +5456,7 @@ function AdminPage({ language, toggleLanguage, t }) {
         // Load employee profile
         loadUserProfile('employee', data.id)
         setIsAuthenticated(true)
+        if (data.token) localStorage.setItem('authToken', data.token)
         persistAuthState({
           isEmployee: true,
           userRole: data.role,
@@ -5227,6 +5476,7 @@ function AdminPage({ language, toggleLanguage, t }) {
     setIsEmployee(false)
     setUserRole('Admin')
     localStorage.removeItem('adminAuth')
+    localStorage.removeItem('authToken')
     localStorage.removeItem('adminUsername')
     localStorage.removeItem('adminActiveTab')
     localStorage.removeItem('adminViewingDealerId')
@@ -5240,7 +5490,7 @@ function AdminPage({ language, toggleLanguage, t }) {
     setLoadingProfile(true)
     try {
       if (userType === 'admin') {
-        const resProfile = await fetch(`${API_BASE}/api/admin/profile`)
+        const resProfile = await authFetch(`${API_BASE}/api/admin/profile`)
         if (resProfile.ok) {
           const data = await resProfile.json()
           setProfileData((prev) => ({
@@ -5258,7 +5508,7 @@ function AdminPage({ language, toggleLanguage, t }) {
           setUserRole('Admin')
         }
       } else if (userType === 'employee' && employeeId) {
-        const resEmployee = await fetch(`${API_BASE}/api/employees/${employeeId}`)
+        const resEmployee = await authFetch(`${API_BASE}/api/employees/${employeeId}`)
         if (resEmployee.ok) {
           const data = await resEmployee.json()
           if (data.data) {
@@ -5327,12 +5577,12 @@ function AdminPage({ language, toggleLanguage, t }) {
                 </div>
               )}
               <div className="admin-form-group">
-                <label>{language === 'en' ? 'Username' : 'ব্যবহারকারীর নাম'}</label>
+                <label>{language === 'en' ? 'Username / Employee ID' : 'ব্যবহারকারীর নাম / কর্মচারী আইডি'}</label>
                 <input
                   type="text"
                   value={username}
                   onChange={(e) => setUsername(e.target.value)}
-                  placeholder={language === 'en' ? 'Enter username' : 'ব্যবহারকারীর নাম লিখুন'}
+                  placeholder={language === 'en' ? 'Enter username or ID' : 'ইউজারনেম বা আইডি লিখুন'}
                   required
                 />
               </div>
@@ -5353,7 +5603,7 @@ function AdminPage({ language, toggleLanguage, t }) {
             <div className="admin-login-note">
               <p>{language === 'en' ? 'Admin default: admin / admin123' : 'অ্যাডমিন ডিফল্ট: admin / admin123'}</p>
               <p style={{ marginTop: '0.5rem', fontSize: '0.875rem' }}>
-                {language === 'en' ? 'Employees: Use your username/email and password provided by admin' : 'কর্মচারী: আপনার ব্যবহারকারীর নাম/ইমেইল এবং অ্যাডমিন প্রদত্ত পাসওয়ার্ড ব্যবহার করুন'}
+                {language === 'en' ? 'Employees: Use your Employee ID (e.g., bcc001) and password provided by admin' : 'কর্মচারী: আপনার কর্মচারী আইডি (যেমন bcc001) এবং অ্যাডমিন প্রদত্ত পাসওয়ার্ড ব্যবহার করুন'}
               </p>
             </div>
           </div>
@@ -5780,7 +6030,7 @@ function AdminPage({ language, toggleLanguage, t }) {
               >
                 <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
                   <circle cx="12" cy="12" r="3" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-                  <path d="M12 1v6m0 6v6M5.64 5.64l4.24 4.24m4.24 4.24l4.24 4.24M1 12h6m6 0h6M5.64 18.36l4.24-4.24m4.24-4.24l4.24-4.24" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+                  <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
                 </svg>
                 {adminContent.settings}
               </button>
@@ -7876,6 +8126,214 @@ function AdminPage({ language, toggleLanguage, t }) {
                       </div>
                     </div>
                   </div>
+
+                  {/* Team Management Section */}
+                  <div className="admin-photo-group" style={{ gridColumn: '1 / -1', marginTop: '2rem' }}>
+                    <div className="admin-photo-group-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+                        <div style={{
+                          width: '32px',
+                          height: '32px',
+                          borderRadius: '8px',
+                          background: '#f0fdf4',
+                          color: '#22c55e',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center'
+                        }}>
+                          <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" style={{ width: '18px', height: '18px' }}>
+                            <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+                            <circle cx="12" cy="7" r="4" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+                          </svg>
+                        </div>
+                        <h3 style={{ margin: 0, fontSize: '1.125rem', fontWeight: 600, color: '#1f2937' }}>
+                          {language === 'en' ? 'Team Member Management' : 'টিম সদস্য ব্যবস্থাপনা'}
+                        </h3>
+                      </div>
+                      <button
+                        className="admin-save-btn"
+                        style={{ padding: '0.5rem 1rem', fontSize: '0.875rem' }}
+                        onClick={() => {
+                          setEditingTeamMember(null)
+                          setTeamMemberForm({
+                            nameEn: '', nameBn: '',
+                            roleEn: '', roleBn: '',
+                            expertiseEn: '', expertiseBn: '',
+                            photo: '',
+                            group: 'management'
+                          })
+                          setShowTeamModal(true)
+                        }}
+                      >
+                        {language === 'en' ? '+ Add Member' : '+ সদস্য যোগ করুন'}
+                      </button>
+                    </div>
+
+                    <div className="admin-team-list" style={{
+                      display: 'grid',
+                      gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))',
+                      gap: '1.5rem',
+                      marginTop: '2rem'
+                    }}>
+                      {(pageImages.teamMembers || []).map((member, index) => (
+                        <div
+                          key={member.id || index}
+                          className="admin-team-card"
+                          style={{
+                            background: 'white',
+                            borderRadius: '1rem',
+                            border: '1px solid #f1f5f9',
+                            boxShadow: '0 1px 3px rgba(0,0,0,0.05)',
+                            overflow: 'hidden',
+                            transition: 'all 0.3s ease',
+                            display: 'flex',
+                            flexDirection: 'column',
+                            position: 'relative'
+                          }}
+                          onMouseEnter={(e) => {
+                            e.currentTarget.style.transform = 'translateY(-4px)'
+                            e.currentTarget.style.boxShadow = '0 12px 24px -8px rgba(0, 0, 0, 0.15)'
+                          }}
+                          onMouseLeave={(e) => {
+                            e.currentTarget.style.transform = 'translateY(0)'
+                            e.currentTarget.style.boxShadow = '0 1px 3px rgba(0,0,0,0.05)'
+                          }}
+                        >
+                          <div style={{ position: 'relative', height: '220px', overflow: 'hidden', backgroundColor: '#f8fafc' }}>
+                            <img
+                              src={member.photo || '/hero-image.jpg'}
+                              alt={member.name?.[language] || ''}
+                              style={{
+                                width: '100%',
+                                height: '100%',
+                                objectFit: 'cover',
+                                objectPosition: 'center top'
+                              }}
+                            />
+                            <div style={{
+                              position: 'absolute',
+                              top: '12px',
+                              right: '12px',
+                              padding: '4px 10px',
+                              background: 'rgba(255, 255, 255, 0.95)',
+                              backdropFilter: 'blur(4px)',
+                              borderRadius: '20px',
+                              fontSize: '0.75rem',
+                              fontWeight: 600,
+                              color: '#475569',
+                              boxShadow: '0 2px 4px rgba(0,0,0,0.05)',
+                              textTransform: 'capitalize'
+                            }}>
+                              {member.group === 'board' ? 'Board' : member.group === 'chairman' ? 'Chairman' : 'Management'}
+                            </div>
+                          </div>
+
+                          <div style={{ padding: '1.5rem', flex: 1, display: 'flex', flexDirection: 'column' }}>
+                            <div style={{ marginBottom: 'auto' }}>
+                              <h4 style={{
+                                margin: '0 0 0.5rem 0',
+                                fontSize: '1.125rem',
+                                fontWeight: 700,
+                                color: '#1e293b',
+                                lineHeight: 1.3
+                              }}>
+                                {member.name?.[language] || (language === 'en' ? 'Unnamed' : 'নামহীন')}
+                              </h4>
+                              <p style={{
+                                margin: '0',
+                                fontSize: '0.875rem',
+                                color: '#64748b',
+                                fontWeight: 500
+                              }}>
+                                {member.role?.[language]}
+                              </p>
+                            </div>
+
+                            <div style={{
+                              display: 'flex',
+                              gap: '0.75rem',
+                              marginTop: '1.5rem',
+                              paddingTop: '1rem',
+                              borderTop: '1px solid #f1f5f9'
+                            }}>
+                              <button
+                                style={{
+                                  flex: 1,
+                                  padding: '0.625rem',
+                                  fontSize: '0.875rem',
+                                  borderRadius: '0.5rem',
+                                  border: '1px solid #e2e8f0',
+                                  background: 'white',
+                                  cursor: 'pointer',
+                                  color: '#475569',
+                                  fontWeight: 600,
+                                  display: 'flex',
+                                  alignItems: 'center',
+                                  justifyContent: 'center',
+                                  gap: '0.5rem',
+                                  transition: 'all 0.2s'
+                                }}
+                                onMouseEnter={(e) => { e.currentTarget.style.background = '#f8fafc'; e.currentTarget.style.borderColor = '#cbd5e1' }}
+                                onMouseLeave={(e) => { e.currentTarget.style.background = 'white'; e.currentTarget.style.borderColor = '#e2e8f0' }}
+                                onClick={() => {
+                                  setEditingTeamMember(member)
+                                  setTeamMemberForm({
+                                    nameEn: member.name?.en || '',
+                                    nameBn: member.name?.bn || '',
+                                    roleEn: member.role?.en || '',
+                                    roleBn: member.role?.bn || '',
+                                    expertiseEn: member.expertise?.en || '',
+                                    expertiseBn: member.expertise?.bn || '',
+                                    photo: member.photo || '',
+                                    group: member.group || 'management'
+                                  })
+                                  setShowTeamModal(true)
+                                }}
+                              >
+                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                                  <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path>
+                                  <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path>
+                                </svg>
+                                {language === 'en' ? 'Edit' : 'সম্পাদনা'}
+                              </button>
+                              <button
+                                style={{
+                                  flex: 1,
+                                  padding: '0.625rem',
+                                  fontSize: '0.875rem',
+                                  borderRadius: '0.5rem',
+                                  border: '1px solid #fee2e2',
+                                  background: '#fff1f2',
+                                  cursor: 'pointer',
+                                  color: '#e11d48',
+                                  fontWeight: 600,
+                                  display: 'flex',
+                                  alignItems: 'center',
+                                  justifyContent: 'center',
+                                  gap: '0.5rem',
+                                  transition: 'all 0.2s'
+                                }}
+                                onMouseEnter={(e) => { e.currentTarget.style.background = '#ffe4e6'; e.currentTarget.style.borderColor = '#fecdd3' }}
+                                onMouseLeave={(e) => { e.currentTarget.style.background = '#fff1f2'; e.currentTarget.style.borderColor = '#fee2e2' }}
+                                onClick={() => {
+                                  if (window.confirm(language === 'en' ? 'Are you sure you want to remove this member?' : 'আপনি কি নিশ্চিত যে আপনি এই সদস্যকে অপসারণ করতে চান?')) {
+                                    const updatedMembers = (pageImages.teamMembers || []).filter(m => (m.id || index) !== (member.id || index))
+                                    handleImageChange('teamMembers', updatedMembers)
+                                  }
+                                }}
+                              >
+                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                                  <polyline points="3 6 5 6 21 6"></polyline>
+                                  <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
+                                </svg>
+                                {language === 'en' ? 'Remove' : 'অপসারণ'}
+                              </button>
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
                 </div>
               </div>
             </div>
@@ -8613,7 +9071,7 @@ function AdminPage({ language, toggleLanguage, t }) {
                             }, 0)
 
                             return (
-                              <tr key={d.id}>
+                              <tr key={d._id}>
                                 <td>{d.dealerId}</td>
                                 <td>{d.shopName || '-'}</td>
                                 <td>{d.name}</td>
@@ -8678,7 +9136,7 @@ function AdminPage({ language, toggleLanguage, t }) {
                         return (
                           <div
                             className="mobile-card"
-                            key={d.id}
+                            key={d._id}
                             onClick={() => toggleDealerExpansion(d.id || d.dealerId)}
                             style={{ cursor: 'pointer' }}
                           >
@@ -9074,8 +9532,6 @@ function AdminPage({ language, toggleLanguage, t }) {
                             <>
                               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.75rem' }}>
                                 <div>
-                                  <h3 style={{ margin: 0 }}>{language === 'en' ? 'Dealer Orders' : 'ডিলারের অর্ডার'}</h3>
-
                                 </div>
 
                               </div>
@@ -9210,6 +9666,122 @@ function AdminPage({ language, toggleLanguage, t }) {
                                               <div style={{ fontSize: '0.875rem', color: '#1e40af', fontWeight: 700, marginBottom: '0.5rem' }}>
                                                 {language === 'en' ? 'Add Collection' : 'সংগ্রহ যোগ করুন'}
                                               </div>
+                                              <div style={{ marginBottom: '1rem' }}>
+                                                <div style={{ fontSize: '0.875rem', fontWeight: 600, color: '#4b5563', marginBottom: '0.5rem' }}>
+                                                  Paid By:
+                                                </div>
+                                                <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
+                                                  <button
+                                                    onClick={() => { setCollectionPaymentMethod('Bank'); setCollectionMobileProvider('') }}
+                                                    style={{
+                                                      padding: '0.5rem 1rem',
+                                                      borderRadius: '0.375rem',
+                                                      border: `1px solid ${collectionPaymentMethod === 'Bank' ? '#3b82f6' : '#d1d5db'}`,
+                                                      backgroundColor: collectionPaymentMethod === 'Bank' ? '#eff6ff' : 'white',
+                                                      color: collectionPaymentMethod === 'Bank' ? '#1d4ed8' : '#374151',
+                                                      cursor: 'pointer',
+                                                      fontWeight: 600
+                                                    }}
+                                                  >
+                                                    Bank
+                                                  </button>
+                                                  <button
+                                                    onClick={() => { setCollectionPaymentMethod('Mobile Banking'); setCollectionBankName(''); setCollectionBranch(''); setCollectionReceiptNo('') }}
+                                                    style={{
+                                                      padding: '0.5rem 1rem',
+                                                      borderRadius: '0.375rem',
+                                                      border: `1px solid ${collectionPaymentMethod === 'Mobile Banking' ? '#3b82f6' : '#d1d5db'}`,
+                                                      backgroundColor: collectionPaymentMethod === 'Mobile Banking' ? '#eff6ff' : 'white',
+                                                      color: collectionPaymentMethod === 'Mobile Banking' ? '#1d4ed8' : '#374151',
+                                                      cursor: 'pointer',
+                                                      fontWeight: 600
+                                                    }}
+                                                  >
+                                                    Mobile Banking
+                                                  </button>
+                                                </div>
+
+                                                {collectionPaymentMethod === 'Bank' && (
+                                                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: '0.5rem', marginTop: '0.75rem' }}>
+                                                    <input
+                                                      type="text"
+                                                      placeholder="Bank Name"
+                                                      value={collectionBankName}
+                                                      onChange={(e) => setCollectionBankName(e.target.value)}
+                                                      style={{ padding: '0.5rem', border: '1px solid #d1d5db', borderRadius: '0.375rem' }}
+                                                    />
+                                                    <input
+                                                      type="text"
+                                                      placeholder="Branch"
+                                                      value={collectionBranch}
+                                                      onChange={(e) => setCollectionBranch(e.target.value)}
+                                                      style={{ padding: '0.5rem', border: '1px solid #d1d5db', borderRadius: '0.375rem' }}
+                                                    />
+                                                    <input
+                                                      type="text"
+                                                      placeholder="Receipt No"
+                                                      value={collectionReceiptNo}
+                                                      onChange={(e) => setCollectionReceiptNo(e.target.value)}
+                                                      style={{ padding: '0.5rem', border: '1px solid #d1d5db', borderRadius: '0.375rem' }}
+                                                    />
+                                                  </div>
+                                                )}
+
+                                                {collectionPaymentMethod === 'Mobile Banking' && (
+                                                  <div style={{ marginTop: '0.75rem' }}>
+                                                    <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '0.5rem' }}>
+                                                      {['Bkash', 'Nagad', 'Rocket'].map(provider => (
+                                                        <button
+                                                          key={provider}
+                                                          onClick={() => setCollectionMobileProvider(provider)}
+                                                          style={{
+                                                            padding: '0.375rem 0.75rem',
+                                                            borderRadius: '0.375rem',
+                                                            border: `1px solid ${collectionMobileProvider === provider ? '#ec4899' : '#d1d5db'}`,
+                                                            backgroundColor: collectionMobileProvider === provider ? '#fdf2f8' : 'white',
+                                                            color: collectionMobileProvider === provider ? '#be185d' : '#374151',
+                                                            fontSize: '0.875rem',
+                                                            cursor: 'pointer',
+                                                            fontWeight: 500
+                                                          }}
+                                                        >
+                                                          {provider}
+                                                        </button>
+                                                      ))}
+                                                    </div>
+                                                    <input
+                                                      type="text"
+                                                      placeholder="Txt No"
+                                                      value={collectionTrxId}
+                                                      onChange={(e) => setCollectionTrxId(e.target.value)}
+                                                      style={{ width: '100%', padding: '0.5rem', border: '1px solid #d1d5db', borderRadius: '0.375rem' }}
+                                                    />
+                                                  </div>
+                                                )}
+                                              </div>
+                                              <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center', flexWrap: 'wrap', marginBottom: '0.5rem' }}>
+                                                <select
+                                                  value={selectedCollectionOrderId}
+                                                  onChange={(e) => setSelectedCollectionOrderId(e.target.value)}
+                                                  style={{
+                                                    flex: 1,
+                                                    padding: '0.5rem',
+                                                    border: '1px solid #3b82f6',
+                                                    borderRadius: '0.375rem',
+                                                    fontSize: '0.875rem',
+                                                    fontWeight: 600,
+                                                    color: '#1e40af',
+                                                    backgroundColor: 'white'
+                                                  }}
+                                                >
+                                                  <option value="">{language === 'en' ? 'Select Order (All)' : 'অর্ডার নির্বাচন (সব)'}</option>
+                                                  {filteredDealerOrders.map(order => (
+                                                    <option key={order._id} value={order._id}>
+                                                      {customOrderIds[order._id] || order.orderId} (Due: ৳{Math.max(0, (parseFloat(order.totalPrice || 0) * (order.discountEnabled && order.discountAmount > 0 ? order.discountAmount : 1)) - (parseFloat(order.paidAmount || 0) + (order.paymentHistory || []).reduce((sum, p) => sum + (parseFloat(p.commission) || 0), 0))).toLocaleString()})
+                                                    </option>
+                                                  ))}
+                                                </select>
+                                              </div>
                                               <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center', flexWrap: 'wrap' }}>
                                                 <select
                                                   value={addCollectionCommission}
@@ -9284,6 +9856,29 @@ function AdminPage({ language, toggleLanguage, t }) {
                                               <div style={{ fontSize: '0.875rem', color: '#b91c1c', fontWeight: 700, marginBottom: '0.5rem' }}>
                                                 {language === 'en' ? 'Return Product' : 'পণ্য ফেরত'}
                                               </div>
+                                              <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center', flexWrap: 'wrap', marginBottom: '0.5rem' }}>
+                                                <select
+                                                  value={selectedReturnOrderId}
+                                                  onChange={(e) => setSelectedReturnOrderId(e.target.value)}
+                                                  style={{
+                                                    flex: 1,
+                                                    padding: '0.5rem',
+                                                    border: '1px solid #ef4444',
+                                                    borderRadius: '0.375rem',
+                                                    fontSize: '0.875rem',
+                                                    fontWeight: 600,
+                                                    color: '#b91c1c',
+                                                    backgroundColor: 'white'
+                                                  }}
+                                                >
+                                                  <option value="">{language === 'en' ? 'Select Order (All)' : 'অর্ডার নির্বাচন (সব)'}</option>
+                                                  {filteredDealerOrders.map(order => (
+                                                    <option key={order._id} value={order._id}>
+                                                      {customOrderIds[order._id] || order.orderId} (Due: ৳{Math.max(0, (parseFloat(order.totalPrice || 0) * (order.discountEnabled && order.discountAmount > 0 ? order.discountAmount : 1)) - (parseFloat(order.paidAmount || 0) + (order.paymentHistory || []).reduce((sum, p) => sum + (parseFloat(p.commission) || 0), 0))).toLocaleString()})
+                                                    </option>
+                                                  ))}
+                                                </select>
+                                              </div>
                                               <div style={{ display: 'flex', gap: '0.5rem', flexDirection: 'column' }}>
                                                 {/* Product Selection Row */}
                                                 <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
@@ -9303,7 +9898,7 @@ function AdminPage({ language, toggleLanguage, t }) {
                                                     }}
                                                   >
                                                     <option value="">{language === 'en' ? 'Select Product' : 'পণ্য নির্বাচন করুন'}</option>
-                                                    {products.map(p => (
+                                                    {filteredReturnProducts.map(p => (
                                                       <option key={p._id} value={p._id}>{p.name}</option>
                                                     ))}
                                                   </select>
@@ -9431,7 +10026,8 @@ function AdminPage({ language, toggleLanguage, t }) {
                                           commission: commAmount,
                                           totalCommission: runningCommission, // Total Commission so far for this order
                                           totalDue: runningDue, // Total Due after this payment
-                                          note: payment.note || ''
+                                          note: payment.note || '',
+                                          metadata: payment.metadata
                                         })
                                       })
                                     })
@@ -9454,12 +10050,12 @@ function AdminPage({ language, toggleLanguage, t }) {
                                                 <th style={{ padding: '0.75rem', fontWeight: 600, color: '#475569', textAlign: 'center' }}>{language === 'en' ? 'Date' : 'তারিখ'}</th>
                                                 <th style={{ padding: '0.75rem', fontWeight: 600, color: '#475569', textAlign: 'center' }}>{language === 'en' ? 'Order ID' : 'অর্ডার আইডি'}</th>
                                                 <th style={{ padding: '0.75rem', fontWeight: 600, color: '#475569', textAlign: 'right' }}>{language === 'en' ? 'Total Amount' : 'মোট পরিমাণ'}</th>
+                                                <th style={{ padding: '0.75rem', fontWeight: 600, color: '#475569', textAlign: 'right' }}>{language === 'en' ? 'paid' : 'পরিশোধ'}</th>
+                                                <th style={{ padding: '0.75rem', fontWeight: 600, color: '#475569', textAlign: 'center' }}>Comm%</th>
+                                                <th style={{ padding: '0.75rem', fontWeight: 600, color: '#475569', textAlign: 'right' }}>{language === 'en' ? 'Total Comm' : 'মোট কমিশন'}</th>
                                                 <th style={{ padding: '0.75rem', fontWeight: 600, color: '#475569', textAlign: 'right' }}>{language === 'en' ? 'Total Paid' : 'মোট পরিশোধিত'}</th>
-                                                <th style={{ padding: '0.75rem', fontWeight: 600, color: '#475569', textAlign: 'right' }}>{language === 'en' ? 'Paid' : 'পরিশোধ'}</th>
-                                                <th style={{ padding: '0.75rem', fontWeight: 600, color: '#475569', textAlign: 'center' }}>Comm %</th>
-                                                <th style={{ padding: '0.75rem', fontWeight: 600, color: '#475569', textAlign: 'right' }}>Commission</th>
-                                                <th style={{ padding: '0.75rem', fontWeight: 600, color: '#475569', textAlign: 'right' }}>Total Comm</th>
-                                                <th style={{ padding: '0.75rem', fontWeight: 600, color: '#475569', textAlign: 'right' }}>Total Due</th>
+                                                <th style={{ padding: '0.75rem', fontWeight: 600, color: '#475569', textAlign: 'right' }}>{language === 'en' ? 'Total Due' : 'মোট বকেয়া'}</th>
+                                                <th style={{ padding: '0.75rem', fontWeight: 600, color: '#475569', textAlign: 'left' }}>{language === 'en' ? 'Payment Info' : 'পেমেন্ট তথ্য'}</th>
                                               </tr>
                                             </thead>
                                             <tbody>
@@ -9469,14 +10065,11 @@ function AdminPage({ language, toggleLanguage, t }) {
                                                     <td style={{ padding: '0.75rem', color: '#334155', textAlign: 'center' }}>
                                                       {new Date(payment.date).toLocaleDateString(language === 'en' ? 'en-US' : 'bn-BD')}
                                                     </td>
-                                                    <td style={{ padding: '0.75rem', color: '#334155', fontWeight: 500, textAlign: 'center' }}>
-                                                      {payment.orderId}
+                                                    <td style={{ padding: '0.75rem', color: '#334155', textAlign: 'center', fontWeight: 700 }}>
+                                                      {payment.orderId || '-'}
                                                     </td>
                                                     <td style={{ padding: '0.75rem', textAlign: 'right', color: '#334155' }}>
                                                       ৳{Number(payment.totalAmount).toLocaleString()}
-                                                    </td>
-                                                    <td style={{ padding: '0.75rem', textAlign: 'right', color: '#166534', fontWeight: 600 }}>
-                                                      ৳{Number(payment.runningPaid).toLocaleString()}
                                                     </td>
                                                     <td style={{ padding: '0.75rem', textAlign: 'right', color: '#15803d', fontWeight: 700, backgroundColor: '#f0fdf4' }}>
                                                       ৳{Number(payment.paidAmount).toLocaleString()}
@@ -9484,20 +10077,41 @@ function AdminPage({ language, toggleLanguage, t }) {
                                                     <td style={{ padding: '0.75rem', textAlign: 'center', color: '#64748b' }}>
                                                       {payment.commissionPercent}
                                                     </td>
-                                                    <td style={{ padding: '0.75rem', textAlign: 'right', color: '#b91c1c' }}>
-                                                      ৳{Number(payment.commission).toLocaleString(undefined, { maximumFractionDigits: 2 })}
-                                                    </td>
                                                     <td style={{ padding: '0.75rem', textAlign: 'right', color: '#991b1b', fontWeight: 600 }}>
                                                       ৳{Number(payment.totalCommission).toLocaleString(undefined, { maximumFractionDigits: 0 })}
                                                     </td>
+                                                    <td style={{ padding: '0.75rem', textAlign: 'right', color: '#166534', fontWeight: 600 }}>
+                                                      ৳{Number(payment.runningPaid).toLocaleString()}
+                                                    </td>
                                                     <td style={{ padding: '0.75rem', textAlign: 'right', color: '#c2410c', fontWeight: 600 }}>
                                                       ৳{Number(payment.totalDue).toLocaleString()}
+                                                    </td>
+                                                    <td style={{ padding: '0.75rem', color: '#475569', fontSize: '0.75rem' }}>
+                                                      {payment.metadata ? (
+                                                        <div>
+                                                          <div style={{ fontWeight: 700, color: '#1e293b' }}>{payment.metadata.method}</div>
+                                                          {payment.metadata.method === 'Bank' && (
+                                                            <div style={{ color: '#64748b' }}>
+                                                              {payment.metadata.bankName}, {payment.metadata.branch}
+                                                              <br />
+                                                              Ref: {payment.metadata.receiptNo}
+                                                            </div>
+                                                          )}
+                                                          {payment.metadata.method === 'Mobile Banking' && (
+                                                            <div style={{ color: '#64748b' }}>
+                                                              {payment.metadata.provider}
+                                                              <br />
+                                                              Trx: {payment.metadata.trxId}
+                                                            </div>
+                                                          )}
+                                                        </div>
+                                                      ) : payment.note}
                                                     </td>
                                                   </tr>
                                                 ))
                                               ) : (
                                                 <tr>
-                                                  <td colSpan="10" style={{ padding: '1.5rem', textAlign: 'center', color: '#94a3b8' }}>
+                                                  <td colSpan="9" style={{ padding: '1.5rem', textAlign: 'center', color: '#94a3b8' }}>
                                                     {language === 'en' ? 'No payment history found' : 'কোন পেমেন্ট ইতিহাস পাওয়া যায়নি'}
                                                   </td>
                                                 </tr>
@@ -9523,9 +10137,11 @@ function AdminPage({ language, toggleLanguage, t }) {
                                                     ৳
                                                   </div>
                                                   <div className="mobile-card-header-text">
-                                                    <div className="mobile-card-title">{payment.orderId}</div>
+                                                    <div className="mobile-card-title">
+                                                      ৳{Number(payment.paidAmount).toLocaleString()}
+                                                    </div>
                                                     <div className="mobile-card-subtitle">
-                                                      {new Date(payment.date).toLocaleDateString(language === 'en' ? 'en-US' : 'bn-BD')}
+                                                      {new Date(payment.date).toLocaleDateString(language === 'en' ? 'en-US' : 'bn-BD')} | {payment.orderId || '-'}
                                                     </div>
                                                   </div>
                                                 </div>
@@ -9535,15 +10151,15 @@ function AdminPage({ language, toggleLanguage, t }) {
                                                     <span className="mobile-card-value">৳{Number(payment.totalAmount).toLocaleString()}</span>
                                                   </div>
                                                   <div className="mobile-card-row">
-                                                    <span className="mobile-card-label">{language === 'en' ? 'Paid (This Txn)' : 'পরিশোধ (এই লেনদেন)'}</span>
-                                                    <span className="mobile-card-value" style={{ color: '#15803d', fontWeight: 700 }}>
-                                                      ৳{Number(payment.paidAmount).toLocaleString()}
+                                                    <span className="mobile-card-label">Comm% | {language === 'en' ? 'Total Comm' : 'মোট কমিশন'}</span>
+                                                    <span className="mobile-card-value" style={{ color: '#b91c1c' }}>
+                                                      {payment.commissionPercent} | ৳{Number(payment.totalCommission).toLocaleString(undefined, { maximumFractionDigits: 0 })}
                                                     </span>
                                                   </div>
                                                   <div className="mobile-card-row">
-                                                    <span className="mobile-card-label">{language === 'en' ? 'Commission' : 'কমিশন'}</span>
-                                                    <span className="mobile-card-value" style={{ color: '#b91c1c' }}>
-                                                      ৳{Number(payment.commission).toLocaleString(undefined, { maximumFractionDigits: 2 })} ({payment.commissionPercent})
+                                                    <span className="mobile-card-label">{language === 'en' ? 'Total Paid' : 'মোট পরিশোধিত'}</span>
+                                                    <span className="mobile-card-value" style={{ color: '#166534', fontWeight: 600 }}>
+                                                      ৳{Number(payment.runningPaid).toLocaleString()}
                                                     </span>
                                                   </div>
                                                   <div className="mobile-card-row">
@@ -9552,6 +10168,20 @@ function AdminPage({ language, toggleLanguage, t }) {
                                                       ৳{Number(payment.totalDue).toLocaleString()}
                                                     </span>
                                                   </div>
+                                                  {payment.metadata && (
+                                                    <div className="mobile-card-row" style={{ borderTop: '1px dashed #e2e8f0', paddingTop: '0.5rem', marginTop: '0.5rem', flexDirection: 'column', alignItems: 'flex-start' }}>
+                                                      <span className="mobile-card-label" style={{ marginBottom: '0.25rem' }}>{language === 'en' ? 'Payment Info' : 'পেমেন্ট তথ্য'}</span>
+                                                      <div style={{ fontSize: '0.75rem', color: '#475569' }}>
+                                                        <span style={{ fontWeight: 700 }}>{payment.metadata.method}</span>
+                                                        {payment.metadata.method === 'Bank' && (
+                                                          <span>: {payment.metadata.bankName} ({payment.metadata.branch}), Ref: {payment.metadata.receiptNo}</span>
+                                                        )}
+                                                        {payment.metadata.method === 'Mobile Banking' && (
+                                                          <span>: {payment.metadata.provider}, Trx: {payment.metadata.trxId}</span>
+                                                        )}
+                                                      </div>
+                                                    </div>
+                                                  )}
                                                 </div>
                                               </div>
                                             ))
@@ -9567,6 +10197,7 @@ function AdminPage({ language, toggleLanguage, t }) {
                                             <thead>
                                               <tr style={{ backgroundColor: '#fef2f2', borderBottom: '2px solid #fecaca', textAlign: 'left' }}>
                                                 <th style={{ padding: '0.75rem', fontWeight: 600, color: '#991b1b' }}>{language === 'en' ? 'Date' : 'তারিখ'}</th>
+                                                <th style={{ padding: '0.75rem', fontWeight: 600, color: '#991b1b' }}>{language === 'en' ? 'Order ID' : 'অর্ডার আইডি'}</th>
                                                 <th style={{ padding: '0.75rem', fontWeight: 600, color: '#991b1b' }}>{language === 'en' ? 'Product' : 'পণ্য'}</th>
                                                 <th style={{ padding: '0.75rem', fontWeight: 600, color: '#991b1b', textAlign: 'center' }}>P/B</th>
                                                 <th style={{ padding: '0.75rem', fontWeight: 600, color: '#991b1b', textAlign: 'center' }}>Carton</th>
@@ -9580,6 +10211,9 @@ function AdminPage({ language, toggleLanguage, t }) {
                                                   <tr key={ret._id} style={{ borderBottom: '1px solid #fecaca' }}>
                                                     <td style={{ padding: '0.75rem', color: '#334155' }}>
                                                       {new Date(ret.date).toLocaleDateString(language === 'en' ? 'en-US' : 'bn-BD')}
+                                                    </td>
+                                                    <td style={{ padding: '0.75rem', color: '#334155', fontWeight: 700 }}>
+                                                      {ret.orderId || '-'}
                                                     </td>
                                                     <td style={{ padding: '0.75rem', color: '#334155', fontWeight: 500 }}>
                                                       {ret.productName}
@@ -9600,7 +10234,7 @@ function AdminPage({ language, toggleLanguage, t }) {
                                                 ))
                                               ) : (
                                                 <tr>
-                                                  <td colSpan="6" style={{ padding: '1.5rem', textAlign: 'center', color: '#94a3b8' }}>
+                                                  <td colSpan="7" style={{ padding: '1.5rem', textAlign: 'center', color: '#94a3b8' }}>
                                                     {language === 'en' ? 'No return history found' : 'কোন ফেরত ইতিহাস পাওয়া যায়নি'}
                                                   </td>
                                                 </tr>
@@ -9663,7 +10297,7 @@ function AdminPage({ language, toggleLanguage, t }) {
 
                                   <div className="admin-table-container" style={{ width: '100%', overflowX: 'auto', marginTop: '2rem' }}>
                                     <div style={{ padding: '0 0.5rem 1rem 0.5rem', fontWeight: 700, fontSize: '1.1rem', color: '#1e293b' }}>
-                                      {language === 'en' ? 'Dealer Orders' : 'ডিলারের অর্ডার'}
+                                      {language === 'en' ? 'Customer Orders' : 'কাস্টমার অর্ডার'}
                                     </div>
                                     <table className="admin-table" style={{ width: '100%', fontSize: '0.875rem' }}>
                                       <thead>
@@ -9830,14 +10464,57 @@ function AdminPage({ language, toggleLanguage, t }) {
                                           );
                                         })}
                                       </tbody>
+                                      <tfoot style={{ backgroundColor: '#f1f5f9', fontWeight: 800 }}>
+                                        <tr>
+                                          <td colSpan="6" style={{ padding: '0.75rem', textAlign: 'right', color: '#475569' }}>
+                                            {language === 'en' ? 'Total Summary:' : 'মোট সারসংক্ষেপ:'}
+                                          </td>
+                                          <td style={{ padding: '0.75rem', textAlign: 'center', color: '#1e293b' }}>
+                                            ৳{filteredDealerOrdersTotals.totalGrandTotal.toLocaleString()}
+                                          </td>
+                                          <td style={{ padding: '0.75rem', textAlign: 'center', color: '#16a34a' }}>
+                                            ৳{filteredDealerOrdersTotals.totalPaidAmount.toLocaleString()}
+                                          </td>
+                                          <td style={{ padding: '0.75rem', textAlign: 'center', color: '#dc2626' }}>
+                                            ৳{filteredDealerOrdersTotals.totalDueAmount.toLocaleString()}
+                                          </td>
+                                        </tr>
+                                      </tfoot>
                                     </table>
                                   </div>
 
                                   {/* Mobile Card View for Dealer Orders */}
                                   <div className="mobile-card-container" style={{ marginTop: '1rem' }}>
                                     <div style={{ padding: '0 0.5rem 1rem 0.5rem', fontWeight: 700, fontSize: '1.1rem', color: '#1e293b' }}>
-                                      {language === 'en' ? 'Dealer Orders' : 'ডিলারের অর্ডার'}
+                                      {language === 'en' ? 'Customer Orders' : 'কাস্টমার অর্ডার'}
                                     </div>
+
+                                    {/* Mobile Totals Summary Box */}
+                                    {filteredDealerOrders.length > 0 && (
+                                      <div style={{
+                                        margin: '0.5rem',
+                                        padding: '1rem',
+                                        backgroundColor: '#f8fafc',
+                                        borderRadius: '12px',
+                                        border: '1px solid #e2e8f0',
+                                        display: 'flex',
+                                        flexDirection: 'column',
+                                        gap: '0.75rem'
+                                      }}>
+                                        <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.9rem' }}>
+                                          <span style={{ color: '#475569', fontWeight: 600 }}>{language === 'en' ? 'Total Grand Total:' : 'মোট সর্বমোট:'}</span>
+                                          <span style={{ color: '#1e293b', fontWeight: 700 }}>৳{filteredDealerOrdersTotals.totalGrandTotal.toLocaleString()}</span>
+                                        </div>
+                                        <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.9rem' }}>
+                                          <span style={{ color: '#475569', fontWeight: 600 }}>{language === 'en' ? 'Total Paid Amount:' : 'মোট পরিশোধিত পরিমাণ:'}</span>
+                                          <span style={{ color: '#16a34a', fontWeight: 700 }}>৳{filteredDealerOrdersTotals.totalPaidAmount.toLocaleString()}</span>
+                                        </div>
+                                        <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.9rem' }}>
+                                          <span style={{ color: '#475569', fontWeight: 600 }}>{language === 'en' ? 'Total Due Amount:' : 'মোট বাকি পরিমাণ:'}</span>
+                                          <span style={{ color: '#dc2626', fontWeight: 700 }}>৳{filteredDealerOrdersTotals.totalDueAmount.toLocaleString()}</span>
+                                        </div>
+                                      </div>
+                                    )}
                                     {filteredDealerOrders.length === 0 ? (
                                       <div style={{ textAlign: 'center', padding: '2rem', color: '#6b7280' }}>
                                         {language === 'en' ? 'No orders found' : 'কোন অর্ডার পাওয়া যায়নি'}
@@ -10462,7 +11139,7 @@ function AdminPage({ language, toggleLanguage, t }) {
                                   {language === 'en' ? 'Generated Login Credentials' : 'তৈরি করা লগইন পরিচয়পত্র'}
                                 </h4>
                                 <p style={{ margin: '0.25rem 0', fontSize: '0.875rem', color: '#0c4a6e' }}>
-                                  <strong>{language === 'en' ? 'Username:' : 'ব্যবহারকারীর নাম:'}</strong> {generatedCredentials.username}
+                                  <strong>{language === 'en' ? 'Employee ID (User Name):' : 'কর্মচারী আইডি (ব্যবহারকারীর নাম):'}</strong> {generatedCredentials.username}
                                 </p>
                                 <p style={{ margin: '0.25rem 0', fontSize: '0.875rem', color: '#0c4a6e' }}>
                                   <strong>{language === 'en' ? 'Password:' : 'পাসওয়ার্ড:'}</strong> <span style={{ fontFamily: 'monospace', backgroundColor: '#fff', padding: '0.25rem 0.5rem', borderRadius: '0.25rem' }}>{generatedCredentials.password}</span>
@@ -10493,6 +11170,13 @@ function AdminPage({ language, toggleLanguage, t }) {
                               </div>
                             )}
                             <div className="admin-form-grid">
+                              <div className="admin-form-group">
+                                <label>{language === 'en' ? 'Employee ID (Auto-generated)' : 'কর্মচারী আইডি (স্বয়ংক্রিয়)'}</label>
+                                <input type="text" value={nextEmployeeId} readOnly style={{ backgroundColor: '#f3f4f6', fontWeight: 700, color: '#1e293b' }} />
+                                <p style={{ fontSize: '0.7rem', color: '#64748b', marginTop: '0.2rem' }}>
+                                  {language === 'en' ? 'This ID will be used as the login username.' : 'এই আইডিটি লগইন ইউজারনেম হিসেবে ব্যবহৃত হবে।'}
+                                </p>
+                              </div>
                               <div className="admin-form-group">
                                 <label>{language === 'en' ? 'Name' : 'নাম'}</label>
                                 <input type="text" value={newEmployee.name} onChange={(e) => setNewEmployee({ ...newEmployee, name: e.target.value })} />
@@ -10701,7 +11385,7 @@ function AdminPage({ language, toggleLanguage, t }) {
 
                                   console.log('[Frontend] Sending employee data:', { ...employeeData, document: employeeData.document ? 'Base64 data (hidden)' : 'No document' })
 
-                                  const res = await fetch(`${API_BASE}/api/employees`, {
+                                  const res = await authFetch(`${API_BASE}/api/employees`, {
                                     method: 'POST',
                                     headers: { 'Content-Type': 'application/json' },
                                     body: JSON.stringify(employeeData)
@@ -10862,7 +11546,7 @@ function AdminPage({ language, toggleLanguage, t }) {
                                     onClick={async () => {
                                       // Fetch latest employee data to ensure password is up to date
                                       try {
-                                        const res = await fetch(`${API_BASE}/api/employees/${emp._id}`)
+                                        const res = await authFetch(`${API_BASE}/api/employees/${emp._id}`)
                                         if (res.ok) {
                                           const data = await res.json()
                                           console.log('[View Employee] Fetched employee data:', {
@@ -10985,7 +11669,7 @@ function AdminPage({ language, toggleLanguage, t }) {
                                     onClick={async (e) => {
                                       e.stopPropagation()
                                       try {
-                                        const res = await fetch(`${API_BASE}/api/employees/${emp._id}`)
+                                        const res = await authFetch(`${API_BASE}/api/employees/${emp._id}`)
                                         if (res.ok) {
                                           const data = await res.json()
                                           setViewingEmployee({ ...data.data, status: normalizeSalaryStatus(data.data.status) })
@@ -11390,13 +12074,13 @@ function AdminPage({ language, toggleLanguage, t }) {
                                   <table style={{ width: '100%', borderCollapse: 'collapse' }}>
                                     <thead>
                                       <tr style={{ backgroundColor: '#f9fafb', borderBottom: '2px solid #e5e7eb' }}>
-                                        <th style={{ padding: '0.75rem', textAlign: 'left', fontSize: '0.875rem', fontWeight: 600, color: '#6b7280' }}>
+                                        <th style={{ padding: '0.75rem', textAlign: 'left', fontSize: '0.875rem', fontWeight: 600, color: '#6b7280', whiteSpace: 'nowrap' }}>
                                           {language === 'en' ? 'Date' : 'তারিখ'}
                                         </th>
-                                        <th style={{ padding: '0.75rem', textAlign: 'left', fontSize: '0.875rem', fontWeight: 600, color: '#6b7280' }}>
+                                        <th style={{ padding: '0.75rem', textAlign: 'left', fontSize: '0.875rem', fontWeight: 600, color: '#6b7280', whiteSpace: 'nowrap' }}>
                                           {language === 'en' ? 'Order ID' : 'অর্ডার আইডি'}
                                         </th>
-                                        <th style={{ padding: '0.75rem', textAlign: 'left', fontSize: '0.875rem', fontWeight: 600, color: '#6b7280' }}>
+                                        <th style={{ padding: '0.75rem', textAlign: 'left', fontSize: '0.875rem', fontWeight: 600, color: '#6b7280', minWidth: '180px' }}>
                                           {language === 'en' ? 'Customer' : 'কাস্টমার'}
                                         </th>
                                         <th style={{ padding: '0.75rem', textAlign: 'right', fontSize: '0.875rem', fontWeight: 600, color: '#6b7280' }}>
@@ -11514,16 +12198,31 @@ function AdminPage({ language, toggleLanguage, t }) {
                                             const createdByName = order.requestedByName || order.requestedByRole || '-'
                                             const approvedByName = order.approvedByName || '-'
 
+                                            // Robust dealer and shop name lookup
+                                            const orderDealerId = order.dealer?._id || order.dealer || sale.dealerId || sale.dealerObjectId || ''
+                                            const foundDealer = dealers.find(d =>
+                                              (orderDealerId && String(d._id) === String(orderDealerId)) ||
+                                              (order.dealerId && String(d.dealerId) === String(order.dealerId)) ||
+                                              (sale.dealerId && String(d.dealerId) === String(sale.dealerId))
+                                            )
+                                            const displayShopName = foundDealer?.shopName || order.shopName || sale.shopName || '-'
+                                            const displayCustomerName = foundDealer?.name || order.dealerName || (order.dealer && order.dealer.name) || sale.dealerName || '-'
+
                                             return (
                                               <tr key={idx} style={{ borderBottom: '1px solid #f3f4f6' }}>
                                                 <td style={{ padding: '0.75rem', fontSize: '0.875rem', color: '#111827' }}>
                                                   {sale.date ? new Date(sale.date).toLocaleDateString() : (sale.createdAt ? new Date(sale.createdAt).toLocaleDateString() : (order.createdAt ? new Date(order.createdAt).toLocaleDateString() : '-'))}
                                                 </td>
-                                                <td style={{ padding: '0.75rem', fontSize: '0.875rem', color: '#111827', fontFamily: 'monospace' }}>
+                                                <td style={{ padding: '0.75rem', fontSize: '0.875rem', color: '#111827', fontFamily: 'monospace', whiteSpace: 'nowrap' }}>
                                                   {customOrderIds[order._id] || order.orderId || sale.orderId || '-'}
                                                 </td>
                                                 <td style={{ padding: '0.75rem', fontSize: '0.875rem', color: '#111827' }}>
-                                                  {order.dealerName || (order.dealer && order.dealer.name) || sale.dealerName || '-'}
+                                                  <div style={{ fontWeight: 600, color: '#1f2937' }}>
+                                                    {displayShopName}
+                                                  </div>
+                                                  <div style={{ fontSize: '0.75rem', color: '#6b7280' }}>
+                                                    {displayCustomerName}
+                                                  </div>
                                                 </td>
                                                 <td style={{ padding: '0.75rem', fontSize: '0.875rem', color: '#111827', fontWeight: 500, textAlign: 'right' }}>
                                                   ৳{Number(order.totalPrice || sale.amount || sale.totalAmount || 0).toLocaleString()}
@@ -12625,7 +13324,7 @@ function AdminPage({ language, toggleLanguage, t }) {
                                 onClick={async () => {
                                   if (window.confirm(language === 'en' ? 'Reset password for this employee? A new password will be generated.' : 'এই কর্মচারীর পাসওয়ার্ড রিসেট করবেন? একটি নতুন পাসওয়ার্ড তৈরি করা হবে।')) {
                                     try {
-                                      const res = await fetch(`${API_BASE}/api/employees/reset-password`, {
+                                      const res = await authFetch(`${API_BASE}/api/employees/reset-password`, {
                                         method: 'POST',
                                         headers: { 'Content-Type': 'application/json' },
                                         body: JSON.stringify({ id: viewingEmployee._id })
@@ -12637,7 +13336,7 @@ function AdminPage({ language, toggleLanguage, t }) {
                                       setLastGeneratedPassword(data.newPassword)
 
                                       // Refresh employee list
-                                      const resEmployees = await fetch(`${API_BASE}/api/employees`)
+                                      const resEmployees = await authFetch(`${API_BASE}/api/employees`)
                                       if (resEmployees.ok) {
                                         const empData = await resEmployees.json()
                                         setEmployees((empData.data || []).map((e) => ({
@@ -12806,116 +13505,118 @@ function AdminPage({ language, toggleLanguage, t }) {
                       }
 
 
-                      <div style={{ marginTop: '1.5rem', display: 'flex', justifyContent: 'flex-end', gap: '0.5rem' }}>
-                        {isEditingEmployee ? (
-                          <>
-                            <button
-                              onClick={() => {
-                                setIsEditingEmployee(false)
-                                setEditingEmployeeData(null)
-                              }}
-                              disabled={savingEmployee}
-                              style={{
-                                padding: '0.5rem 1.5rem',
-                                backgroundColor: '#6b7280',
-                                color: 'white',
-                                border: 'none',
-                                borderRadius: '0.375rem',
-                                cursor: savingEmployee ? 'not-allowed' : 'pointer',
-                                fontWeight: 600,
-                                opacity: savingEmployee ? 0.6 : 1
-                              }}
-                            >
-                              {adminContent.cancel}
-                            </button>
-                            <button
-                              onClick={handleSaveEmployeeEdit}
-                              disabled={savingEmployee}
-                              style={{
-                                padding: '0.5rem 1.5rem',
-                                backgroundColor: '#10b981',
-                                color: 'white',
-                                border: 'none',
-                                borderRadius: '0.375rem',
-                                cursor: savingEmployee ? 'not-allowed' : 'pointer',
-                                fontWeight: 600,
-                                opacity: savingEmployee ? 0.6 : 1
-                              }}
-                            >
-                              {savingEmployee ? (language === 'en' ? 'Saving...' : 'সংরক্ষণ করা হচ্ছে...') : adminContent.save}
-                            </button>
-                          </>
-                        ) : (
-                          <>
-                            <button
-                              onClick={() => {
-                                setIsEditingEmployee(true)
-                                setEditingEmployeeData({ ...viewingEmployee, status: normalizeSalaryStatus(viewingEmployee.status) })
-                              }}
-                              style={{
-                                padding: '0.5rem 1.5rem',
-                                backgroundColor: '#3b82f6',
-                                color: 'white',
-                                border: 'none',
-                                borderRadius: '0.375rem',
-                                cursor: 'pointer',
-                                fontWeight: 600
-                              }}
-                            >
-                              {adminContent.edit}
-                            </button>
-                            <button
-                              onClick={async () => {
-                                if (!viewingEmployee?._id) return
-                                if (window.confirm(language === 'en' ? 'Are you sure you want to delete this employee?' : 'আপনি কি নিশ্চিত যে আপনি এই কর্মচারীটি মুছতে চান?')) {
-                                  try {
-                                    const res = await fetch(`${API_BASE}/api/employees/${viewingEmployee._id}`, {
-                                      method: 'DELETE'
-                                    })
-                                    if (!res.ok) throw new Error('Failed to delete')
-                                    setEmployees(employees.filter(e => e._id !== viewingEmployee._id))
-                                    setViewingEmployee(null)
-                                    setIsEditingEmployee(false)
-                                    setEditingEmployeeData(null)
-                                  } catch (err) {
-                                    alert(language === 'en' ? 'Failed to delete employee' : 'কর্মচারী মুছে ফেলতে ব্যর্থ')
+                      {!showSalesHistory && !showAssignedDealers && (
+                        <div style={{ marginTop: '1.5rem', display: 'flex', justifyContent: 'center', gap: '0.75rem' }}>
+                          {isEditingEmployee ? (
+                            <>
+                              <button
+                                onClick={() => {
+                                  setIsEditingEmployee(false)
+                                  setEditingEmployeeData(null)
+                                }}
+                                disabled={savingEmployee}
+                                style={{
+                                  padding: '0.5rem 1.5rem',
+                                  backgroundColor: '#6b7280',
+                                  color: 'white',
+                                  border: 'none',
+                                  borderRadius: '0.375rem',
+                                  cursor: savingEmployee ? 'not-allowed' : 'pointer',
+                                  fontWeight: 600,
+                                  opacity: savingEmployee ? 0.6 : 1
+                                }}
+                              >
+                                {adminContent.cancel}
+                              </button>
+                              <button
+                                onClick={handleSaveEmployeeEdit}
+                                disabled={savingEmployee}
+                                style={{
+                                  padding: '0.5rem 1.5rem',
+                                  backgroundColor: '#10b981',
+                                  color: 'white',
+                                  border: 'none',
+                                  borderRadius: '0.375rem',
+                                  cursor: savingEmployee ? 'not-allowed' : 'pointer',
+                                  fontWeight: 600,
+                                  opacity: savingEmployee ? 0.6 : 1
+                                }}
+                              >
+                                {savingEmployee ? (language === 'en' ? 'Saving...' : 'সংরক্ষণ করা হচ্ছে...') : adminContent.save}
+                              </button>
+                            </>
+                          ) : (
+                            <>
+                              <button
+                                onClick={() => {
+                                  setIsEditingEmployee(true)
+                                  setEditingEmployeeData({ ...viewingEmployee, status: normalizeSalaryStatus(viewingEmployee.status) })
+                                }}
+                                style={{
+                                  padding: '0.5rem 1.5rem',
+                                  backgroundColor: '#3b82f6',
+                                  color: 'white',
+                                  border: 'none',
+                                  borderRadius: '0.375rem',
+                                  cursor: 'pointer',
+                                  fontWeight: 600
+                                }}
+                              >
+                                {adminContent.edit}
+                              </button>
+                              <button
+                                onClick={async () => {
+                                  if (!viewingEmployee?._id) return
+                                  if (window.confirm(language === 'en' ? 'Are you sure you want to delete this employee?' : 'আপনি কি নিশ্চিত যে আপনি এই কর্মচারীটি মুছতে চান?')) {
+                                    try {
+                                      const res = await authFetch(`${API_BASE}/api/employees/${viewingEmployee._id}`, {
+                                        method: 'DELETE'
+                                      })
+                                      if (!res.ok) throw new Error('Failed to delete')
+                                      setEmployees(employees.filter(e => e._id !== viewingEmployee._id))
+                                      setViewingEmployee(null)
+                                      setIsEditingEmployee(false)
+                                      setEditingEmployeeData(null)
+                                    } catch (err) {
+                                      alert(language === 'en' ? 'Failed to delete employee' : 'কর্মচারী মুছে ফেলতে ব্যর্থ')
+                                    }
                                   }
-                                }
-                              }}
-                              style={{
-                                padding: '0.5rem 1.5rem',
-                                backgroundColor: '#ef4444',
-                                color: 'white',
-                                border: 'none',
-                                borderRadius: '0.375rem',
-                                cursor: 'pointer',
-                                fontWeight: 600
-                              }}
-                            >
-                              {adminContent.delete}
-                            </button>
-                            <button
-                              onClick={() => {
-                                setViewingEmployee(null)
-                                setIsEditingEmployee(false)
-                                setEditingEmployeeData(null)
-                                setLastGeneratedPassword('')
-                              }}
-                              style={{
-                                padding: '0.5rem 1.5rem',
-                                backgroundColor: '#6b7280',
-                                color: 'white',
-                                border: 'none',
-                                borderRadius: '0.375rem',
-                                cursor: 'pointer',
-                                fontWeight: 600
-                              }}
-                            >
-                              {language === 'en' ? 'Close' : 'বন্ধ করুন'}
-                            </button>
-                          </>
-                        )}
-                      </div>
+                                }}
+                                style={{
+                                  padding: '0.5rem 1.5rem',
+                                  backgroundColor: '#ef4444',
+                                  color: 'white',
+                                  border: 'none',
+                                  borderRadius: '0.375rem',
+                                  cursor: 'pointer',
+                                  fontWeight: 600
+                                }}
+                              >
+                                {adminContent.delete}
+                              </button>
+                              <button
+                                onClick={() => {
+                                  setViewingEmployee(null)
+                                  setIsEditingEmployee(false)
+                                  setEditingEmployeeData(null)
+                                  setLastGeneratedPassword('')
+                                }}
+                                style={{
+                                  padding: '0.5rem 1.5rem',
+                                  backgroundColor: '#6b7280',
+                                  color: 'white',
+                                  border: 'none',
+                                  borderRadius: '0.375rem',
+                                  cursor: 'pointer',
+                                  fontWeight: 600
+                                }}
+                              >
+                                {language === 'en' ? 'Close' : 'বন্ধ করুন'}
+                              </button>
+                            </>
+                          )}
+                        </div>
+                      )}
                     </div>
                   </div>
                 )
@@ -13812,7 +14513,7 @@ function AdminPage({ language, toggleLanguage, t }) {
                                                         className="admin-action-btn edit"
                                                         onClick={async () => {
                                                           try {
-                                                            const res = await fetch(`${API_BASE}/api/orders/${order._id}`, {
+                                                            const res = await authFetch(`${API_BASE}/api/orders/${order._id}`, {
                                                               method: 'PUT',
                                                               headers: { 'Content-Type': 'application/json' },
                                                               body: JSON.stringify({
@@ -13826,7 +14527,7 @@ function AdminPage({ language, toggleLanguage, t }) {
                                                             await loadOrders()
                                                             await loadOrderRequests()
                                                             // Reload employees to update achieved target
-                                                            const empRes = await fetch(`${API_BASE}/api/employees`)
+                                                            const empRes = await authFetch(`${API_BASE}/api/employees`)
                                                             if (empRes.ok) {
                                                               const empData = await empRes.json()
                                                               setEmployees(empData.data || [])
@@ -13851,7 +14552,7 @@ function AdminPage({ language, toggleLanguage, t }) {
                                                         className="admin-action-btn delete"
                                                         onClick={async () => {
                                                           try {
-                                                            const res = await fetch(`${API_BASE}/api/orders/${order._id}`, {
+                                                            const res = await authFetch(`${API_BASE}/api/orders/${order._id}`, {
                                                               method: 'PUT',
                                                               headers: { 'Content-Type': 'application/json' },
                                                               body: JSON.stringify({ approvalStatus: 'Rejected', status: 'Cancelled' })
@@ -14136,7 +14837,7 @@ function AdminPage({ language, toggleLanguage, t }) {
                                                       onClick={async (e) => {
                                                         e.stopPropagation()
                                                         try {
-                                                          const res = await fetch(`${API_BASE}/api/orders/${order._id}`, {
+                                                          const res = await authFetch(`${API_BASE}/api/orders/${order._id}`, {
                                                             method: 'PUT',
                                                             headers: { 'Content-Type': 'application/json' },
                                                             body: JSON.stringify({
@@ -14149,7 +14850,7 @@ function AdminPage({ language, toggleLanguage, t }) {
                                                           if (!res.ok) throw new Error(data.message || 'Failed to approve')
                                                           await loadOrders()
                                                           await loadOrderRequests()
-                                                          const empRes = await fetch(`${API_BASE}/api/employees`)
+                                                          const empRes = await authFetch(`${API_BASE}/api/employees`)
                                                           if (empRes.ok) {
                                                             const empData = await empRes.json()
                                                             setEmployees(empData.data || [])
@@ -14174,7 +14875,7 @@ function AdminPage({ language, toggleLanguage, t }) {
                                                       onClick={async (e) => {
                                                         e.stopPropagation()
                                                         try {
-                                                          const res = await fetch(`${API_BASE}/api/orders/${order._id}`, {
+                                                          const res = await authFetch(`${API_BASE}/api/orders/${order._id}`, {
                                                             method: 'PUT',
                                                             headers: { 'Content-Type': 'application/json' },
                                                             body: JSON.stringify({ approvalStatus: 'Rejected', status: 'Cancelled' })
@@ -15212,20 +15913,179 @@ function AdminPage({ language, toggleLanguage, t }) {
                               {customOrderIds[viewingOrder._id] || viewingOrder.orderId || 'N/A'}
                             </p>
                           </div>
-                          <button
-                            onClick={() => setViewingOrder(null)}
-                            style={{
-                              background: '#e2e8f0',
-                              border: 'none',
-                              padding: '0.4rem 0.65rem',
-                              borderRadius: '0.375rem',
-                              cursor: 'pointer',
-                              fontWeight: 700,
-                              color: '#475569'
-                            }}
-                          >
-                            ×
-                          </button>
+                          <div style={{ display: 'flex', gap: '0.65rem', flexWrap: 'wrap', justifyContent: 'flex-end', alignItems: 'center' }}>
+                            {isEditingOrderDetails ? (
+                              <>
+                                <button
+                                  onClick={async () => {
+                                    try {
+                                      const res = await authFetch(`${API_BASE}/api/orders/${viewingOrder._id}`, {
+                                        method: 'PUT',
+                                        headers: { 'Content-Type': 'application/json' },
+                                        body: JSON.stringify({
+                                          paidAmount: editingOrderDetails.paidAmount || 0,
+                                          status: editingOrderDetails.status || 'Pending',
+                                          commission: editingOrderDetails.commission,
+                                          newPayment: editingOrderDetails.payInput ? {
+                                            amount: parseFloat(editingOrderDetails.payInput),
+                                            commission: (() => {
+                                              const pay = parseFloat(editingOrderDetails.payInput) || 0
+                                              const rateStr = editingOrderDetails.commission || ''
+                                              const rate = parseFloat(rateStr.replace('%', '')) || 0
+                                              return (pay * rate) / 100
+                                            })()
+                                          } : undefined
+                                        })
+                                      })
+                                      const data = await res.json()
+                                      if (!res.ok) throw new Error(data.message || 'Failed to update order')
+                                      await loadOrders()
+                                      await loadOrderRequests()
+                                      if (data.data) {
+                                        setViewingOrder(data.data)
+                                      } else {
+                                        setViewingOrder({ ...viewingOrder, ...editingOrderDetails })
+                                      }
+                                      setIsEditingOrderDetails(false)
+                                      setEditingOrderDetails(null)
+                                    } catch (err) {
+                                      alert(language === 'en' ? 'Failed to update order' : 'অর্ডার আপডেট করতে ব্যর্থ')
+                                      console.error(err)
+                                    }
+                                  }}
+                                  style={{
+                                    padding: '0.45rem 1rem',
+                                    backgroundColor: '#10b981',
+                                    color: 'white',
+                                    border: 'none',
+                                    borderRadius: '0.5rem',
+                                    cursor: 'pointer',
+                                    fontWeight: 700,
+                                    fontSize: '0.85rem',
+                                    boxShadow: '0 4px 6px -1px rgba(16,185,129,0.2)'
+                                  }}
+                                >
+                                  {language === 'en' ? 'Save' : 'সংরক্ষণ'}
+                                </button>
+                                <button
+                                  onClick={() => {
+                                    setIsEditingOrderDetails(false)
+                                    setEditingOrderDetails(null)
+                                  }}
+                                  style={{
+                                    padding: '0.45rem 1rem',
+                                    backgroundColor: '#f3f4f6',
+                                    color: '#4b5563',
+                                    border: '1px solid #e5e7eb',
+                                    borderRadius: '0.5rem',
+                                    cursor: 'pointer',
+                                    fontWeight: 700,
+                                    fontSize: '0.85rem'
+                                  }}
+                                >
+                                  {language === 'en' ? 'Cancel' : 'বাতিল'}
+                                </button>
+                                {(userRole || '').toLowerCase() === 'admin' && (
+                                  <button
+                                    onClick={async () => {
+                                      if (window.confirm(language === 'en' ? 'Are you sure you want to delete this order?' : 'আপনি কি এই অর্ডারটি মুছতে চান?')) {
+                                        await handleDeleteOrder(viewingOrder._id)
+                                        setViewingOrder(null)
+                                      }
+                                    }}
+                                    style={{
+                                      padding: '0.45rem 1rem',
+                                      backgroundColor: '#ef4444',
+                                      color: 'white',
+                                      border: 'none',
+                                      borderRadius: '0.5rem',
+                                      cursor: 'pointer',
+                                      fontWeight: 700,
+                                      fontSize: '0.85rem',
+                                      boxShadow: '0 4px 6px -1px rgba(239,68,68,0.2)'
+                                    }}
+                                  >
+                                    {adminContent.delete}
+                                  </button>
+                                )}
+                              </>
+                            ) : (
+                              <>
+                                <button
+                                  onClick={() => {
+                                    setIsEditingOrderDetails(true)
+                                    const totalVal = parseFloat(viewingOrder.totalPrice || 0)
+                                    const discount = viewingOrder.discountEnabled && viewingOrder.discountAmount > 0 ? viewingOrder.discountAmount : 1
+                                    const grandTotal = viewingOrder.grandTotal || (totalVal * discount)
+                                    const paid = parseFloat(viewingOrder.paidAmount || 0)
+                                    const comm = (viewingOrder.paymentHistory || []).reduce((sum, p) => sum + (parseFloat(p.commission) || 0), 0)
+                                    const due = Math.max(0, grandTotal - (paid + comm))
+                                    const currentStatus = viewingOrder.status || 'Pending'
+                                    let initialStatus = currentStatus
+                                    if ((userRole || '').toLowerCase() !== 'admin') {
+                                      if (currentStatus !== 'Shipped' && currentStatus !== 'Delivered' && currentStatus !== 'Complete') {
+                                        initialStatus = 'Shipped'
+                                      }
+                                    }
+                                    setEditingOrderDetails({
+                                      paidAmount: paid,
+                                      dueAmount: due,
+                                      status: initialStatus,
+                                      commission: viewingOrder.commission || ''
+                                    })
+                                  }}
+                                  style={{
+                                    padding: '0.45rem 1rem',
+                                    backgroundColor: '#3b82f6',
+                                    color: 'white',
+                                    border: 'none',
+                                    borderRadius: '0.5rem',
+                                    cursor: 'pointer',
+                                    fontWeight: 700,
+                                    fontSize: '0.85rem',
+                                    boxShadow: '0 4px 6px -1px rgba(59,130,246,0.2)'
+                                  }}
+                                >
+                                  {adminContent.edit}
+                                </button>
+                                <button
+                                  onClick={() => handlePrintOrder(viewingOrder)}
+                                  style={{
+                                    padding: '0.45rem 1rem',
+                                    backgroundColor: '#f3f4f6',
+                                    color: '#374151',
+                                    border: '1px solid #e5e7eb',
+                                    borderRadius: '0.5rem',
+                                    cursor: 'pointer',
+                                    fontWeight: 700,
+                                    fontSize: '0.85rem'
+                                  }}
+                                >
+                                  {language === 'en' ? 'Print' : 'প্রিন্ট'}
+                                </button>
+                              </>
+                            )}
+                            <button
+                              onClick={() => {
+                                setViewingOrder(null)
+                                setIsEditingOrderDetails(false)
+                                setEditingOrderDetails(null)
+                              }}
+                              style={{
+                                padding: '0.45rem 1rem',
+                                backgroundColor: '#6b7280',
+                                color: 'white',
+                                border: 'none',
+                                borderRadius: '0.5rem',
+                                cursor: 'pointer',
+                                fontWeight: 700,
+                                fontSize: '0.85rem',
+                                boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)'
+                              }}
+                            >
+                              {language === 'en' ? 'Close' : 'বন্ধ'}
+                            </button>
+                          </div>
                         </div>
 
                         <div className="admin-order-details-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))', gap: '1rem', position: 'relative', zIndex: 1 }}>
@@ -15752,15 +16612,13 @@ function AdminPage({ language, toggleLanguage, t }) {
                               <table className="admin-table" style={{ width: '100%', minWidth: '800px' }}>
                                 <thead>
                                   <tr>
-                                    <th style={{ textAlign: 'center', whiteSpace: 'nowrap', padding: '0.75rem' }}>{language === 'en' ? 'Date' : 'তারিখ'}</th>
-                                    <th style={{ textAlign: 'center', whiteSpace: 'nowrap', padding: '0.75rem' }}>{language === 'en' ? 'Total Price' : 'মোট মূল্য'}</th>
-                                    <th style={{ textAlign: 'center', whiteSpace: 'nowrap', padding: '0.75rem' }}>{language === 'en' ? 'Grand Total' : 'সর্বমোট'}</th>
-                                    <th style={{ textAlign: 'center', whiteSpace: 'nowrap', padding: '0.75rem' }}>{language === 'en' ? 'Total Paid Amount' : 'মোট পরিশোধিত'}</th>
-                                    <th style={{ textAlign: 'center', whiteSpace: 'nowrap', padding: '0.75rem' }}>{language === 'en' ? 'Pay Amount' : 'পরিশোধের পরিমাণ'}</th>
-                                    <th style={{ textAlign: 'center', whiteSpace: 'nowrap', padding: '0.75rem' }}>{language === 'en' ? 'Commission %' : 'কমিশন %'}</th>
-                                    <th style={{ textAlign: 'center', whiteSpace: 'nowrap', padding: '0.75rem' }}>{language === 'en' ? 'Commission' : 'কমিশন'}</th>
-                                    <th style={{ textAlign: 'center', whiteSpace: 'nowrap', padding: '0.75rem' }}>{language === 'en' ? 'Total Commission' : 'মোট কমিশন'}</th>
-                                    <th style={{ textAlign: 'center', whiteSpace: 'nowrap', padding: '0.75rem' }}>{language === 'en' ? 'Due Amount' : 'বাকি পরিমাণ'}</th>
+                                    <th style={{ textAlign: 'center', whiteSpace: 'nowrap', padding: '1rem 0.75rem', backgroundColor: '#f8fafc', color: '#475569', fontSize: '0.85rem' }}>{language === 'en' ? 'Date' : 'তারিখ'}</th>
+                                    <th style={{ textAlign: 'center', whiteSpace: 'nowrap', padding: '1rem 0.75rem', backgroundColor: '#f8fafc', color: '#475569', fontSize: '0.85rem' }}>{language === 'en' ? 'Total Price' : 'মোট মূল্য'}</th>
+                                    <th style={{ textAlign: 'center', whiteSpace: 'nowrap', padding: '1rem 0.75rem', backgroundColor: '#f8fafc', color: '#475569', fontSize: '0.85rem' }}>{language === 'en' ? 'Grand Total' : 'সর্বমোট'}</th>
+                                    <th style={{ textAlign: 'center', whiteSpace: 'nowrap', padding: '1rem 0.75rem', backgroundColor: '#f8fafc', color: '#475569', fontSize: '0.85rem' }}>{language === 'en' ? 'Pay Amount' : 'পরিশোধের পরিমাণ'}</th>
+                                    <th style={{ textAlign: 'center', whiteSpace: 'nowrap', padding: '1rem 0.75rem', backgroundColor: '#f8fafc', color: '#475569', fontSize: '0.85rem' }}>{language === 'en' ? 'Comm. %' : 'কমিশন %'}</th>
+                                    <th style={{ textAlign: 'center', whiteSpace: 'nowrap', padding: '1rem 0.75rem', backgroundColor: '#f8fafc', color: '#475569', fontSize: '0.85rem' }}>{language === 'en' ? 'Total Commission' : 'মোট কমিশন'}</th>
+                                    <th style={{ textAlign: 'center', whiteSpace: 'nowrap', padding: '1rem 0.75rem', backgroundColor: '#f8fafc', color: '#475569', fontSize: '0.85rem' }}>{language === 'en' ? 'Due Amount' : 'বাকি পরিমাণ'}</th>
                                   </tr>
                                 </thead>
                                 <tbody>
@@ -15784,15 +16642,13 @@ function AdminPage({ language, toggleLanguage, t }) {
 
                                         return (
                                           <tr key={index}>
-                                            <td style={{ textAlign: 'center' }}>{payment.date ? new Date(payment.date).toLocaleDateString() : '-'}</td>
-                                            <td style={{ textAlign: 'center' }}>৳{Math.round(totalPrice)}</td>
-                                            <td style={{ textAlign: 'center', fontWeight: 600, color: '#1e40af' }}>৳{Math.round(orderGrandTotal)}</td>
-                                            <td style={{ textAlign: 'center', fontWeight: 600 }}>৳{Math.round(runningPaid)}</td>
-                                            <td style={{ textAlign: 'center', color: '#16a34a', fontWeight: 600 }}>৳{Math.round(amount)}</td>
-                                            <td style={{ textAlign: 'center' }}>{commPercent}</td>
-                                            <td style={{ textAlign: 'center' }}>৳{Math.round(commission)}</td>
-                                            <td style={{ textAlign: 'center', fontWeight: 600 }}>৳{Math.round(runningCommission)}</td>
-                                            <td style={{ textAlign: 'center', color: '#dc2626', fontWeight: 600 }}>৳{Math.round(currentDue)}</td>
+                                            <td style={{ textAlign: 'center', padding: '0.75rem' }}>{payment.date ? new Date(payment.date).toLocaleDateString() : '-'}</td>
+                                            <td style={{ textAlign: 'center', padding: '0.75rem' }}>৳{Math.round(totalPrice).toLocaleString()}</td>
+                                            <td style={{ textAlign: 'center', padding: '0.75rem', fontWeight: 600, color: '#1e40af' }}>৳{Math.round(orderGrandTotal).toLocaleString()}</td>
+                                            <td style={{ textAlign: 'center', padding: '0.75rem', color: '#16a34a', fontWeight: 600 }}>৳{Math.round(amount).toLocaleString()}</td>
+                                            <td style={{ textAlign: 'center', padding: '0.75rem' }}>{commPercent}</td>
+                                            <td style={{ textAlign: 'center', padding: '0.75rem', fontWeight: 600 }}>৳{Math.round(runningCommission).toLocaleString()}</td>
+                                            <td style={{ textAlign: 'center', padding: '0.75rem', color: '#dc2626', fontWeight: 600 }}>৳{Math.round(currentDue).toLocaleString()}</td>
                                           </tr>
                                         )
                                       })
@@ -15800,23 +16656,23 @@ function AdminPage({ language, toggleLanguage, t }) {
                                       // Add summary row
                                       rows.push(
                                         <tr key="summary" style={{ backgroundColor: '#f8fafc', fontWeight: 700, borderTop: '2px solid #e2e8f0' }}>
-                                          <td colSpan="4" style={{ textAlign: 'right', padding: '0.75rem' }}>{language === 'en' ? 'TOTAL:' : 'মোট:'}</td>
-                                          <td style={{ textAlign: 'center', color: '#16a34a' }}>৳{Math.round(runningPaid)}</td>
-                                          <td style={{ textAlign: 'center' }}>-</td>
-                                          <td style={{ textAlign: 'center', color: '#ca8a04' }}>৳{Math.round(runningCommission)}</td>
-                                          <td colSpan="2" style={{ textAlign: 'center', backgroundColor: '#eff6ff' }}>
-                                            <div style={{ fontSize: '0.75rem', color: '#1e40af' }}>{language === 'en' ? 'TOTAL COLLECTION' : 'মোট সংগ্রহ'}</div>
-                                            <div style={{ color: '#1e40af', fontSize: '1rem' }}>৳{Math.round((runningPaid + runningCommission))}</div>
+                                          <td colSpan="3" style={{ textAlign: 'right', padding: '1rem' }}>{language === 'en' ? 'TOTAL:' : 'মোট:'}</td>
+                                          <td style={{ textAlign: 'center', padding: '0.75rem', color: '#16a34a' }}>৳{Math.round(runningPaid).toLocaleString()}</td>
+                                          <td style={{ textAlign: 'center', padding: '0.75rem' }}>-</td>
+                                          <td style={{ textAlign: 'center', padding: '0.75rem', color: '#ca8a04' }}>৳{Math.round(runningCommission).toLocaleString()}</td>
+                                          <td style={{ textAlign: 'center', backgroundColor: '#eff6ff', padding: '0.5rem' }}>
+                                            <div style={{ fontSize: '0.65rem', color: '#1e40af', lineHeight: 1.2 }}>{language === 'en' ? 'TOTAL COLLECTION' : 'মোট সংগ্রহ'}</div>
+                                            <div style={{ color: '#1e40af', fontSize: '1rem', fontWeight: 800 }}>৳{Math.round((runningPaid + runningCommission)).toLocaleString()}</div>
                                           </td>
                                         </tr>
                                       )
                                       rows.push(
                                         <tr key="final-due" style={{ backgroundColor: '#fef2f2', fontWeight: 800 }}>
-                                          <td colSpan="7" style={{ textAlign: 'right', padding: '0.75rem', color: '#dc2626' }}>
+                                          <td colSpan="6" style={{ textAlign: 'right', padding: '1rem', color: '#dc2626', fontSize: '0.9rem' }}>
                                             {language === 'en' ? 'FINAL DUE AMOUNT:' : 'সর্বমোট বকেয়া পরিমাণ:'}
                                           </td>
-                                          <td colSpan="2" style={{ textAlign: 'center', color: '#dc2626', fontSize: '1.1rem' }}>
-                                            ৳{Math.round(Math.max(0, orderGrandTotal - (runningPaid + runningCommission)))}
+                                          <td style={{ textAlign: 'center', padding: '0.75rem', color: '#dc2626', fontSize: '1.1rem' }}>
+                                            ৳{Math.round(Math.max(0, orderGrandTotal - (runningPaid + runningCommission))).toLocaleString()}
                                           </td>
                                         </tr>
                                       )
@@ -15824,7 +16680,7 @@ function AdminPage({ language, toggleLanguage, t }) {
                                     })()
                                   ) : (
                                     <tr>
-                                      <td colSpan="9" style={{ textAlign: 'center', padding: '1rem', color: '#6b7280' }}>
+                                      <td colSpan="7" style={{ textAlign: 'center', padding: '1rem', color: '#6b7280' }}>
                                         {language === 'en' ? 'No payment history available' : 'কোনো পেমেন্ট ইতিহাস নেই'}
                                       </td>
                                     </tr>
@@ -15869,13 +16725,6 @@ function AdminPage({ language, toggleLanguage, t }) {
                                         <div className="mobile-card-row">
                                           <span className="mobile-card-label">{language === 'en' ? 'Paid Amount' : 'পরিশোধিত'}</span>
                                           <span className="mobile-card-value" style={{ color: '#16a34a', fontWeight: 600 }}>৳{Math.round(amount)}</span>
-                                        </div>
-                                        <div className="mobile-card-row">
-                                          <span className="mobile-card-label">
-                                            {language === 'en' ? 'Commission' : 'কমিশন'}
-                                            {commPercent && <span style={{ fontSize: '0.75rem', color: '#64748b', marginLeft: '0.4rem' }}>({commPercent})</span>}
-                                          </span>
-                                          <span className="mobile-card-value">৳{Math.round(commission)}</span>
                                         </div>
                                         <div className="mobile-card-row">
                                           <span className="mobile-card-label">{language === 'en' ? 'Due' : 'বাকি'}</span>
@@ -15926,175 +16775,6 @@ function AdminPage({ language, toggleLanguage, t }) {
                           </div>
                         )}
 
-                        {/* Action Buttons */}
-                        <div style={{ position: 'relative', display: 'flex', gap: '0.75rem', marginTop: '1.5rem', zIndex: 1 }}>
-                          {isEditingOrderDetails ? (
-                            <>
-                              <button
-                                onClick={async () => {
-                                  try {
-                                    const res = await fetch(`${API_BASE}/api/orders/${viewingOrder._id}`, {
-                                      method: 'PUT',
-                                      headers: { 'Content-Type': 'application/json' },
-                                      body: JSON.stringify({
-                                        paidAmount: editingOrderDetails.paidAmount || 0,
-                                        status: editingOrderDetails.status || 'Pending',
-                                        commission: editingOrderDetails.commission,
-                                        newPayment: editingOrderDetails.payInput ? {
-                                          amount: parseFloat(editingOrderDetails.payInput),
-                                          commission: (() => {
-                                            const pay = parseFloat(editingOrderDetails.payInput) || 0
-                                            const rateStr = editingOrderDetails.commission || ''
-                                            const rate = parseFloat(rateStr.replace('%', '')) || 0
-                                            return (pay * rate) / 100
-                                          })()
-                                        } : undefined
-                                      })
-                                    })
-                                    const data = await res.json()
-                                    if (!res.ok) throw new Error(data.message || 'Failed to update order')
-                                    await loadOrders()
-                                    await loadOrderRequests()
-                                    if (data.data) {
-                                      setViewingOrder(data.data)
-                                    } else {
-                                      setViewingOrder({ ...viewingOrder, ...editingOrderDetails })
-                                    }
-                                    setIsEditingOrderDetails(false)
-                                    setEditingOrderDetails(null)
-                                  } catch (err) {
-                                    alert(language === 'en' ? 'Failed to update order' : 'অর্ডার আপডেট করতে ব্যর্থ')
-                                    console.error(err)
-                                  }
-                                }}
-                                style={{
-                                  padding: '0.5rem 1.5rem',
-                                  backgroundColor: '#10b981',
-                                  color: 'white',
-                                  border: 'none',
-                                  borderRadius: '0.5rem',
-                                  cursor: 'pointer',
-                                  fontWeight: 700,
-                                  boxShadow: '0 10px 20px rgba(16,185,129,0.35)'
-                                }}
-                              >
-                                {language === 'en' ? 'Save' : 'সংরক্ষণ'}
-                              </button>
-                              <button
-                                onClick={() => {
-                                  setIsEditingOrderDetails(false)
-                                  setEditingOrderDetails(null)
-                                }}
-                                style={{
-                                  padding: '0.5rem 1.5rem',
-                                  backgroundColor: '#6b7280',
-                                  color: 'white',
-                                  border: 'none',
-                                  borderRadius: '0.5rem',
-                                  cursor: 'pointer',
-                                  fontWeight: 700
-                                }}
-                              >
-                                {language === 'en' ? 'Cancel' : 'বাতিল'}
-                              </button>
-                            </>
-                          ) : (
-                            <>
-                              <button
-                                onClick={() => {
-                                  setIsEditingOrderDetails(true)
-                                  const totalVal = parseFloat(viewingOrder.totalPrice || 0)
-                                  const discount = viewingOrder.discountEnabled && viewingOrder.discountAmount > 0 ? viewingOrder.discountAmount : 1
-                                  const grandTotal = viewingOrder.grandTotal || (totalVal * discount)
-                                  const paid = parseFloat(viewingOrder.paidAmount || 0)
-                                  const comm = (viewingOrder.paymentHistory || []).reduce((sum, p) => sum + (parseFloat(p.commission) || 0), 0)
-                                  const due = Math.max(0, grandTotal - (paid + comm))
-                                  const currentStatus = viewingOrder.status || 'Pending'
-                                  // For non-admin users, if status is not Shipped, Delivered, or Complete, default to Shipped
-                                  let initialStatus = currentStatus
-                                  if ((userRole || '').toLowerCase() !== 'admin') {
-                                    if (currentStatus !== 'Shipped' && currentStatus !== 'Delivered' && currentStatus !== 'Complete') {
-                                      initialStatus = 'Shipped'
-                                    }
-                                  }
-                                  setEditingOrderDetails({
-                                    paidAmount: paid,
-                                    dueAmount: due,
-                                    status: initialStatus,
-                                    commission: viewingOrder.commission || ''
-                                  })
-                                }}
-                                style={{
-                                  padding: '0.5rem 1.5rem',
-                                  backgroundColor: '#3b82f6',
-                                  color: 'white',
-                                  border: 'none',
-                                  borderRadius: '0.5rem',
-                                  cursor: 'pointer',
-                                  fontWeight: 700,
-                                  boxShadow: '0 10px 20px rgba(59,130,246,0.35)'
-                                }}
-                              >
-                                {adminContent.edit}
-                              </button>
-                              {(userRole || '').toLowerCase() === 'admin' && (
-                                <button
-                                  onClick={async () => {
-                                    if (window.confirm(language === 'en' ? 'Are you sure you want to delete this order?' : 'আপনি কি এই অর্ডারটি মুছতে চান?')) {
-                                      await handleDeleteOrder(viewingOrder._id)
-                                      setViewingOrder(null)
-                                    }
-                                  }}
-                                  style={{
-                                    padding: '0.5rem 1.5rem',
-                                    backgroundColor: '#ef4444',
-                                    color: 'white',
-                                    border: 'none',
-                                    borderRadius: '0.5rem',
-                                    cursor: 'pointer',
-                                    fontWeight: 700,
-                                    boxShadow: '0 10px 20px rgba(239,68,68,0.35)'
-                                  }}
-                                >
-                                  {adminContent.delete}
-                                </button>
-                              )}
-                              <button
-                                onClick={() => handlePrintOrder(viewingOrder)}
-                                style={{
-                                  padding: '0.5rem 1.5rem',
-                                  backgroundColor: '#f3f4f6',
-                                  color: '#374151',
-                                  border: 'none',
-                                  borderRadius: '0.5rem',
-                                  cursor: 'pointer',
-                                  fontWeight: 700,
-                                  boxShadow: '0 10px 20px rgba(0,0,0,0.1)'
-                                }}
-                              >
-                                {language === 'en' ? 'Print Invoice' : 'ইনভয়েস প্রিন্ট'}
-                              </button>
-                            </>
-                          )}
-                          <button
-                            onClick={() => {
-                              setViewingOrder(null)
-                              setIsEditingOrderDetails(false)
-                              setEditingOrderDetails(null)
-                            }}
-                            style={{
-                              padding: '0.5rem 1.5rem',
-                              backgroundColor: '#6b7280',
-                              color: 'white',
-                              border: 'none',
-                              borderRadius: '0.5rem',
-                              cursor: 'pointer',
-                              fontWeight: 700
-                            }}
-                          >
-                            {language === 'en' ? 'Close' : 'বন্ধ করুন'}
-                          </button>
-                        </div>
                       </div>
                     </div>
                   )}
@@ -17335,7 +18015,8 @@ function AdminPage({ language, toggleLanguage, t }) {
                                   <>
                                     <th>{language === 'en' ? 'Region ID' : 'অঞ্চল আইডি'}</th>
                                     <th>{language === 'en' ? 'Zilla' : 'জেলা'}</th>
-                                    <th>{language === 'en' ? 'total Amount' : 'মোট পরিমাণ'}</th>
+                                    <th>{language === 'en' ? 'Total Amount' : 'মোট পরিমাণ'}</th>
+                                    <th>{language === 'en' ? 'Paid' : 'পরিশোধিত'}</th>
                                     <th>{language === 'en' ? 'Due' : 'বাকি'}</th>
                                   </>
                                 )}
@@ -17343,7 +18024,8 @@ function AdminPage({ language, toggleLanguage, t }) {
                                   <>
                                     <th>{language === 'en' ? 'Area ID' : 'এলাকা আইডি'}</th>
                                     <th>{language === 'en' ? 'Area' : 'এলাকা'}</th>
-                                    <th>{language === 'en' ? 'total Amount' : 'মোট পরিমাণ'}</th>
+                                    <th>{language === 'en' ? 'Total Amount' : 'মোট পরিমাণ'}</th>
+                                    <th>{language === 'en' ? 'Paid' : 'পরিশোধিত'}</th>
                                     <th>{language === 'en' ? 'Due' : 'বাকি'}</th>
                                   </>
                                 )}
@@ -17351,7 +18033,8 @@ function AdminPage({ language, toggleLanguage, t }) {
                                   <>
                                     <th>{language === 'en' ? 'Territory ID' : 'টেরিটরি আইডি'}</th>
                                     <th>{language === 'en' ? 'Area' : 'এলাকা'}</th>
-                                    <th>{language === 'en' ? 'total Amount' : 'মোট পরিমাণ'}</th>
+                                    <th>{language === 'en' ? 'Total Amount' : 'মোট পরিমাণ'}</th>
+                                    <th>{language === 'en' ? 'Paid' : 'পরিশোধিত'}</th>
                                     <th>{language === 'en' ? 'Due' : 'বাকি'}</th>
                                   </>
                                 )}
@@ -17360,6 +18043,7 @@ function AdminPage({ language, toggleLanguage, t }) {
                                     <th>{language === 'en' ? 'CID' : 'সিআইডি'}</th>
                                     <th>{language === 'en' ? 'Customer' : 'কাস্টমার'}</th>
                                     <th>{language === 'en' ? 'Grand Total' : 'মোট পরিমাণ'}</th>
+                                    <th>{language === 'en' ? 'Paid' : 'পরিশোধিত'}</th>
                                     <th>{language === 'en' ? 'Due' : 'বাকি'}</th>
                                   </>
                                 )}
@@ -17373,6 +18057,7 @@ function AdminPage({ language, toggleLanguage, t }) {
                                       <td>{item.id}</td>
                                       <td>{customerSalesSummary.viewMode === 'dealer' ? item.shopName : item.label}</td>
                                       <td>{language === 'en' ? '৳' : '৳'} {Math.round(item.revenue).toLocaleString()}</td>
+                                      <td>{language === 'en' ? '৳' : '৳'} {Math.round(item.paid).toLocaleString()}</td>
                                       <td>{language === 'en' ? '৳' : '৳'} {Math.round(item.due).toLocaleString()}</td>
                                     </tr>
                                   ))}
@@ -17380,12 +18065,13 @@ function AdminPage({ language, toggleLanguage, t }) {
                                   <tr style={{ backgroundColor: '#f8fafc', fontWeight: 800, borderTop: '2px solid #e2e8f0', position: 'sticky', bottom: 0, zIndex: 10 }}>
                                     <td colSpan="2" style={{ textAlign: 'right' }}>{language === 'en' ? 'Total:' : 'মোট:'}</td>
                                     <td>{language === 'en' ? '৳' : '৳'} {Math.round(customerSalesSummary.totals.revenue).toLocaleString()}</td>
+                                    <td>{language === 'en' ? '৳' : '৳'} {Math.round(customerSalesSummary.totals.paid).toLocaleString()}</td>
                                     <td>{language === 'en' ? '৳' : '৳'} {Math.round(customerSalesSummary.totals.due).toLocaleString()}</td>
                                   </tr>
                                 </>
                               ) : (
                                 <tr>
-                                  <td colSpan="4" style={{ textAlign: 'center', padding: '2rem', color: '#6b7280' }}>
+                                  <td colSpan="5" style={{ textAlign: 'center', padding: '2rem', color: '#6b7280' }}>
                                     {language === 'en' ? 'No data found' : 'কোন তথ্য পাওয়া যায়নি'}
                                   </td>
                                 </tr>
@@ -17771,8 +18457,163 @@ function AdminPage({ language, toggleLanguage, t }) {
             </div>
           )
         }
-      </main >
-    </div >
+
+        {/* Team Member Management Modal */}
+        {showTeamModal && (
+          <div className="admin-modal-overlay" onClick={() => setShowTeamModal(false)}>
+            <div className="admin-modal-content" onClick={e => e.stopPropagation()} style={{ maxWidth: '600px' }}>
+              <div className="admin-modal-header" style={{ marginBottom: '1.5rem' }}>
+                <h2 style={{ margin: 0, fontSize: '1.25rem', fontWeight: 700, color: '#111827' }}>
+                  {editingTeamMember ? (language === 'en' ? 'Edit Team Member' : 'টিম সদস্য সম্পাদনা') : (language === 'en' ? 'Add Team Member' : 'টিম সদস্য যোগ করুন')}
+                </h2>
+                <button onClick={() => setShowTeamModal(false)} className="admin-modal-close">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ width: '20px', height: '20px' }}>
+                    <line x1="18" y1="6" x2="6" y2="18"></line>
+                    <line x1="6" y1="6" x2="18" y2="18"></line>
+                  </svg>
+                </button>
+              </div>
+
+              <div className="admin-form-grid" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
+                <div className="admin-form-group">
+                  <label>{language === 'en' ? 'Name (English)' : 'নাম (ইংরেজি)'}</label>
+                  <input
+                    type="text"
+                    value={teamMemberForm.nameEn}
+                    onChange={e => setTeamMemberForm({ ...teamMemberForm, nameEn: e.target.value })}
+                    placeholder="e.g. Abdul Latif"
+                  />
+                </div>
+                <div className="admin-form-group">
+                  <label>{language === 'en' ? 'Name (Bengali)' : 'নাম (বাংলা)'}</label>
+                  <input
+                    type="text"
+                    value={teamMemberForm.nameBn}
+                    onChange={e => setTeamMemberForm({ ...teamMemberForm, nameBn: e.target.value })}
+                    placeholder="উদাঃ আব্দুল লতিফ"
+                  />
+                </div>
+                <div className="admin-form-group">
+                  <label>{language === 'en' ? 'Role (English)' : 'পদবি (ইংরেজি)'}</label>
+                  <input
+                    type="text"
+                    value={teamMemberForm.roleEn}
+                    onChange={e => setTeamMemberForm({ ...teamMemberForm, roleEn: e.target.value })}
+                    placeholder="e.g. Chairman"
+                  />
+                </div>
+                <div className="admin-form-group">
+                  <label>{language === 'en' ? 'Role (Bengali)' : 'পদবি (বাংলা)'}</label>
+                  <input
+                    type="text"
+                    value={teamMemberForm.roleBn}
+                    onChange={e => setTeamMemberForm({ ...teamMemberForm, roleBn: e.target.value })}
+                    placeholder="উদাঃ চেয়ারম্যান"
+                  />
+                </div>
+                <div className="admin-form-group" style={{ gridColumn: '1 / -1' }}>
+                  <label>{language === 'en' ? 'Group' : 'গ্রুপ'}</label>
+                  <select
+                    value={teamMemberForm.group}
+                    onChange={e => setTeamMemberForm({ ...teamMemberForm, group: e.target.value })}
+                    style={{ width: '100%', padding: '0.625rem', borderRadius: '0.5rem', border: '1px solid #d1d5db' }}
+                  >
+                    <option value="chairman">{language === 'en' ? 'Chairman' : 'চেয়ারম্যান'}</option>
+                    <option value="board">{language === 'en' ? 'Board of Directors' : 'পরিচালনা পর্ষদ'}</option>
+                    <option value="management">{language === 'en' ? 'Management Team' : 'ব্যবস্থাপনা দল'}</option>
+                  </select>
+                </div>
+                <div className="admin-form-group">
+                  <label>{language === 'en' ? 'Expertise (English)' : 'অভিজ্ঞতা (ইংরেজি)'}</label>
+                  <textarea
+                    value={teamMemberForm.expertiseEn}
+                    onChange={e => setTeamMemberForm({ ...teamMemberForm, expertiseEn: e.target.value })}
+                    placeholder="Brief bio or expertise..."
+                    style={{ width: '100%', padding: '0.625rem', borderRadius: '0.5rem', border: '1px solid #d1d5db', minHeight: '80px' }}
+                  />
+                </div>
+                <div className="admin-form-group">
+                  <label>{language === 'en' ? 'Expertise (Bengali)' : 'অভিজ্ঞতা (বাংলা)'}</label>
+                  <textarea
+                    value={teamMemberForm.expertiseBn}
+                    onChange={e => setTeamMemberForm({ ...teamMemberForm, expertiseBn: e.target.value })}
+                    placeholder="সংক্ষিপ্ত জীবনী বা অভিজ্ঞতা..."
+                    style={{ width: '100%', padding: '0.625rem', borderRadius: '0.5rem', border: '1px solid #d1d5db', minHeight: '80px' }}
+                  />
+                </div>
+                <div className="admin-form-group" style={{ gridColumn: '1 / -1' }}>
+                  <label>{language === 'en' ? 'Member Photo' : 'সদস্যের ছবি'}</label>
+                  <div style={{ display: 'flex', gap: '1rem', alignItems: 'center' }}>
+                    <div style={{
+                      width: '64px',
+                      height: '64px',
+                      borderRadius: '8px',
+                      background: '#f1f5f9',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      overflow: 'hidden',
+                      border: '1px solid #e2e8f0'
+                    }}>
+                      {teamMemberForm.photo ? (
+                        <img src={teamMemberForm.photo} alt="Preview" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                      ) : (
+                        <svg viewBox="0 0 24 24" fill="none" stroke="#94a3b8" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ width: '24px', height: '24px' }}>
+                          <rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect>
+                          <circle cx="8.5" cy="8.5" r="1.5"></circle>
+                          <polyline points="21 15 16 10 5 21"></polyline>
+                        </svg>
+                      )}
+                    </div>
+                    <div style={{ flex: 1 }}>
+                      <label className="admin-upload-btn" style={{ marginBottom: '0.5rem', width: 'fit-content' }}>
+                        {language === 'en' ? 'Upload Photo' : 'ছবি আপলোড করুন'}
+                        <input
+                          type="file"
+                          accept="image/*"
+                          onChange={async (e) => {
+                            const file = e.target.files?.[0]
+                            if (file) {
+                              const base64 = await fileToBase64(file)
+                              setTeamMemberForm({ ...teamMemberForm, photo: base64 })
+                            }
+                          }}
+                          style={{ display: 'none' }}
+                        />
+                      </label>
+                      <input
+                        type="text"
+                        value={teamMemberForm.photo}
+                        onChange={e => setTeamMemberForm({ ...teamMemberForm, photo: e.target.value })}
+                        placeholder="Or paste image URL..."
+                        style={{ width: '100%', padding: '0.5rem', borderRadius: '0.375rem', border: '1px solid #d1d5db', fontSize: '0.75rem' }}
+                      />
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <div style={{ display: 'flex', gap: '1rem', marginTop: '2rem' }}>
+                <button
+                  className="admin-save-btn"
+                  style={{ flex: 1, padding: '0.875rem' }}
+                  onClick={handleSaveTeamMember}
+                >
+                  {language === 'en' ? 'Save Member' : 'সদস্য সংরক্ষণ করুন'}
+                </button>
+                <button
+                  className="admin-remove-btn"
+                  style={{ flex: 1, padding: '0.875rem' }}
+                  onClick={() => setShowTeamModal(false)}
+                >
+                  {language === 'en' ? 'Cancel' : 'বাতিল'}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+      </main>
+    </div>
   )
 }
 

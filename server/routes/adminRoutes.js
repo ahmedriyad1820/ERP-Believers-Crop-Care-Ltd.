@@ -1,5 +1,6 @@
 import express from 'express'
 import bcrypt from 'bcryptjs'
+import jwt from 'jsonwebtoken'
 import AdminProfile from '../models/AdminProfile.js'
 
 const router = express.Router()
@@ -73,9 +74,22 @@ router.post('/login', async (req, res) => {
       profile.role = 'Admin'
       await profile.save()
     }
+
+    // Generate JWT Token
+    const token = jwt.sign({ id: profile._id, role: 'Admin' }, process.env.JWT_SECRET || 'bcc-erp-secret-key-change-me', {
+      expiresIn: process.env.JWT_EXPIRES_IN || '90d'
+    })
+
     // Always return 'Admin' role for admin login, regardless of stored role
     console.log(`[backend] Login successful: User '${username}' with role 'Admin'`)
-    res.json({ success: true, role: 'Admin', name: profile.name, photo: profile.photo, designation: profile.designation })
+    res.json({
+      success: true,
+      token, // Send token to client
+      role: 'Admin',
+      name: profile.name,
+      photo: profile.photo,
+      designation: profile.designation
+    })
   } catch (err) {
     console.error(err)
     res.status(500).json({ message: 'Login failed' })

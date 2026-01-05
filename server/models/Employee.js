@@ -36,7 +36,10 @@ const EmployeeSchema = new mongoose.Schema({
   photo: { type: String, default: '' },
   status: { type: String, default: 'Unpaid' },
   username: { type: String, unique: true, sparse: true, default: '' },
-  passwordHash: { type: String, default: '' }
+  passwordHash: { type: String, default: '' },
+  mfaSecret: { type: String, select: false },
+  mfaEnabled: { type: Boolean, default: false },
+  passwordChangedAt: { type: Date }
 }, { timestamps: true })
 
 // Delete existing model if it exists to force recompilation with new schema

@@ -16,6 +16,27 @@ import ContactPage from './pages/Contact.jsx'
 import AdminPage from './pages/Admin.jsx'
 import TeamSection from './components/TeamSection.jsx'
 
+// Resolve API base so mobile devices on the LAN can reach the backend.
+const resolveApiBase = () => {
+  const envBase = import.meta.env.VITE_API_BASE
+
+  // Prefer an explicitly configured base unless it's the non-routable placeholder.
+  if (envBase && !['http://0.0.0.0:5000', 'http://localhost:5000'].includes(envBase)) {
+    return envBase
+  }
+
+  // Derive from the page origin (works for mobile testing on the same network).
+  if (typeof window !== 'undefined' && window.location?.hostname) {
+    const { protocol, hostname } = window.location
+    return `${protocol}//${hostname}:5000`
+  }
+
+  // Safe fallback for SSR/unknown contexts.
+  return 'http://localhost:5000'
+}
+
+const API_BASE = resolveApiBase()
+
 // Translations
 const translations = {
   en: {
@@ -748,7 +769,7 @@ const translations = {
   }
 }
 
-function HomePage({ language, toggleLanguage, t, heroImage = '/hero-image.jpg' }) {
+function HomePage({ language, toggleLanguage, t, heroImage = '/hero-image.jpg', teamMembers = [], heroMedia }) {
   const navigate = useNavigate()
   const [currentSlide, setCurrentSlide] = useState(0)
   const [quantities, setQuantities] = useState({}) // Store quantities for each product
@@ -760,17 +781,6 @@ function HomePage({ language, toggleLanguage, t, heroImage = '/hero-image.jpg' }
   const [currentHeroImageIndex, setCurrentHeroImageIndex] = useState(0) // For hero image slider
   const productsSliderRef = useRef(null)
 
-  // Get hero media from localStorage (reactive)
-  const heroMedia = useMemo(() => {
-    const pageImagesStr = localStorage.getItem('pageImages')
-    const pageImages = pageImagesStr ? JSON.parse(pageImagesStr) : {}
-    const mediaType = pageImages.homeHeroMediaType || 'photos'
-    return {
-      images: pageImages.homeHeroImages || [heroImage],
-      video: pageImages.homeHeroVideo || '',
-      mediaType: mediaType
-    }
-  }, [contentUpdate, heroImage])
 
   // Listen for content updates
   useEffect(() => {
@@ -1298,7 +1308,7 @@ function HomePage({ language, toggleLanguage, t, heroImage = '/hero-image.jpg' }
         </div>
       </section>
 
-      <TeamSection t={t} language={language} showManagement={false} />
+      <TeamSection t={t} language={language} showManagement={false} teamMembers={teamMembers} />
 
       {/* Testimonials Section */}
       <section className="testimonial-section fade-section">
@@ -1528,6 +1538,34 @@ function App() {
     return pageImages.homeHero || localStorage.getItem('heroImage') || '/hero-image.jpg'
   }, [contentUpdate])
 
+  // Get hero media from localStorage (reactive)
+  const heroMedia = useMemo(() => {
+    const pageImagesStr = localStorage.getItem('pageImages')
+    const pageImages = pageImagesStr ? JSON.parse(pageImagesStr) : {}
+    const mediaType = pageImages.homeHeroMediaType || 'photos'
+    return {
+      images: pageImages.homeHeroImages || [heroImage],
+      video: pageImages.homeHeroVideo || '',
+      mediaType: mediaType,
+      teamMembers: pageImages.teamMembers || []
+    }
+  }, [contentUpdate, heroImage])
+
+  // Fetch Page Images from API on mount
+  useEffect(() => {
+    fetch(`${API_BASE}/api/page-images`)
+      .then(res => res.json())
+      .then(data => {
+        if (data && data.data) {
+          localStorage.setItem('pageImages', JSON.stringify(data.data))
+          // Trigger content update
+          window.dispatchEvent(new Event('contentUpdated'))
+          window.dispatchEvent(new Event('storage'))
+        }
+      })
+      .catch(err => console.error('Failed to fetch page images:', err))
+  }, [])
+
   useEffect(() => {
     const handleStorageChange = () => {
       setContentUpdate(prev => prev + 1)
@@ -1737,7 +1775,7 @@ function App() {
     <Router>
       <ScrollToTop />
       <Routes>
-        <Route path="/" element={<HomePage language={language} toggleLanguage={toggleLanguage} t={t} heroImage={heroImage} />} />
+        <Route path="/" element={<HomePage language={language} toggleLanguage={toggleLanguage} t={t} heroImage={heroImage} heroMedia={heroMedia} teamMembers={heroMedia.teamMembers} />} />
         <Route path="/about" element={<AboutPage language={language} toggleLanguage={toggleLanguage} t={t} />} />
         <Route path="/product" element={<ProductPage language={language} toggleLanguage={toggleLanguage} t={t} editedContent={editedContent} />} />
         <Route path="/product/:productIndex" element={<ProductDetails language={language} toggleLanguage={toggleLanguage} t={t} />} />

@@ -29,13 +29,13 @@ function ContactPage({ language, toggleLanguage, t }) {
 
   const hero = language === 'bn'
     ? {
-        title: 'যোগাযোগ',
-        subtitle: 'ডিলার অর্ডার, মাঠ সহায়তা বা এগ্রোনমি প্রশ্নে আমাদের সাপোর্ট টিমের সাথে যোগাযোগ করুন।'
-      }
+      title: 'যোগাযোগ',
+      subtitle: 'ডিলার অর্ডার, মাঠ সহায়তা বা এগ্রোনমি প্রশ্নে আমাদের সাপোর্ট টিমের সাথে যোগাযোগ করুন।'
+    }
     : {
-        title: 'Contact Us',
-        subtitle: 'Reach our service desk for dealer orders, field support, or agronomy questions.'
-      }
+      title: 'Contact Us',
+      subtitle: 'Reach our service desk for dealer orders, field support, or agronomy questions.'
+    }
 
   return (
     <div className="app contact-page">
@@ -128,7 +128,7 @@ function ContactPage({ language, toggleLanguage, t }) {
                     referrerPolicy="no-referrer-when-downgrade"
                   ></iframe>
                 </div>
-            </div>
+              </div>
             </div>
           </div>
         </section>

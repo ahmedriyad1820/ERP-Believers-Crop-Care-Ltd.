@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 
 const MANAGEMENT_SLIDE_SIZE = 3
 
-function TeamSection({ t, language, className = '', showManagement = true }) {
+function TeamSection({ t, language, className = '', showManagement = true, teamMembers = [] }) {
   const [managementSlide, setManagementSlide] = useState(0)
   const [isMobile, setIsMobile] = useState(false)
 
@@ -13,13 +13,11 @@ function TeamSection({ t, language, className = '', showManagement = true }) {
     return () => window.removeEventListener('resize', checkMobile)
   }, [])
 
-  const managementMembers = useMemo(
-    () =>
-      showManagement
-        ? (t.team?.members || []).filter(member => member.group === 'management')
-        : [],
-    [t, showManagement]
-  )
+  const managementMembers = useMemo(() => {
+    if (!showManagement) return []
+    const members = teamMembers.length > 0 ? teamMembers : (t.team?.members || [])
+    return members.filter(member => member.group === 'management')
+  }, [t, showManagement, teamMembers])
 
   const managementSlides = useMemo(() => {
     if (!showManagement) {
@@ -76,12 +74,17 @@ function TeamSection({ t, language, className = '', showManagement = true }) {
   }
 
   const getMembersByGroup = groupKey => {
-    if (!t.team?.members) {
-      return []
-    }
+    const allMembers = teamMembers.length > 0 ? teamMembers : (t.team?.members || [])
     return groupKey === 'all'
-      ? t.team.members
-      : t.team.members.filter(member => member.group === groupKey)
+      ? allMembers
+      : allMembers.filter(member => member.group === groupKey)
+  }
+
+  // Helper to get localized field
+  const getField = (field, lang) => {
+    if (!field) return ''
+    if (typeof field === 'string') return field
+    return field[lang] || field['en'] || ''
   }
 
   return (
@@ -134,7 +137,7 @@ function TeamSection({ t, language, className = '', showManagement = true }) {
                                 <img
                                   className="team-card-photo"
                                   src={member.photo}
-                                  alt={member.name}
+                                  alt={getField(member.name, language)}
                                   loading="lazy"
                                   onError={e => {
                                     e.currentTarget.src = '/hero-image.jpg'
@@ -144,8 +147,8 @@ function TeamSection({ t, language, className = '', showManagement = true }) {
                                 <div className="team-card-body">
                                   <div className="team-name-row">
                                     <div className="team-name-block">
-                                      <h3>{member.name}</h3>
-                                      <p className="team-role-line">{member.role}</p>
+                                      <h3>{getField(member.name, language)}</h3>
+                                      <p className="team-role-line">{getField(member.role, language)}</p>
                                     </div>
                                   </div>
                                 </div>
@@ -174,7 +177,7 @@ function TeamSection({ t, language, className = '', showManagement = true }) {
                         <img
                           className="team-card-photo"
                           src={member.photo}
-                          alt={member.name}
+                          alt={getField(member.name, language)}
                           loading="lazy"
                           onError={e => {
                             e.currentTarget.src = '/hero-image.jpg'
@@ -184,8 +187,8 @@ function TeamSection({ t, language, className = '', showManagement = true }) {
                         <div className="team-card-body">
                           <div className="team-name-row">
                             <div className="team-name-block">
-                              <h3>{member.name}</h3>
-                              <p className="team-role-line">{member.role}</p>
+                              <h3>{getField(member.name, language)}</h3>
+                              <p className="team-role-line">{getField(member.role, language)}</p>
                             </div>
                           </div>
                         </div>
