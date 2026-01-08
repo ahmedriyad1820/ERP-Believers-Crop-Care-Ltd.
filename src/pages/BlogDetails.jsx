@@ -1,48 +1,76 @@
-import { useEffect } from 'react'
-import { useParams, Link, useNavigate } from 'react-router-dom'
+import { useEffect, useState, useMemo } from 'react'
+import { useParams, useNavigate } from 'react-router-dom'
 import SiteHeader from '../components/SiteHeader.jsx'
 import logoImage from '../assets/logo.png'
 
-function buildBlogPosts(t) {
-  const featured = t.blog?.featured || []
-  const list = t.blog?.list || []
-  const combined = [...featured, ...list]
-
-  return combined.map((post, index) => ({
-    id: String(index),
-    ...post
-  }))
+// Resolve API base so mobile devices on the LAN can reach the backend.
+const resolveApiBase = () => {
+  const envBase = import.meta.env.VITE_API_BASE
+  if (envBase && !['http://0.0.0.0:5000', 'http://localhost:5000'].includes(envBase)) {
+    return envBase
+  }
+  if (typeof window !== 'undefined' && window.location?.hostname) {
+    const { protocol, hostname } = window.location
+    return `${protocol}//${hostname}:5000`
+  }
+  return 'http://localhost:5000'
 }
 
-function getPostBody(post, language) {
-  if (!post) return ''
-  const base = post.excerpt || ''
-  if (language === 'bn') {
-    return (
-      base ||
-      'এই লেখায় আমরা মাঠের অভিজ্ঞতা, কৃষকের বাস্তব চ্যালেঞ্জ এবং ব্যবহারিক সমাধান নিয়ে বিস্তারিত আলোচনা করেছি। সঠিক পরিকল্পনা, সেচ, পুষ্টি ব্যবস্থাপনা এবং রোগবালাই নিয়ন্ত্রণের মাধ্যমে কীভাবে ফসলের উৎপাদন বাড়ানো যায় তা এখানে ধাপে ধাপে তুলে ধরা হয়েছে।'
-    )
-  }
-  return (
-    base ||
-    'In this article we go deeper into real field experience, common grower challenges, and the practical steps that helped improve outcomes. From planning and nutrition to crop protection and monitoring, you can adapt these ideas to your own fields.'
-  )
+const API_BASE = resolveApiBase()
+
+const getImageUrl = (imagePath) => {
+  if (!imagePath) return '/hero-image.jpg'
+  if (typeof imagePath === 'string' && imagePath.startsWith('http')) return imagePath
+  return `${API_BASE}${imagePath.toString().startsWith('/') ? '' : '/'}${imagePath}`
 }
 
 function BlogDetailsPage({ language, toggleLanguage, t }) {
   const { postId } = useParams()
   const navigate = useNavigate()
   const isBn = language === 'bn'
+  const [post, setPost] = useState(null)
+  const [loading, setLoading] = useState(true)
+  const [contentUpdate, setContentUpdate] = useState(0)
 
-  const allPosts = buildBlogPosts(t)
-  const currentPost = allPosts.find(post => post.id === postId) || allPosts[0]
-  const recentPosts = allPosts.filter(post => post.id !== currentPost.id).slice(0, 4)
+  // Listen for content updates
+  useEffect(() => {
+    const handleStorageChange = () => setContentUpdate(prev => prev + 1)
+    const handleContentUpdate = () => setContentUpdate(prev => prev + 1)
+    window.addEventListener('storage', handleStorageChange)
+    window.addEventListener('contentUpdated', handleContentUpdate)
+    return () => {
+      window.removeEventListener('storage', handleStorageChange)
+      window.removeEventListener('contentUpdated', handleContentUpdate)
+    }
+  }, [])
+
+  // Get page images reactively
+  const pageImages = useMemo(() => {
+    const pageImagesStr = localStorage.getItem('pageImages')
+    return pageImagesStr ? JSON.parse(pageImagesStr) : {}
+  }, [contentUpdate])
+
+  useEffect(() => {
+    const fetchPost = async () => {
+      setLoading(true)
+      try {
+        const response = await fetch(`${API_BASE}/api/blogs/${postId}`)
+        const data = await response.json()
+        if (data.success) {
+          setPost(data.data)
+        }
+      } catch (error) {
+        console.error('Fetch blog detail error:', error)
+      } finally {
+        setLoading(false)
+      }
+    }
+    if (postId) fetchPost()
+  }, [postId])
 
   useEffect(() => {
     const sections = document.querySelectorAll('.fade-section')
-    if (!sections.length) {
-      return
-    }
+    if (!sections.length) return
 
     const observer = new IntersectionObserver(
       entries => {
@@ -58,30 +86,58 @@ function BlogDetailsPage({ language, toggleLanguage, t }) {
     )
 
     sections.forEach(section => observer.observe(section))
-
     return () => observer.disconnect()
-  }, [])
+  }, [post, loading])
 
-  const heroTitle = currentPost?.title || (isBn ? 'ব্লগ' : 'Blog')
-  const heroSubtitle = currentPost?.category
-    ? `${currentPost.category} • ${currentPost.date}`
-    : isBn
-      ? 'ব্লগ বিস্তারিত'
-      : 'Blog details'
+  if (loading) {
+    return (
+      <div className="app blog-page">
+        <SiteHeader language={language} toggleLanguage={toggleLanguage} t={t} />
+        <main className="about-page-main">
+          <div style={{ textAlign: 'center', padding: '10rem', color: '#94a3b8' }}>
+            <p>{isBn ? 'ব্লগ লোড হচ্ছে...' : 'Loading blog...'}</p>
+          </div>
+        </main>
+      </div>
+    )
+  }
 
-  const bodyText = getPostBody(currentPost, language)
+  if (!post) {
+    return (
+      <div className="app blog-page">
+        <SiteHeader language={language} toggleLanguage={toggleLanguage} t={t} />
+        <main className="about-page-main">
+          <div style={{ textAlign: 'center', padding: '10rem', color: '#94a3b8' }}>
+            <p>{isBn ? 'ব্লগ পাওয়া যায়নি।' : 'Blog not found.'}</p>
+            <button onClick={() => navigate('/blog')} className="job-back-btn" style={{ marginTop: '1rem' }}>
+              {isBn ? 'সব ব্লগে ফিরে যান' : 'Back to all blogs'}
+            </button>
+          </div>
+        </main>
+      </div>
+    )
+  }
+
+  const heroTitle = isBn ? (post.titleBn || post.title) : post.title
+  const heroSubtitle = `${isBn ? (post.categoryBn || post.category) : post.category} • ${post.date}`
 
   return (
     <div className="app blog-page">
       <SiteHeader language={language} toggleLanguage={toggleLanguage} t={t} />
       <main className="about-page-main">
         {/* Hero */}
-        <section className="about-hero-banner fade-section">
-          <div className="about-hero-banner-content" style={{ fontWeight: 700 }}>
+        <section className="about-hero-banner">
+          <div
+            className="about-hero-banner-content"
+            style={{
+              fontWeight: 700,
+              background: `linear-gradient(135deg, rgba(9, 17, 31, 0.40), rgba(19, 56, 98, 0.40)), url(${pageImages.blogHero || '/hero-image.jpg'}) center 40% / cover no-repeat`
+            }}
+          >
             <button
               type="button"
               className="job-back-btn"
-              style={{ marginBottom: '0.75rem' }}
+              style={{ marginBottom: '0.75rem', color: 'white', border: '1px solid rgba(255,255,255,0.3)', background: 'rgba(0,0,0,0.2)' }}
               onClick={() => navigate('/blog')}
             >
               {isBn ? '← সব ব্লগে ফিরে যান' : '← Back to all blog posts'}
@@ -96,11 +152,11 @@ function BlogDetailsPage({ language, toggleLanguage, t }) {
           <div className="blog-container">
             <article className="blog-details-main">
               <div className="blog-details-hero">
-                {currentPost?.image && (
+                {post.image && (
                   <div className="blog-details-image">
                     <img
-                      src={currentPost.image}
-                      alt={currentPost.title}
+                      src={getImageUrl(post.image)}
+                      alt={isBn ? (post.titleBn || post.title) : post.title}
                       loading="lazy"
                       onError={e => {
                         e.currentTarget.src = '/hero-image.jpg'
@@ -111,73 +167,32 @@ function BlogDetailsPage({ language, toggleLanguage, t }) {
               </div>
               <div className="blog-details-card-shell">
                 <div className="blog-details-card">
-                  {currentPost?.category && (
-                    <p className="blog-details-chip">
-                      {currentPost.category}
-                    </p>
-                  )}
+                  <p className="blog-details-chip">
+                    {isBn ? (post.categoryBn || post.category) : post.category}
+                  </p>
                   <div className="blog-details-meta-row">
                     <span className="blog-details-meta-label">
                       {isBn ? 'লেখক' : 'Author'}
                     </span>
                     <span className="blog-details-meta-value">
-                      👤 {currentPost.author}
+                      👤 {isBn ? (post.authorBn || post.author) : post.author}
                     </span>
                     <span className="blog-details-meta-separator">•</span>
                     <span className="blog-details-meta-value">
-                      📅 {currentPost.date}
+                      📅 {post.date}
                     </span>
                   </div>
                   <h1 className="blog-details-title">
-                    {currentPost?.title || (isBn ? 'ব্লগ' : 'Blog')}
+                    {heroTitle}
                   </h1>
-                  {currentPost?.excerpt && (
-                    <p className="blog-details-excerpt">{currentPost.excerpt}</p>
+                  {(post.excerpt || post.excerptBn) && (
+                    <p className="blog-details-excerpt">
+                      {isBn ? (post.excerptBn || post.excerpt) : post.excerpt}
+                    </p>
                   )}
                   <div className="blog-details-body">
-                    <p>{bodyText}</p>
-                    <div className="blog-inline-row">
-                      <div className="blog-inline-image">
-                        <img
-                          src={currentPost.image}
-                          alt={currentPost.title}
-                          loading="lazy"
-                          onError={e => {
-                            e.currentTarget.src = '/hero-image.jpg'
-                          }}
-                        />
-                      </div>
-                      <div className="blog-inline-text">
-                        <h2 className="blog-details-subheading">
-                          {isBn
-                            ? 'স্মার্ট পরিকল্পনা ও নিয়মিত পর্যবেক্ষণ'
-                            : 'Plan smart and monitor consistently'}
-                        </h2>
-                        <p>
-                          {isBn
-                            ? 'ভাল ফলনের জন্য শুধুমাত্র একটি ইনপুট বা একবারের প্রয়োগ যথেষ্ট নয়। মৌসুমের শুরু থেকে শেষ পর্যন্ত একটি সুস্পষ্ট ক্যালেন্ডার থাকা জরুরি—কখন সেচ দেবেন, কখন সার প্রয়োগ করবেন এবং কোন পর্যায়ে রোগবালাই নিয়ন্ত্রণ করবেন তা আগে থেকেই ঠিক করে নিন।'
-                            : 'Strong yields rarely come from a single input or one-time action. Build a simple crop calendar that covers the whole season—when to irrigate, when to feed, and at which growth stages to protect against pests and diseases.'}
-                        </p>
-                      </div>
-                    </div>
-                    <div className="blog-inline-row blog-inline-row-reverse">
-                      <div className="blog-inline-text">
-                        <p>
-                          {isBn
-                            ? 'ক্ষেত থেকে প্রাপ্ত বাস্তব ডেটা—পাতার রং, মাটির আর্দ্রতা, পোকামাকড়ের লক্ষণ—নিয়মিত নোট করে রাখুন। এর ওপর ভিত্তি করে পরের মৌসুমের জন্য আরও উন্নত সিদ্ধান্ত নেয়া সহজ হবে এবং একই জমিতে ধারাবাহিকভাবে ভাল ফলন পাওয়া যাবে।'
-                            : 'Use real observations from the field—leaf colour, soil moisture, early pest signs—to fine-tune your schedule. Writing these down after every season helps you make better decisions next year and keep improving results on the same land.'}
-                        </p>
-                      </div>
-                      <div className="blog-inline-image">
-                        <img
-                          src="https://images.unsplash.com/photo-1464226184884-fa280b87c399?auto=format&fit=crop&w=1200&q=80"
-                          alt={isBn ? 'ক্ষেতে ফসল পর্যবেক্ষণ' : 'Inspecting crops in the field'}
-                          loading="lazy"
-                          onError={e => {
-                            e.currentTarget.src = '/hero-image.jpg'
-                          }}
-                        />
-                      </div>
+                    <div style={{ whiteSpace: 'pre-wrap' }}>
+                      {isBn ? (post.contentBn || post.content) : post.content}
                     </div>
                   </div>
                 </div>
@@ -196,8 +211,8 @@ function BlogDetailsPage({ language, toggleLanguage, t }) {
             />
           </div>
           <div className="footer-info">
-            <p className="footer-text">{t.footer.copyright}</p>
-            <p className="footer-text">{t.footer.tagline}</p>
+            <p className="footer-text">{t.footer?.copyright}</p>
+            <p className="footer-text">{t.footer?.tagline}</p>
           </div>
         </div>
       </footer>

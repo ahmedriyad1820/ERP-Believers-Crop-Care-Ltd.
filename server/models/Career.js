@@ -43,6 +43,38 @@ const careerSchema = new mongoose.Schema({
     type: String,
     trim: true
   },
+  overview: {
+    type: String,
+    trim: true
+  },
+  overviewBn: {
+    type: String,
+    trim: true
+  },
+  salary: {
+    type: String,
+    trim: true
+  },
+  salaryBn: {
+    type: String,
+    trim: true
+  },
+  benefits: {
+    type: [String],
+    default: []
+  },
+  benefitsBn: {
+    type: [String],
+    default: []
+  },
+  responsibilities: {
+    type: [String],
+    default: []
+  },
+  responsibilitiesBn: {
+    type: [String],
+    default: []
+  },
   description: {
     type: String,
     trim: true

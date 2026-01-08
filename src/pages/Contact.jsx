@@ -1,6 +1,21 @@
-import { useEffect } from 'react'
+import { useEffect, useState } from 'react'
 import SiteHeader from '../components/SiteHeader.jsx'
 import logoImage from '../assets/logo.png'
+
+// Resolve API base so mobile devices on the LAN can reach the backend.
+const resolveApiBase = () => {
+  const envBase = import.meta.env.VITE_API_BASE
+  if (envBase && !['http://0.0.0.0:5000', 'http://localhost:5000'].includes(envBase)) {
+    return envBase
+  }
+  if (typeof window !== 'undefined' && window.location?.hostname) {
+    const { protocol, hostname } = window.location
+    return `${protocol}//${hostname}:5000`
+  }
+  return 'http://localhost:5000'
+}
+
+const API_BASE = resolveApiBase()
 
 function ContactPage({ language, toggleLanguage, t }) {
   useEffect(() => {
@@ -26,6 +41,44 @@ function ContactPage({ language, toggleLanguage, t }) {
 
     return () => observer.disconnect()
   }, [])
+
+  const [contactForm, setContactForm] = useState({
+    name: '',
+    phone: '',
+    email: '',
+    district: '',
+    message: ''
+  })
+  const [isSubmittingContact, setIsSubmittingContact] = useState(false)
+  const [contactSuccessMessage, setContactSuccessMessage] = useState('')
+
+  const handleContactSubmit = async (e) => {
+    e.preventDefault()
+    setIsSubmittingContact(true)
+    setContactSuccessMessage('')
+    try {
+      const response = await fetch(`${API_BASE}/api/contacts`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(contactForm)
+      })
+
+      if (response.ok) {
+        setContactSuccessMessage(language === 'en' ? 'Our Representative will contact you soon!!' : 'আমাদের প্রতিনিধি শীঘ্রই আপনার সাথে যোগাযোগ করবে!!')
+        setContactForm({ name: '', phone: '', email: '', district: '', message: '' })
+        // Auto-hide success message after 5 seconds
+        setTimeout(() => setContactSuccessMessage(''), 5000)
+      } else {
+        const data = await response.json()
+        alert(data.message || (language === 'en' ? 'Failed to send message.' : 'বার্তা পাঠাতে ব্যর্থ হয়েছে।'))
+      }
+    } catch (error) {
+      console.error('Contact error:', error)
+      alert(language === 'en' ? 'An error occurred. Please try again.' : 'একটি ত্রুটি ঘটেছে। দয়া করে আবার চেষ্টা করুন।')
+    } finally {
+      setIsSubmittingContact(false)
+    }
+  }
 
   const hero = language === 'bn'
     ? {
@@ -83,25 +136,63 @@ function ContactPage({ language, toggleLanguage, t }) {
                 </div>
               </div>
               <div className="contact-main-grid">
-                <form className="contact-form" onSubmit={e => e.preventDefault()}>
+                <form className="contact-form" onSubmit={handleContactSubmit}>
+                  {contactSuccessMessage && (
+                    <div style={{
+                      padding: '1rem',
+                      marginBottom: '1rem',
+                      backgroundColor: '#22c55e',
+                      color: 'white',
+                      borderRadius: '8px',
+                      textAlign: 'center',
+                      fontWeight: '600',
+                      fontSize: '1.1rem',
+                      animation: 'slideIn 0.3s ease-out'
+                    }}>
+                      ✓ {contactSuccessMessage}
+                    </div>
+                  )}
                   <div className="form-row">
                     <label>
                       <span>{t.contact.form.nameLabel}</span>
-                      <input type="text" placeholder={t.contact.form.namePlaceholder} required />
+                      <input
+                        type="text"
+                        placeholder={t.contact.form.namePlaceholder}
+                        value={contactForm.name}
+                        onChange={e => setContactForm({ ...contactForm, name: e.target.value })}
+                        required
+                      />
                     </label>
                     <label>
                       <span>{t.contact.form.phoneLabel}</span>
-                      <input type="tel" placeholder={t.contact.form.phonePlaceholder} required />
+                      <input
+                        type="tel"
+                        placeholder={t.contact.form.phonePlaceholder}
+                        value={contactForm.phone}
+                        onChange={e => setContactForm({ ...contactForm, phone: e.target.value })}
+                        required
+                      />
                     </label>
                   </div>
                   <div className="form-row">
                     <label>
                       <span>{t.contact.form.emailLabel}</span>
-                      <input type="email" placeholder={t.contact.form.emailPlaceholder} required />
+                      <input
+                        type="email"
+                        placeholder={t.contact.form.emailPlaceholder}
+                        value={contactForm.email}
+                        onChange={e => setContactForm({ ...contactForm, email: e.target.value })}
+                        required
+                      />
                     </label>
                     <label>
                       <span>{t.contact.form.districtLabel}</span>
-                      <input type="text" placeholder={t.contact.form.districtPlaceholder} />
+                      <input
+                        type="text"
+                        placeholder={t.contact.form.districtPlaceholder}
+                        value={contactForm.district}
+                        onChange={e => setContactForm({ ...contactForm, district: e.target.value })}
+                      />
                     </label>
                   </div>
                   <label>
@@ -109,11 +200,17 @@ function ContactPage({ language, toggleLanguage, t }) {
                     <textarea
                       rows="4"
                       placeholder={t.contact.form.messagePlaceholder}
+                      value={contactForm.message}
+                      onChange={e => setContactForm({ ...contactForm, message: e.target.value })}
                       required
                     ></textarea>
                   </label>
-                  <button type="submit" className="contact-submit-btn">
-                    {t.contact.cta}
+                  <button
+                    type="submit"
+                    className="contact-submit-btn"
+                    disabled={isSubmittingContact}
+                  >
+                    {isSubmittingContact ? (language === 'en' ? 'Sending...' : 'পাঠানো হচ্ছে...') : t.contact.cta}
                   </button>
                 </form>
                 <div className="contact-map-wrapper">

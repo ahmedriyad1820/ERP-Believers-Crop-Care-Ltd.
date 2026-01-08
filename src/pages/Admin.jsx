@@ -24,12 +24,22 @@ const resolveApiBase = () => {
 
 const API_BASE = resolveApiBase()
 
+const getImageUrl = (imagePath) => {
+  if (!imagePath || typeof imagePath !== 'string') return '/hero-image.jpg'
+  if (imagePath.startsWith('http')) return imagePath
+  return `${API_BASE}${imagePath}`
+}
+
 // Authenticated Fetch Helper
 const authFetch = async (url, options = {}) => {
   const token = localStorage.getItem('authToken')
-  const headers = {
-    'Content-Type': 'application/json',
-    ...options.headers
+
+  // Create headers
+  const headers = { ...options.headers }
+
+  // Only add Content-Type for JSON, skip for FormData (browser adds boundary)
+  if (options.body && !(options.body instanceof FormData)) {
+    headers['Content-Type'] = 'application/json'
   }
 
   if (token) {
@@ -98,6 +108,32 @@ function AdminPage({ language, toggleLanguage, t }) {
     }
     return null
   }) // Store employee ID if employee logged in
+
+  // Collapsible Table State for Mobile
+  const [isProductSummaryExpanded, setIsProductSummaryExpanded] = useState(false)
+  const [isLedgerExpanded, setIsLedgerExpanded] = useState(false)
+
+  // Asset Management State
+  const [assets, setAssets] = useState([])
+  const [assetSearchTerm, setAssetSearchTerm] = useState('')
+  const [isAddAssetModalOpen, setIsAddAssetModalOpen] = useState(false)
+  const [isEditingAsset, setIsEditingAsset] = useState(false)
+  const [editingAssetId, setEditingAssetId] = useState(null)
+  const [expandedAssetId, setExpandedAssetId] = useState(null)
+  const [expandedContactId, setExpandedContactId] = useState(null)
+  const [isAssetSubmitting, setIsAssetSubmitting] = useState(false)
+  const [newAsset, setNewAsset] = useState({
+    name: '',
+    category: '',
+    purchaseDate: '',
+    quantity: 1,
+    purchaseShop: '',
+    value: 0,
+    paid: 0,
+    status: 'Active',
+    notes: ''
+  })
+
   const [isEmployee, setIsEmployee] = useState(() => {
     try {
       const savedAuth = localStorage.getItem('adminAuth')
@@ -135,7 +171,7 @@ function AdminPage({ language, toggleLanguage, t }) {
     email: 'admin@example.com',
     phone: '+880 1234 567890',
     address: 'Dhaka, Bangladesh',
-    photo: '',
+    photo: '', photoAdjustment: { top: 50, left: 50 },
     role: 'Admin',
     designation: '',
     department: ''
@@ -417,7 +453,7 @@ function AdminPage({ language, toggleLanguage, t }) {
     nameEn: '', nameBn: '',
     roleEn: '', roleBn: '',
     expertiseEn: '', expertiseBn: '',
-    photo: '',
+    photo: '', photoAdjustment: { top: 50, left: 50 },
     group: 'management'
   })
   const [loadingEmployees, setLoadingEmployees] = useState(false)
@@ -454,6 +490,117 @@ function AdminPage({ language, toggleLanguage, t }) {
   const [territorySortField, setTerritorySortField] = useState('regionId')
   const [territorySortDirection, setTerritorySortDirection] = useState('asc')
 
+  const [contacts, setContacts] = useState([])
+  const [contactSearchTerm, setContactSearchTerm] = useState('')
+  const [loadingContacts, setLoadingContacts] = useState(false)
+
+  // Blog Management State
+  const [blogs, setBlogs] = useState([])
+  const [loadingBlogs, setLoadingBlogs] = useState(false)
+  const [blogSearchTerm, setBlogSearchTerm] = useState('')
+  const [showBlogModal, setShowBlogModal] = useState(false)
+  const [isEditingBlog, setIsEditingBlog] = useState(false)
+  const [editingBlogId, setEditingBlogId] = useState(null)
+  const [blogForm, setBlogForm] = useState({
+    category: '',
+    categoryBn: '',
+    title: '',
+    titleBn: '',
+    author: '',
+    authorBn: '',
+    date: new Date().toISOString().split('T')[0],
+    excerpt: '',
+    excerptBn: '',
+    content: '',
+    contentBn: '',
+    image: '',
+    isFeatured: false,
+    isActive: true
+  })
+
+  // Career Management State
+  const [careers, setCareers] = useState([])
+  const [loadingCareers, setLoadingCareers] = useState(false)
+  const [showCareerModal, setShowCareerModal] = useState(false)
+  const [isEditingCareer, setIsEditingCareer] = useState(false)
+  const [editingCareerId, setEditingCareerId] = useState(null)
+  const [careerForm, setCareerForm] = useState({
+    jobId: '',
+    title: '',
+    titleBn: '',
+    location: '',
+    locationBn: '',
+    type: '',
+    typeBn: '',
+    summary: '',
+    summaryBn: '',
+    overview: '',
+    overviewBn: '',
+    salary: '',
+    salaryBn: '',
+    benefits: [],
+    benefitsBn: [],
+    responsibilities: [],
+    responsibilitiesBn: [],
+    description: '',
+    descriptionBn: '',
+    requirements: [],
+    requirementsBn: [],
+    isActive: true,
+    isOpen: true
+  })
+
+  // Application Management State
+  const [applications, setApplications] = useState([])
+  const [loadingApplications, setLoadingApplications] = useState(false)
+  const [selectedCareerFilter, setSelectedCareerFilter] = useState('')
+  const [selectedStatusFilter, setSelectedStatusFilter] = useState('')
+
+  const fetchContacts = async () => {
+    setLoadingContacts(true)
+    try {
+      const response = await fetch(`${API_BASE}/api/contacts`)
+      const data = await response.json()
+      if (response.ok) {
+        setContacts(data.data)
+      }
+    } catch (error) {
+      console.error('Fetch contacts error:', error)
+    } finally {
+      setLoadingContacts(false)
+    }
+  }
+
+  const handleDeleteContact = async (id) => {
+    if (!window.confirm(language === 'en' ? 'Are you sure you want to delete this message?' : 'আপনি কি এই বার্তাটি মুছতে চান?')) return
+    try {
+      const response = await fetch(`${API_BASE}/api/contacts/${id}`, {
+        method: 'DELETE'
+      })
+      if (response.ok) {
+        setContacts(contacts.filter(c => c._id !== id))
+      }
+    } catch (error) {
+      console.error('Delete contact error:', error)
+    }
+  }
+
+  const handleUpdateContactStatus = async (id, status) => {
+    try {
+      const response = await fetch(`${API_BASE}/api/contacts/${id}/status`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status })
+      })
+      if (response.ok) {
+        const updated = await response.json()
+        setContacts(contacts.map(c => c._id === id ? updated.data : c))
+      }
+    } catch (error) {
+      console.error('Update contact status error:', error)
+    }
+  }
+
 
   // Idle Timeout Logic (30 minutes)
   useEffect(() => {
@@ -482,6 +629,148 @@ function AdminPage({ language, toggleLanguage, t }) {
       events.forEach(event => window.removeEventListener(event, resetTimer))
     }
   }, [isAuthenticated, language]) // Re-run if auth state changes
+
+  // ... (skipping many lines)
+
+  const fetchBlogs = async () => {
+    setLoadingBlogs(true)
+    try {
+      const response = await authFetch(`${API_BASE}/api/blogs`)
+      const data = await response.json()
+      if (response.ok) {
+        setBlogs(data.data)
+      }
+    } catch (error) {
+      console.error('Fetch blogs error:', error)
+    } finally {
+      setLoadingBlogs(false)
+    }
+  }
+
+  const fetchCareers = async () => {
+    setLoadingCareers(true)
+    try {
+      const response = await authFetch(`${API_BASE}/api/careers`)
+      const data = await response.json()
+      if (response.ok) {
+        setCareers(data.data)
+      }
+    } catch (error) {
+      console.error('Fetch careers error:', error)
+    } finally {
+      setLoadingCareers(false)
+    }
+  }
+
+  const fetchApplications = async () => {
+    setLoadingApplications(true)
+    try {
+      const response = await authFetch(`${API_BASE}/api/applications`)
+      const data = await response.json()
+      if (response.ok) {
+        setApplications(data.data)
+      }
+    } catch (error) {
+      console.error('Fetch applications error:', error)
+    } finally {
+      setLoadingApplications(false)
+    }
+  }
+
+  const handleBlogSubmit = async (e) => {
+    e.preventDefault()
+    setLoadingBlogs(true)
+    try {
+      const url = isEditingBlog ? `${API_BASE}/api/blogs/${editingBlogId}` : `${API_BASE}/api/blogs`
+      const method = isEditingBlog ? 'PUT' : 'POST'
+
+      const formData = new FormData()
+      Object.keys(blogForm).forEach(key => {
+        // Only append if value exists or is boolean/number
+        if (blogForm[key] !== null && blogForm[key] !== undefined) {
+          formData.append(key, blogForm[key])
+        }
+      })
+
+      const response = await authFetch(url, {
+        method,
+        body: formData
+      })
+
+      if (response.ok) {
+        alert(language === 'en' ? `Blog ${isEditingBlog ? 'updated' : 'created'} successfully!` : `ব্লগটি সফলভাবে ${isEditingBlog ? 'আপডেট' : 'তৈরি'} হয়েছে!`)
+        setShowBlogModal(false)
+        resetBlogForm()
+        fetchBlogs()
+      } else {
+        const errorData = await response.json()
+        alert(errorData.message || 'Failed to save blog')
+      }
+    } catch (error) {
+      console.error('Blog submit error:', error)
+      alert('An error occurred while saving the blog')
+    } finally {
+      setLoadingBlogs(false)
+    }
+  }
+
+  const handleDeleteBlog = async (id) => {
+    if (!window.confirm(language === 'en' ? 'Are you sure you want to delete this blog?' : 'আপনি কি এই ব্লগটি মুছতে চান?')) return
+    try {
+      const response = await authFetch(`${API_BASE}/api/blogs/${id}`, {
+        method: 'DELETE'
+      })
+      if (response.ok) {
+        setBlogs(blogs.filter(b => b._id !== id))
+        alert(language === 'en' ? 'Blog deleted successfully!' : 'ব্লগটি সফলভাবে মুছে ফেলা হয়েছে!')
+      }
+    } catch (error) {
+      console.error('Delete blog error:', error)
+    }
+  }
+
+  const handleEditBlog = (blog) => {
+    setEditingBlogId(blog._id)
+    setIsEditingBlog(true)
+    setBlogForm({
+      category: blog.category || '',
+      categoryBn: blog.categoryBn || '',
+      title: blog.title || '',
+      titleBn: blog.titleBn || '',
+      author: blog.author || '',
+      authorBn: blog.authorBn || '',
+      date: blog.date || new Date().toISOString().split('T')[0],
+      excerpt: blog.excerpt || '',
+      excerptBn: blog.excerptBn || '',
+      content: blog.content || '',
+      contentBn: blog.contentBn || '',
+      image: blog.image || '',
+      isFeatured: blog.isFeatured || false,
+      isActive: blog.isActive !== undefined ? blog.isActive : true
+    })
+    setShowBlogModal(true)
+  }
+
+  const resetBlogForm = () => {
+    setIsEditingBlog(false)
+    setEditingBlogId(null)
+    setBlogForm({
+      category: '',
+      categoryBn: '',
+      title: '',
+      titleBn: '',
+      author: '',
+      authorBn: '',
+      date: new Date().toISOString().split('T')[0],
+      excerpt: '',
+      excerptBn: '',
+      content: '',
+      contentBn: '',
+      image: '',
+      isFeatured: false,
+      isActive: true
+    })
+  }
 
   // Fetch settings on mount
   useEffect(() => {
@@ -555,54 +844,282 @@ function AdminPage({ language, toggleLanguage, t }) {
     } else {
       // Monthly
       newTargets = newTargets.filter(t => !(t.year === targetYear && t.month === targetMonth))
-      newTargets.push({ year: targetYear, month: targetMonth, amount: amount })
+      newTargets.push({ year: targetYear, month: targetMonth, amount })
     }
 
     try {
-      const res = await authFetch(`${API_BASE}/api/settings`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ salesTargets: newTargets, commissionRates }) // Keep rates
+      const res = await authFetch(`${API_BASE}/api/settings/targets`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ salesTargets: newTargets })
       })
       const data = await res.json()
       if (data.success) {
         setSalesTargets(data.data.salesTargets)
+        alert(language === 'en' ? 'Sales target saved successfully!' : 'বিক্রয় লক্ষ্যমাত্রা সফলভাবে সংরক্ষিত হয়েছে!')
         setShowManageTarget(false)
-        setTargetAmount('')
-
-        // Sync with RSM logic: Find RSM and update their salesTarget
-        // Only if setting a Monthly target for the CURRENT month/year or future?
-        // User requested: "monthly setted target will set as the target of RSM"
-        // We'll update RSMs with the monthly amount. 
-        // If half-yearly, we divide by 6.
-
-        const syncAmount = targetMode === 'half-yearly' ? (amount / 6) : amount
-        // Note: For half-yearly, this sets the *monthly* target value on the employee record, 
-        // which matches the single "salesTarget" field in Employee schema which usually means "Monthly Target".
-
-        const rsms = employees.filter(e => (e.role || '').toUpperCase() === 'RSM')
-        if (rsms.length > 0) {
-          await Promise.all(rsms.map(rsm =>
-            authFetch(`${API_BASE}/api/employees/${rsm._id}`, {
-              method: 'PUT',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ ...rsm, salesTarget: syncAmount })
-            })
-          ))
-          // Refresh employees locally to show updated target in HR tab
-          loadEmployees()
-          alert(language === 'en' ? 'Target saved and synced with RSM!' : 'লক্ষ্য সংরক্ষিত এবং RSM এর সাথে সিঙ্ক হয়েছে!')
-        } else {
-          // Provide feedback even if no RSM found, just for target save
-          // Or stay silent? The modal closes, maybe that's enough.
-        }
+      } else {
+        alert(data.message || 'Failed to save target')
       }
     } catch (err) {
-      console.error('Error saving targets:', err)
+      console.error('Error saving target:', err)
+      alert('Error saving target')
     } finally {
       setSavingTarget(false)
     }
   }
+
+  // --- Notice Management ---
+  const [notices, setNotices] = useState([])
+  const [isNoticeCalendarExpanded, setIsNoticeCalendarExpanded] = useState(false)
+  const [loadingNotices, setLoadingNotices] = useState(false)
+  const [newNotice, setNewNotice] = useState({
+    title: '',
+    date: new Date().toISOString().split('T')[0],
+    content: '',
+    important: false,
+    photoUrl: ''
+  })
+  const [showCreateNoticeCard, setShowCreateNoticeCard] = useState(false)
+  const [noticePhotoFile, setNoticePhotoFile] = useState(null)
+
+  // Reuse calendar logic from the original NoticePage
+  const [noticeSelectedDate, setNoticeSelectedDate] = useState('')
+  const [noticeCurrentMonth, setNoticeCurrentMonth] = useState(new Date().getMonth())
+  const [noticeCurrentYear, setNoticeCurrentYear] = useState(new Date().getFullYear())
+
+  const fetchNotices = async () => {
+    try {
+      setLoadingNotices(true)
+      const authData = localStorage.getItem('adminAuth')
+
+      if (!authData) {
+        // Silent return to avoid error spam if not logged in
+        return
+      }
+
+      let token = null
+      try {
+        const parsed = JSON.parse(authData)
+        token = parsed.token
+      } catch (e) {
+        console.error('Error parsing adminAuth:', e)
+        return
+      }
+
+      if (!token) {
+        console.error('No token in adminAuth object')
+        return
+      }
+
+      const response = await fetch(`${API_BASE}/api/notices/admin`, {
+        headers: {
+          'Authorization': `Bearer ${token}`
+        }
+      })
+
+      if (response.ok) {
+        const data = await response.json()
+        setNotices(data)
+      } else if (response.status === 401) {
+        console.error('Unauthorized access - Token may be expired')
+      } else {
+        console.error('Failed to fetch notices:', response.status)
+      }
+    } catch (error) {
+      console.error('Error fetching notices:', error)
+    } finally {
+      setLoadingNotices(false)
+    }
+  }
+
+  useEffect(() => {
+    if (activeTab === 'notices') {
+      fetchNotices()
+    }
+  }, [activeTab])
+
+  const handleCreateNotice = async (e) => {
+    e.preventDefault()
+
+    try {
+      setLoadingNotices(true)
+      const formData = new FormData()
+      formData.append('title', newNotice.title)
+      formData.append('date', newNotice.date)
+      formData.append('content', newNotice.content)
+      formData.append('important', newNotice.important)
+
+      if (noticePhotoFile) {
+        formData.append('photo', noticePhotoFile)
+      } else if (newNotice.photoUrl) {
+        formData.append('photoUrl', newNotice.photoUrl)
+      }
+
+      const token = localStorage.getItem('adminAuth') ? JSON.parse(localStorage.getItem('adminAuth')).token : ''
+
+      const response = await fetch(`${API_BASE}/api/notices`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`
+        },
+        body: formData
+      })
+
+      if (response.ok) {
+        alert(language === 'en' ? 'Notice created successfully!' : 'নোটিশ সফলভাবে তৈরি করা হয়েছে!')
+        setShowCreateNoticeCard(false)
+        setNewNotice({
+          title: '',
+          date: new Date().toISOString().split('T')[0],
+          content: '',
+          important: false,
+          photoUrl: ''
+        })
+        setNoticePhotoFile(null)
+        fetchNotices()
+      } else {
+        const errorData = await response.json()
+        alert(`Error: ${errorData.message}`)
+      }
+    } catch (error) {
+      console.error('Error creating notice:', error)
+      alert(language === 'en' ? 'Failed to create notice' : 'নোটিশ তৈরি করতে ব্যর্থ হয়েছে')
+    } finally {
+      setLoadingNotices(false)
+    }
+  }
+
+  const handleDeleteNotice = async (id) => {
+    if (!confirm(language === 'en' ? 'Are you sure you want to delete this notice?' : 'আপনি কি নিশ্চিত যে আপনি এই নোটিশটি মুছে ফেলতে চান?')) {
+      return
+    }
+
+    try {
+      const token = localStorage.getItem('adminAuth') ? JSON.parse(localStorage.getItem('adminAuth')).token : ''
+      const response = await fetch(`${API_BASE}/api/notices/${id}`, {
+        method: 'DELETE',
+        headers: {
+          'Authorization': `Bearer ${token}`
+        }
+      })
+
+      if (response.ok) {
+        fetchNotices()
+      } else {
+        alert('Failed to delete notice')
+      }
+    } catch (error) {
+      console.error('Error deleting notice:', error)
+      alert('Error deleting notice')
+    }
+  }
+
+  // --- Calendar Helpers for Notices ---
+
+  // Convert date string to standard format for filtering
+  const normalizeNoticeDate = (dateString) => {
+    // Handle Bengali date format
+    if (dateString.includes('২০২৪') || dateString.includes('২০২৫') || /[০-৯]/.test(dateString)) {
+      const bengaliToEnglish = {
+        '০': '0', '১': '1', '২': '2', '৩': '3', '৪': '4',
+        '৫': '5', '৬': '6', '৭': '7', '৮': '8', '৯': '9'
+      }
+      let normalized = dateString
+      Object.keys(bengaliToEnglish).forEach(bn => {
+        normalized = normalized.replace(new RegExp(bn, 'g'), bengaliToEnglish[bn])
+      })
+      const parts = normalized.match(/(\d{4})-(\d{2})-(\d{2})/)
+      if (parts) {
+        return `${parts[1]}-${parts[2]}-${parts[3]}`
+      }
+    }
+    if (/^\d{4}-\d{2}-\d{2}$/.test(dateString)) {
+      return dateString
+    }
+    return dateString
+  }
+
+  const formatNoticeDate = (dateString) => {
+    const normalized = normalizeNoticeDate(dateString)
+    const date = new Date(normalized)
+
+    if (language === 'bn') {
+      if (/[০-৯]/.test(dateString)) return dateString
+      return date.toLocaleDateString('bn-BD', { year: 'numeric', month: 'long', day: 'numeric' })
+    }
+    return date.toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })
+  }
+
+  const getDaysInMonth = (month, year) => new Date(year, month + 1, 0).getDate()
+  const getFirstDayOfMonth = (month, year) => new Date(year, month, 1).getDay()
+  const formatDateForCalendar = (year, month, day) => {
+    const monthStr = String(month + 1).padStart(2, '0')
+    const dayStr = String(day).padStart(2, '0')
+    return `${year}-${monthStr}-${dayStr}`
+  }
+
+  const handlePreviousNoticeMonth = () => {
+    if (noticeCurrentMonth === 0) {
+      setNoticeCurrentMonth(11)
+      setNoticeCurrentYear(noticeCurrentYear - 1)
+    } else {
+      setNoticeCurrentMonth(noticeCurrentMonth - 1)
+    }
+  }
+
+  const handleNextNoticeMonth = () => {
+    if (noticeCurrentMonth === 11) {
+      setNoticeCurrentMonth(0)
+      setNoticeCurrentYear(noticeCurrentYear + 1)
+    } else {
+      setNoticeCurrentMonth(noticeCurrentMonth + 1)
+    }
+  }
+
+  const handleNoticeDateClick = (date) => {
+    setNoticeSelectedDate(date === noticeSelectedDate ? '' : date)
+  }
+
+  const renderNoticeCalendar = () => {
+    const daysInMonth = getDaysInMonth(noticeCurrentMonth, noticeCurrentYear)
+    const firstDay = getFirstDayOfMonth(noticeCurrentMonth, noticeCurrentYear)
+    const days = []
+    const today = new Date()
+    const todayStr = formatDateForCalendar(today.getFullYear(), today.getMonth(), today.getDate())
+
+    // Get unique dates from notices
+    const availableDates = [...new Set(notices.map(notice => normalizeNoticeDate(notice.date)))]
+    const datesWithNotices = new Set(availableDates)
+
+    // Add empty cells
+    for (let i = 0; i < firstDay; i++) {
+      days.push(<div key={`empty-${i}`} className="admin-calendar-day admin-calendar-day-empty"></div>)
+    }
+
+    // Add day cells
+    for (let day = 1; day <= daysInMonth; day++) {
+      const dateStr = formatDateForCalendar(noticeCurrentYear, noticeCurrentMonth, day)
+      const hasNotice = datesWithNotices.has(dateStr)
+      const isSelected = noticeSelectedDate === dateStr
+      const isToday = todayStr === dateStr
+
+      days.push(
+        <button
+          key={`day-${noticeCurrentYear}-${noticeCurrentMonth}-${day}`}
+          className={`admin-calendar-day ${hasNotice ? 'has-notice' : ''} ${isSelected ? 'active' : ''}`}
+          onClick={() => handleNoticeDateClick(dateStr)}
+          title={hasNotice ? (language === 'bn' ? 'এই তারিখে নোটিশ আছে' : 'Has notices') : ''}
+        >
+          {day}
+        </button>
+      )
+    }
+    return days
+  }
+
 
   const handleAddCommissionRate = async () => {
     if (!newCommissionRate) return
@@ -806,7 +1323,7 @@ function AdminPage({ language, toggleLanguage, t }) {
     postingArea: '',
     role: '',
     designation: '',
-    photo: '',
+    photo: '', photoAdjustment: { top: 50, left: 50 },
     status: 'Unpaid'
   })
   const [employeeStatus, setEmployeeStatus] = useState('')
@@ -820,7 +1337,7 @@ function AdminPage({ language, toggleLanguage, t }) {
     phone: '',
     email: '',
     address: '',
-    photo: '',
+    photo: '', photoAdjustment: { top: 50, left: 50 },
     nid: '',
     tradeLicense: '',
     pesticideLicense: '',
@@ -847,7 +1364,8 @@ function AdminPage({ language, toggleLanguage, t }) {
         isEmployee: !!state.isEmployee,
         userRole: state.userRole || 'Admin',
         loggedInUser: state.loggedInUser || '',
-        loggedInUserId: state.loggedInUserId ?? null
+        loggedInUserId: state.loggedInUserId ?? null,
+        token: state.token || localStorage.getItem('authToken') || ''
       }))
     } catch (err) {
       console.error('Failed to persist auth state', err)
@@ -1479,6 +1997,8 @@ function AdminPage({ language, toggleLanguage, t }) {
 
   useEffect(() => {
     loadProducts()
+    fetchBlogs()
+    fetchContacts()
   }, [])
 
   const loadOrderRequests = async () => {
@@ -1726,6 +2246,104 @@ function AdminPage({ language, toggleLanguage, t }) {
     setInventoryStatus('')
   }
 
+  // Asset Management Logic
+  const fetchAssets = async () => {
+    try {
+      const res = await authFetch(`${API_BASE}/api/assets`)
+      if (res.ok) {
+        const data = await res.json()
+        setAssets(data)
+      }
+    } catch (err) {
+      console.error('Failed to fetch assets', err)
+    }
+  }
+
+  const handleAddAsset = async (e) => {
+    e.preventDefault()
+    setIsAssetSubmitting(true)
+    try {
+      const url = isEditingAsset ? `${API_BASE}/api/assets/${editingAssetId}` : `${API_BASE}/api/assets`
+      const method = isEditingAsset ? 'PUT' : 'POST'
+
+      const res = await authFetch(url, {
+        method,
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(newAsset)
+      })
+
+      if (res.ok) {
+        fetchAssets()
+        setIsAddAssetModalOpen(false)
+        setIsEditingAsset(false)
+        setEditingAssetId(null)
+        setNewAsset({
+          name: '',
+          category: '',
+          purchaseDate: '',
+          quantity: 1,
+          purchaseShop: '',
+          value: 0,
+          paid: 0,
+          status: 'Active',
+          notes: ''
+        })
+        alert(isEditingAsset
+          ? (language === 'en' ? 'Asset updated successfully' : 'সম্পদ সফলভাবে আপডেট করা হয়েছে')
+          : (language === 'en' ? 'Asset added successfully' : 'সম্পদ সফলভাবে যোগ করা হয়েছে')
+        )
+      } else {
+        alert(isEditingAsset
+          ? (language === 'en' ? 'Failed to update asset' : 'সম্পদ আপডেট করতে ব্যর্থ')
+          : (language === 'en' ? 'Failed to add asset' : 'সম্পদ যোগ করতে ব্যর্থ')
+        )
+      }
+    } catch (err) {
+      console.error(err)
+      alert(language === 'en' ? 'An error occurred' : 'একটি ত্রুটি ঘটেছে')
+    } finally {
+      setIsAssetSubmitting(false)
+    }
+  }
+
+  const handleEditAsset = (asset) => {
+    setNewAsset({
+      name: asset.name,
+      category: asset.category,
+      purchaseDate: asset.purchaseDate ? asset.purchaseDate.split('T')[0] : '',
+      quantity: asset.quantity,
+      purchaseShop: asset.purchaseShop,
+      value: asset.value,
+      paid: asset.paid,
+      status: asset.status,
+      notes: asset.notes
+    })
+    setEditingAssetId(asset._id)
+    setIsEditingAsset(true)
+    setIsAddAssetModalOpen(true)
+  }
+
+  const handleDeleteAsset = async (id) => {
+    if (!window.confirm(language === 'en' ? 'Are you sure you want to delete this asset?' : 'আপনি কি নিশ্চিত যে আপনি এই সম্পদটি মুছতে চান?')) return
+
+    try {
+      const res = await authFetch(`${API_BASE}/api/assets/${id}`, {
+        method: 'DELETE'
+      })
+      if (res.ok) {
+        fetchAssets()
+      }
+    } catch (err) {
+      console.error('Failed to delete asset', err)
+    }
+  }
+
+  useEffect(() => {
+    if (activeTab === 'manageAsset') {
+      fetchAssets()
+    }
+  }, [activeTab])
+
   useEffect(() => {
     if (activeTab === 'orders') {
       loadOrders()
@@ -1756,7 +2374,24 @@ function AdminPage({ language, toggleLanguage, t }) {
     if (activeTab === 'inventory') {
       loadInventory()
     }
+    if (activeTab === 'contacts') {
+      fetchContacts()
+    }
+    if (activeTab === 'blogs') {
+      fetchBlogs()
+    }
+    if (activeTab === 'career') {
+      fetchCareers()
+      fetchApplications()
+    }
   }, [activeTab, inventoryFilter, inventorySelectedMonth, inventorySelectedYear, inventorySelectedHalf])
+
+  // Load employees when HR tab is active
+  useEffect(() => {
+    if (activeTab === 'hr' && isAuthenticated) {
+      loadEmployees()
+    }
+  }, [activeTab, isAuthenticated])
 
   // Load territories when territory tab is active, Revenue tab is active, or Dealer form is open
   useEffect(() => {
@@ -2066,6 +2701,7 @@ function AdminPage({ language, toggleLanguage, t }) {
               id: t.areaId,
               label: t.area || 'N/A',
               revenue: 0,
+              paid: 0,
               due: 0,
               orderCount: 0
             }
@@ -2081,6 +2717,7 @@ function AdminPage({ language, toggleLanguage, t }) {
               id: t.territoryId,
               label: t.area || 'N/A',
               revenue: 0,
+              paid: 0,
               due: 0,
               orderCount: 0
             }
@@ -3458,7 +4095,7 @@ function AdminPage({ language, toggleLanguage, t }) {
         phone: '',
         email: '',
         address: '',
-        photo: '',
+        photo: '', photoAdjustment: { top: 50, left: 50 },
         nid: '',
         tradeLicense: '',
         pesticideLicense: '',
@@ -5250,6 +5887,7 @@ function AdminPage({ language, toggleLanguage, t }) {
       role: { en: teamMemberForm.roleEn, bn: teamMemberForm.roleBn },
       expertise: { en: teamMemberForm.expertiseEn, bn: teamMemberForm.expertiseBn },
       photo: teamMemberForm.photo,
+      photoAdjustment: teamMemberForm.photoAdjustment,
       group: teamMemberForm.group
     }
 
@@ -5549,6 +6187,13 @@ function AdminPage({ language, toggleLanguage, t }) {
       'SalesMan': ['dashboard', 'profile', 'products', 'orders']
     }
 
+    // Add 'notices' to Admin, HR, RSM, Incharge
+    if (['Admin', 'HR', 'RSM', 'Incharge'].includes(userRole)) {
+      if (!roleAccess[userRole].includes('notices')) {
+        roleAccess[userRole].push('notices')
+      }
+    }
+
     return roleAccess[userRole]?.includes(tabName) || false
   }
 
@@ -5637,6 +6282,8 @@ function AdminPage({ language, toggleLanguage, t }) {
     manageProducts: 'Manage Products',
     manageBlogs: 'Manage Blogs',
     viewMessages: 'View Messages',
+    notices: 'Notice Board',
+    manageNotices: 'Manage Notices',
     contentManagement: 'Content Management',
     careerManagement: 'Career Management',
     systemSettings: 'System Settings',
@@ -5705,6 +6352,8 @@ function AdminPage({ language, toggleLanguage, t }) {
     manageProducts: 'পণ্য পরিচালনা',
     manageBlogs: 'ব্লগ পরিচালনা',
     viewMessages: 'বার্তা দেখুন',
+    notices: 'নোটিশ বোর্ড',
+    manageNotices: 'নোটিশ পরিচালনা',
     contentManagement: 'কন্টেন্ট ম্যানেজমেন্ট',
     careerManagement: 'ক্যারিয়ার ম্যানেজমেন্ট',
     systemSettings: 'সিস্টেম সেটিংস',
@@ -5751,8 +6400,8 @@ function AdminPage({ language, toggleLanguage, t }) {
   const productCount = products.length || t.products.items.length
   const stats = {
     totalProducts: productCount,
-    totalBlogs: t.blog.featured.length + t.blog.list.length,
-    totalContacts: 24,
+    totalBlogs: blogs.length,
+    totalContacts: contacts.length,
     recentActivity: [
       { type: 'product', action: 'Updated', item: 'Herbicide Pro', time: '2 hours ago' },
       { type: 'blog', action: 'Published', item: 'Expert Tips for Maximizing Crop Yields', time: '1 day ago' },
@@ -5981,6 +6630,19 @@ function AdminPage({ language, toggleLanguage, t }) {
                   <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
                 </svg>
                 {adminContent.contacts}
+              </button>
+            )}
+            {canAccessTab('notices') && (
+              <button
+                className={`admin-nav-item ${activeTab === 'notices' ? 'active' : ''}`}
+                onClick={() => handleTabChange('notices')}
+              >
+                <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                  <rect x="3" y="3" width="18" height="18" rx="2" ry="2" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+                  <line x1="3" y1="9" x2="21" y2="9" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+                  <line x1="9" y1="21" x2="9" y2="9" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+                </svg>
+                {adminContent.notices}
               </button>
             )}
             {canAccessTab('blogs') && (
@@ -6720,269 +7382,143 @@ function AdminPage({ language, toggleLanguage, t }) {
                   </div>
                 </div>
               )}
+              <div className="admin-search-bar" style={{ marginBottom: '1.5rem', display: 'flex', justifyContent: 'center' }}>
+                <div className="search-box" style={{ position: 'relative', width: '100%' }}>
+                  <svg
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    style={{
+                      position: 'absolute',
+                      left: '12px',
+                      top: '50%',
+                      transform: 'translateY(-50%)',
+                      width: '18px',
+                      height: '18px',
+                      color: '#64748b',
+                      zIndex: 1
+                    }}
+                  >
+                    <circle cx="11" cy="11" r="8"></circle>
+                    <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+                  </svg>
+                  <input
+                    type="text"
+                    className="search-input"
+                    style={{
+                      width: '100%',
+                      padding: '0.5rem 1rem 0.5rem 2.5rem',
+                      border: '2px solid #e2e8f0',
+                      borderRadius: '10px',
+                      fontSize: '0.9rem',
+                      outline: 'none',
+                      transition: 'all 0.3s ease',
+                      backgroundColor: 'white'
+                    }}
+                    placeholder={adminContent.search}
+                    value={productSearch}
+                    onChange={(e) => setProductSearch(e.target.value)}
+                  />
+                </div>
+              </div>
+
               {loadingProducts ? (
                 <LoadingSpinner text={language === 'en' ? 'Loading Products...' : 'পণ্য লোড হচ্ছে...'} />
               ) : (
-                <>
-                  <div className="admin-search-bar" style={{ marginBottom: '1rem' }}>
-                    <input
-                      type="text"
-                      placeholder={adminContent.search}
-                      value={productSearch}
-                      onChange={(e) => setProductSearch(e.target.value)}
-                    />
-                  </div>
-                  <div className="admin-table-container">
-                    <table className="admin-table">
-                      <thead>
-                        <tr>
-                          <th
-                            onClick={() => {
-                              const direction = productSortConfig.key === 'productId' && productSortConfig.direction === 'asc' ? 'desc' : 'asc'
-                              setProductSortConfig({ key: 'productId', direction })
-                            }}
-                            style={{ cursor: 'pointer', userSelect: 'none' }}
-                          >
-                            <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
-                              {language === 'en' ? 'Product ID' : 'পণ্য আইডি'}
-                              {productSortConfig.key === 'productId' && (
-                                <span>{productSortConfig.direction === 'asc' ? '↑' : '↓'}</span>
-                              )}
+                <div className="products-grid admin-compact-grid">
+                  {filteredProducts.length > 0 ? (
+                    filteredProducts.map((product, index) => {
+                      const hasVariants = product.priceCategory === 'per_variant' && Array.isArray(product.variants) && product.variants.length > 0
+                      const minPrice = hasVariants
+                        ? Math.min(...product.variants.map(v => parseFloat(v.price) || 0))
+                        : (product.price || 0)
+
+                      return (
+                        <div key={product._id || index} className="product-grid-card">
+                          <div className="product-grid-image-wrapper">
+                            <div className="product-grid-image">
+                              <img
+                                src={product.image || '/product-bottle.png'}
+                                alt={product.name}
+                                onError={(e) => { e.target.src = '/product-bottle.png' }}
+                              />
                             </div>
-                          </th>
-                          <th
-                            onClick={() => {
-                              const direction = productSortConfig.key === 'name' && productSortConfig.direction === 'asc' ? 'desc' : 'asc'
-                              setProductSortConfig({ key: 'name', direction })
-                            }}
-                            style={{ cursor: 'pointer', userSelect: 'none' }}
-                          >
-                            <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
-                              {adminContent.productName}
-                              {productSortConfig.key === 'name' && (
-                                <span>{productSortConfig.direction === 'asc' ? '↑' : '↓'}</span>
-                              )}
-                            </div>
-                          </th>
-                          <th
-                            onClick={() => {
-                              const direction = productSortConfig.key === 'category' && productSortConfig.direction === 'asc' ? 'desc' : 'asc'
-                              setProductSortConfig({ key: 'category', direction })
-                            }}
-                            style={{ cursor: 'pointer', userSelect: 'none' }}
-                          >
-                            <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
-                              {adminContent.category}
-                              {productSortConfig.key === 'category' && (
-                                <span>{productSortConfig.direction === 'asc' ? '↑' : '↓'}</span>
-                              )}
-                            </div>
-                          </th>
-                          <th
-                            onClick={() => {
-                              const direction = productSortConfig.key === 'price' && productSortConfig.direction === 'asc' ? 'desc' : 'asc'
-                              setProductSortConfig({ key: 'price', direction })
-                            }}
-                            style={{ cursor: 'pointer', userSelect: 'none' }}
-                          >
-                            <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
-                              {language === 'en' ? 'Price' : 'মূল্য'}
-                              {productSortConfig.key === 'price' && (
-                                <span>{productSortConfig.direction === 'asc' ? '↑' : '↓'}</span>
-                              )}
-                            </div>
-                          </th>
-                          <th>{language === 'en' ? 'Actions' : 'কার্যক্রম'}</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {filteredProducts.length ? filteredProducts.map((product, index) => {
-                          const hasVariants = product.priceCategory === 'per_variant' && Array.isArray(product.variants) && product.variants.length > 0
-                          const displayPrice = hasVariants ? null : (product.price || 0)
-
-                          return (
-                            <tr key={product._id || product.name || index}>
-                              <td>{product.productId || '-'}</td>
-                              <td>{product.name}</td>
-                              <td>{product.category}</td>
-                              <td>
-                                {hasVariants ? (
-                                  <select
-                                    style={{
-                                      padding: '0.4rem 0.6rem',
-                                      border: '1px solid #cbd5e1',
-                                      borderRadius: '0.375rem',
-                                      fontSize: '0.875rem',
-                                      backgroundColor: 'white',
-                                      cursor: 'pointer',
-                                      width: '100%',
-                                      minWidth: '150px'
-                                    }}
-                                    onChange={(e) => {
-                                      // Purely for viewing
-                                      e.target.blur()
-                                    }}
-                                  >
-                                    <option value="">{language === 'en' ? 'Select variant' : 'ভ্যারিয়েন্ট নির্বাচন করুন'}</option>
-                                    {product.variants.map((variant, vIndex) => (
-                                      <option key={vIndex} value={variant.productCode}>
-                                        {variant.productCode} ({variant.packSize} {variant.packUnit || 'ml'} x {variant.cartoonSize} {variant.cartoonUnit || 'Pcs'}): ৳{variant.price || 0}
-                                      </option>
-                                    ))}
-                                  </select>
-                                ) : (
-                                  <span style={{ fontWeight: 600, color: '#16a34a' }}>
-                                    ৳{Math.round(displayPrice)}
-                                  </span>
-                                )}
-                              </td>
-                              <td>
-                                <div className="admin-action-buttons">
-                                  <button
-                                    className="admin-action-btn edit"
-                                    style={{ backgroundColor: '#e0e7ff', color: '#1d4ed8' }}
-                                    onClick={() => setViewingProduct(product)}
-                                  >
-                                    {language === 'en' ? 'View' : 'দেখুন'}
-                                  </button>
-                                </div>
-                              </td>
-                            </tr>
-                          )
-                        }) : (
-                          <tr>
-                            <td colSpan="5" style={{ textAlign: 'center', padding: '1.5rem' }}>
-                              {adminContent.noData}
-                            </td>
-                          </tr>
-                        )}
-                      </tbody>
-                    </table>
-                  </div>
-
-                  {/* Mobile Card View for Products */}
-                  <div className="mobile-card-container">
-                    {filteredProducts.length === 0 ? (
-                      <div style={{ textAlign: 'center', padding: '2rem', color: '#6b7280' }}>
-                        {adminContent.noData}
-                      </div>
-                    ) : (
-                      filteredProducts.map((product, index) => {
-                        const hasVariants = product.priceCategory === 'per_variant' && Array.isArray(product.variants) && product.variants.length > 0
-                        const displayPrice = hasVariants ? null : (product.price || 0)
-
-                        return (
-                          <div className="mobile-card" key={product._id || product.name || index}>
-                            <div
-                              className="mobile-card-header"
-                              onClick={() => setExpandedProductId(prev => (prev === product._id ? null : product._id))}
-                              style={{ cursor: 'pointer' }}
-                            >
-                              <div className="mobile-card-avatar" style={{ backgroundColor: '#e0f2fe', color: '#0369a1', overflow: 'hidden' }}>
-                                {product.image ? (
-                                  <img src={product.image} alt={product.name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-                                ) : (
-                                  product.name.charAt(0).toUpperCase()
-                                )}
-                              </div>
-                              <div className="mobile-card-header-text">
-                                <div className="mobile-card-title">{product.name}</div>
-                                <div className="mobile-card-subtitle">{product.productId || ''}</div>
-                              </div>
-
-                              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', marginLeft: 'auto', alignSelf: 'center', justifyContent: 'center', flexShrink: 0 }}>
-                                <div style={{ fontSize: '0.9rem', fontWeight: 700, color: '#475569', marginTop: 'auto' }}>
-                                  {hasVariants ? (
-                                    <span>
-                                      {language === 'en' ? '৳' : '৳'}
-                                      {Math.min(...product.variants.map(v => parseFloat(v.price) || 0)).toLocaleString()}+
-                                    </span>
-                                  ) : (
-                                    <span>{language === 'en' ? '৳' : '৳'} {(product.price || 0).toLocaleString()}</span>
-                                  )}
-                                </div>
-                              </div>
-                            </div>
-
-                            {expandedProductId === product._id && (
-                              <>
-                                <div className="mobile-card-body">
-                                  <div className="mobile-card-row">
-                                    <span className="mobile-card-label">{adminContent.category}</span>
-                                    <span className="mobile-card-value">{product.category}</span>
-                                  </div>
-                                  <div className="mobile-card-row">
-                                    <span className="mobile-card-label">{language === 'en' ? 'Price details' : 'মূল্যের বিবরণ'}</span>
-                                    <span className="mobile-card-value">
-                                      {hasVariants ? (
-                                        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', width: '100%' }}>
-                                          <div style={{ textAlign: 'left', width: '100%' }}>
-                                            {product.variants.map((variant, vIndex) => (
-                                              <div key={vIndex} style={{ fontSize: '0.85rem', marginBottom: '0.35rem', color: '#475569' }}>
-                                                <span style={{ fontWeight: 700 }}>{variant.productCode}</span>: ({variant.packSize} {variant.packUnit || 'ml'} x {variant.cartoonSize} {variant.cartoonUnit || 'Pcs'}): <span style={{ fontWeight: 700, color: '#16a34a' }}>৳{variant.price}</span>
-                                              </div>
-                                            ))}
-                                          </div>
-                                        </div>
-                                      ) : (
-                                        <span style={{ fontWeight: 600, color: '#16a34a' }}>
-                                          {language === 'en' ? 'Fixed Price: ' : 'নির্দিষ্ট মূল্য: '}
-                                          ৳{Math.round(displayPrice)}
-                                        </span>
-                                      )}
-                                    </span>
-                                  </div>
-
-                                  {product.hasOffer && product.buyQuantity && product.freeQuantity && (
-                                    <div className="mobile-card-row">
-                                      <span className="mobile-card-label">{language === 'en' ? 'Offer' : 'অফার'}</span>
-                                      <span className="mobile-card-value" style={{ color: '#ea580c', fontWeight: 600 }}>
-                                        {language === 'en'
-                                          ? `Buy ${product.buyQuantity} Get ${product.freeQuantity} Free`
-                                          : `${product.buyQuantity}টি কিনলে ${product.freeQuantity}টি ফ্রি`}
-                                      </span>
-                                    </div>
-                                  )}
-                                </div>
-                                <div className="mobile-card-actions">
-                                  <button
-                                    className="mobile-action-btn"
-                                    onClick={(e) => {
-                                      e.stopPropagation()
-                                      setViewingProduct(product)
-                                    }}
-                                  >
-                                    {language === 'en' ? 'View Details' : 'বিস্তারিত দেখুন'}
-                                  </button>
-                                  <button
-                                    className="mobile-action-btn edit"
-                                    onClick={(e) => {
-                                      e.stopPropagation()
-                                      handleEditProduct(product)
-                                    }}
-                                    style={{ backgroundColor: '#e0e7ff', color: '#1d4ed8', marginLeft: '0.5rem' }}
-                                  >
-                                    {language === 'en' ? 'Edit' : 'সম্পাদনা'}
-                                  </button>
-                                  <button
-                                    className="mobile-action-btn delete"
-                                    onClick={(e) => {
-                                      e.stopPropagation()
-                                      handleDeleteProduct(product._id)
-                                    }}
-                                    style={{ backgroundColor: '#fee2e2', color: '#dc2626', marginLeft: '0.5rem' }}
-                                  >
-                                    {language === 'en' ? 'Delete' : 'মুছুন'}
-                                  </button>
-                                </div>
-                              </>
-                            )}
                           </div>
-                        )
-                      })
-                    )}
-                  </div>
-                </>
+                          <div className="product-grid-content">
+                            {product.productId && (
+                              <div style={{
+                                fontSize: '0.75rem',
+                                fontWeight: 800,
+                                color: '#94a3b8',
+                                marginBottom: '0.2rem',
+                                textTransform: 'uppercase',
+                                letterSpacing: '0.05em'
+                              }}>
+                                {product.productId}
+                              </div>
+                            )}
+                            <h3 className="product-grid-name" style={{ fontSize: '1.25rem', marginBottom: '0.2rem', color: '#111827' }}>{product.name}</h3>
+                            <p className="product-grid-category" style={{ fontSize: '0.8rem', marginBottom: '0.5rem', color: '#10b981', fontWeight: 700 }}>{product.category}</p>
+
+                            {hasVariants ? (
+                              <div style={{
+                                fontSize: '0.8rem',
+                                color: '#374151',
+                                background: 'rgba(34, 197, 94, 0.05)',
+                                padding: '0.5rem',
+                                borderRadius: '10px',
+                                marginBottom: '1rem',
+                                border: '1px solid rgba(16, 185, 129, 0.1)',
+                                textAlign: 'left'
+                              }}>
+                                {product.variants.map((variant, vIdx) => (
+                                  <div key={vIdx} style={{
+                                    paddingBottom: '4px',
+                                    marginBottom: '4px',
+                                    borderBottom: vIdx === product.variants.length - 1 ? 'none' : '1px dashed rgba(16, 185, 129, 0.1)'
+                                  }}>
+                                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1px' }}>
+                                      <span style={{ fontWeight: 700, color: '#111827', fontSize: '1.05rem' }}>{variant.productCode || 'N/A'}</span>
+                                      <span style={{ color: '#059669', fontWeight: 800, fontSize: '1.05rem' }}>৳{variant.price}</span>
+                                    </div>
+                                    <div style={{ display: 'flex', gap: '6px', fontSize: '0.85rem', color: '#64748b', fontWeight: 600 }}>
+                                      <span>P: {variant.packSize}{variant.packUnit}</span>
+                                      <span style={{ color: '#cbd5e1' }}>|</span>
+                                      <span>C: {variant.cartoonSize}{variant.cartoonUnit}</span>
+                                    </div>
+                                  </div>
+                                ))}
+                              </div>
+                            ) : (
+                              <div style={{ marginTop: 'auto', marginBottom: '1rem', textAlign: 'center' }}>
+                                <span style={{ fontWeight: 800, color: '#16a34a', fontSize: '1.25rem' }}>
+                                  ৳{minPrice.toLocaleString()}
+                                </span>
+                              </div>
+                            )}
+
+                            <div className="product-grid-actions">
+                              <button
+                                className="product-grid-details-btn"
+                                style={{ width: '100%', padding: '0.6rem', fontSize: '0.85rem' }}
+                                onClick={() => setViewingProduct(product)}
+                              >
+                                {language === 'en' ? 'View Details' : 'বিস্তারিত দেখুন'}
+                              </button>
+                            </div>
+                          </div>
+                        </div>
+                      )
+                    })
+                  ) : (
+                    <div style={{ gridColumn: '1 / -1', textAlign: 'center', padding: '4rem', color: '#94a3b8' }}>
+                      {adminContent.noData}
+                    </div>
+                  )}
+                </div>
               )}
 
               {/* Product Details Card */}
@@ -7325,80 +7861,783 @@ function AdminPage({ language, toggleLanguage, t }) {
             </div>
           )}
 
-          {/* Blogs Tab */}
-          {activeTab === 'blogs' && (
-            <div className="admin-tab-content">
-              <div className="admin-tab-header">
-                <h1 className="admin-page-title">{adminContent.manageBlogs}</h1>
-                <button className="admin-add-btn">
-                  <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                    <line x1="12" y1="5" x2="12" y2="19" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
-                    <line x1="5" y1="12" x2="19" y2="12" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
-                  </svg>
-                  {adminContent.addNew}
-                </button>
-              </div>
-              <div className="admin-table-container">
-                <div className="admin-search-bar">
-                  <input type="text" placeholder={adminContent.search} />
-                </div>
-                <table className="admin-table">
-                  <thead>
-                    <tr>
-                      <th>{adminContent.blogTitle}</th>
-                      <th>{adminContent.author}</th>
-                      <th>{adminContent.date}</th>
-                      <th>{language === 'en' ? 'Actions' : 'কার্যক্রম'}</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {[...t.blog.featured, ...t.blog.list].map((blog, index) => (
-                      <tr key={index}>
-                        <td>{blog.title}</td>
-                        <td>{blog.author}</td>
-                        <td>{blog.date}</td>
-                        <td>
-                          <div className="admin-action-buttons">
-                            <button className="admin-action-btn edit">{adminContent.edit}</button>
-                            <button className="admin-action-btn delete">{adminContent.delete}</button>
-                          </div>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            </div>
-          )}
-
           {/* Contacts Tab */}
           {activeTab === 'contacts' && (
             <div className="admin-tab-content">
               <div className="admin-tab-header">
                 <h1 className="admin-page-title">{adminContent.viewMessages}</h1>
+                <button
+                  className="admin-refresh-btn"
+                  onClick={fetchContacts}
+                  disabled={loadingContacts}
+                  style={{
+                    padding: '0.5rem 1rem',
+                    backgroundColor: '#22c55e', // Updated to match "Add New" / "Replied" button bright green
+                    color: 'white',
+                    border: 'none',
+                    borderRadius: '6px',
+                    cursor: loadingContacts ? 'not-allowed' : 'pointer',
+                    fontWeight: '500',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '0.5rem',
+                    transition: 'all 0.2s'
+                  }}
+                  onMouseEnter={(e) => !loadingContacts && (e.currentTarget.style.backgroundColor = '#16a34a')}
+                  onMouseLeave={(e) => !loadingContacts && (e.currentTarget.style.backgroundColor = '#22c55e')}
+                >
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ width: '16px', height: '16px' }}>
+                    <polyline points="23 4 23 10 17 10"></polyline>
+                    <polyline points="1 20 1 14 7 14"></polyline>
+                    <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path>
+                  </svg>
+                  {language === 'en' ? 'Refresh' : 'রিফ্রেশ'}
+                </button>
               </div>
-              <div className="admin-table-container">
-                <div className="admin-search-bar">
-                  <input type="text" placeholder={adminContent.search} />
+              <div className="admin-search-bar" style={{ marginTop: '1.5rem', marginBottom: '1.25rem', display: 'flex', justifyContent: 'center' }}>
+                <div style={{ position: 'relative', width: '100%', maxWidth: '400px' }}>
+                  <svg
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2"
+                    style={{
+                      position: 'absolute',
+                      left: '12px',
+                      top: '50%',
+                      transform: 'translateY(-50%)',
+                      width: '18px',
+                      height: '18px',
+                      color: '#64748b'
+                    }}
+                  >
+                    <circle cx="11" cy="11" r="8" />
+                    <line x1="21" y1="21" x2="16.65" y2="16.65" />
+                  </svg>
+                  <input
+                    type="text"
+                    placeholder={adminContent.search}
+                    value={contactSearchTerm}
+                    onChange={(e) => setContactSearchTerm(e.target.value)}
+                    style={{
+                      paddingLeft: '40px',
+                      width: '100%'
+                    }}
+                  />
                 </div>
-                <table className="admin-table">
-                  <thead>
-                    <tr>
-                      <th>{adminContent.name}</th>
-                      <th>{adminContent.email}</th>
-                      <th>{adminContent.phone}</th>
-                      <th>{adminContent.message}</th>
-                      <th>{language === 'en' ? 'Actions' : 'কার্যক্রম'}</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    <tr>
-                      <td colSpan="5" style={{ textAlign: 'center', padding: '2rem' }}>
+              </div>
+
+              {loadingContacts ? (
+                <LoadingSpinner />
+              ) : (
+                <>
+                  <div className="admin-table-container">
+                    <table className="admin-table">
+                      <thead>
+                        <tr>
+                          <th>{adminContent.name}</th>
+                          <th>{adminContent.email}</th>
+                          <th>{adminContent.phone}</th>
+                          <th>{language === 'en' ? 'District' : 'জেলা'}</th>
+                          <th>{adminContent.message}</th>
+                          <th>{language === 'en' ? 'Status' : 'অবস্থা'}</th>
+                          <th>{language === 'en' ? 'Actions' : 'কার্যক্রম'}</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {contacts
+                          .filter(contact => {
+                            const search = contactSearchTerm.toLowerCase();
+                            return (
+                              contact.name?.toLowerCase().includes(search) ||
+                              contact.email?.toLowerCase().includes(search) ||
+                              contact.district?.toLowerCase().includes(search)
+                            );
+                          }).length > 0 ? (
+                          contacts
+                            .filter(contact => {
+                              const search = contactSearchTerm.toLowerCase();
+                              return (
+                                contact.name?.toLowerCase().includes(search) ||
+                                contact.email?.toLowerCase().includes(search) ||
+                                contact.district?.toLowerCase().includes(search)
+                              );
+                            })
+                            .map((contact) => (
+                              <tr key={contact._id}>
+                                <td>{contact.name}</td>
+                                <td>{contact.email}</td>
+                                <td>{contact.phone}</td>
+                                <td>{contact.district}</td>
+                                <td>
+                                  <div style={{ maxWidth: '300px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={contact.message}>
+                                    {contact.message}
+                                  </div>
+                                </td>
+                                <td>
+                                  <span className={`status-badge status-${contact.status || 'new'}`}>
+                                    {contact.status === 'new' ? (language === 'en' ? 'New' : 'নতুন') :
+                                      contact.status === 'read' ? (language === 'en' ? 'Read' : 'পঠিত') :
+                                        (language === 'en' ? 'Replied' : 'উত্তর দেওয়া হয়েছে')}
+                                  </span>
+                                </td>
+                                <td>
+                                  <div className="admin-actions" style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
+                                    {contact.status !== 'read' && (
+                                      <button
+                                        onClick={() => handleUpdateContactStatus(contact._id, 'read')}
+                                        style={{
+                                          padding: '0.4rem 0.8rem',
+                                          fontSize: '0.75rem',
+                                          backgroundColor: '#3b82f6',
+                                          color: 'white',
+                                          border: 'none',
+                                          borderRadius: '6px',
+                                          cursor: 'pointer',
+                                          fontWeight: '500',
+                                          transition: 'all 0.2s',
+                                          display: 'flex',
+                                          alignItems: 'center',
+                                          gap: '0.25rem'
+                                        }}
+                                        onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#2563eb'}
+                                        onMouseLeave={(e) => e.currentTarget.style.backgroundColor = '#3b82f6'}
+                                        title={language === 'en' ? 'Mark as Read' : 'পঠিত হিসেবে চিহ্নিত করুন'}
+                                      >
+                                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ width: '14px', height: '14px' }}>
+                                          <path d="M9 11l3 3L22 4" />
+                                          <path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11" />
+                                        </svg>
+                                        {language === 'en' ? 'Read' : 'পঠিত'}
+                                      </button>
+                                    )}
+                                    {contact.status !== 'replied' && (
+                                      <button
+                                        onClick={() => handleUpdateContactStatus(contact._id, 'replied')}
+                                        style={{
+                                          padding: '0.4rem 0.8rem',
+                                          fontSize: '0.75rem',
+                                          backgroundColor: '#22c55e',
+                                          color: 'white',
+                                          border: 'none',
+                                          borderRadius: '6px',
+                                          cursor: 'pointer',
+                                          fontWeight: '500',
+                                          transition: 'all 0.2s',
+                                          display: 'flex',
+                                          alignItems: 'center',
+                                          gap: '0.25rem'
+                                        }}
+                                        onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#16a34a'}
+                                        onMouseLeave={(e) => e.currentTarget.style.backgroundColor = '#22c55e'}
+                                        title={language === 'en' ? 'Mark as Replied' : 'উত্তর দেওয়া হয়েছে হিসেবে চিহ্নিত করুন'}
+                                      >
+                                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ width: '14px', height: '14px' }}>
+                                          <path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z" />
+                                        </svg>
+                                        {language === 'en' ? 'Replied' : 'উত্তর'}
+                                      </button>
+                                    )}
+                                    <button
+                                      onClick={() => handleDeleteContact(contact._id)}
+                                      style={{
+                                        padding: '0.4rem 0.8rem',
+                                        fontSize: '0.75rem',
+                                        backgroundColor: '#ef4444',
+                                        color: 'white',
+                                        border: 'none',
+                                        borderRadius: '6px',
+                                        cursor: 'pointer',
+                                        fontWeight: '500',
+                                        transition: 'all 0.2s',
+                                        display: 'flex',
+                                        alignItems: 'center',
+                                        gap: '0.25rem'
+                                      }}
+                                      onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#dc2626'}
+                                      onMouseLeave={(e) => e.currentTarget.style.backgroundColor = '#ef4444'}
+                                      title={adminContent.delete}
+                                    >
+                                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ width: '14px', height: '14px' }}>
+                                        <polyline points="3 6 5 6 21 6"></polyline>
+                                        <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
+                                      </svg>
+                                      {language === 'en' ? 'Delete' : 'মুছুন'}
+                                    </button>
+                                  </div>
+
+                                </td>
+                              </tr>
+                            ))
+                        ) : (
+                          <tr>
+                            <td colSpan="7" style={{ textAlign: 'center', padding: '2rem' }}>
+                              {adminContent.noData}
+                            </td>
+                          </tr>
+                        )}
+                      </tbody>
+                    </table>
+                  </div>
+
+                  {/* Mobile Card View for Contact Messages */}
+                  <div className="mobile-card-container">
+                    {contacts
+                      .filter(contact => {
+                        const search = contactSearchTerm.toLowerCase();
+                        return (
+                          contact.name?.toLowerCase().includes(search) ||
+                          contact.email?.toLowerCase().includes(search) ||
+                          contact.district?.toLowerCase().includes(search)
+                        );
+                      }).length === 0 ? (
+                      <div style={{ textAlign: 'center', padding: '2rem', color: '#6b7280' }}>
                         {adminContent.noData}
-                      </td>
-                    </tr>
-                  </tbody>
-                </table>
+                      </div>
+                    ) : (
+                      contacts
+                        .filter(contact => {
+                          const search = contactSearchTerm.toLowerCase();
+                          return (
+                            contact.name?.toLowerCase().includes(search) ||
+                            contact.email?.toLowerCase().includes(search) ||
+                            contact.district?.toLowerCase().includes(search)
+                          );
+                        })
+                        .map((contact, index) => (
+                          <div className="mobile-card" key={contact._id || index}>
+                            <div
+                              className="mobile-card-header"
+                              onClick={() => setExpandedContactId(prev => (prev === contact._id ? null : contact._id))}
+                              style={{ cursor: 'pointer' }}
+                            >
+                              <div className="mobile-card-avatar" style={{ backgroundColor: '#eff6ff', color: '#3b82f6' }}>
+                                {contact.name?.charAt(0).toUpperCase()}
+                              </div>
+                              <div className="mobile-card-header-text">
+                                <div className="mobile-card-title">{contact.name}</div>
+                                <div className="mobile-card-subtitle">{contact.district}</div>
+                              </div>
+                              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', marginLeft: 'auto', alignSelf: 'center' }}>
+                                <span className={`status-badge status-${contact.status || 'new'}`} style={{ fontSize: '0.7rem' }}>
+                                  {contact.status === 'new' ? (language === 'en' ? 'New' : 'নতুন') :
+                                    contact.status === 'read' ? (language === 'en' ? 'Read' : 'পঠিত') :
+                                      (language === 'en' ? 'Replied' : 'উত্তর')}
+                                </span>
+                              </div>
+                            </div>
+
+                            {expandedContactId === contact._id && (
+                              <div className="mobile-card-body">
+                                <div className="mobile-card-row">
+                                  <span className="mobile-card-label">{adminContent.email}</span>
+                                  <span className="mobile-card-value">{contact.email}</span>
+                                </div>
+                                <div className="mobile-card-row">
+                                  <span className="mobile-card-label">{adminContent.phone}</span>
+                                  <span className="mobile-card-value">{contact.phone}</span>
+                                </div>
+                                <div className="mobile-card-row" style={{ flexDirection: 'column', alignItems: 'flex-start', gap: '0.25rem' }}>
+                                  <span className="mobile-card-label">{adminContent.message}</span>
+                                  <span className="mobile-card-value" style={{ textAlign: 'left', width: '100%', wordBreak: 'break-word', whiteSpace: 'normal' }}>
+                                    {contact.message}
+                                  </span>
+                                </div>
+                                <div className="mobile-card-actions">
+                                  {contact.status !== 'read' && (
+                                    <button
+                                      className="mobile-action-btn"
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        handleUpdateContactStatus(contact._id, 'read');
+                                      }}
+                                      style={{ backgroundColor: '#3b82f6', color: 'white', border: 'none' }}
+                                    >
+                                      {language === 'en' ? 'Read' : 'পঠিত'}
+                                    </button>
+                                  )}
+                                  {contact.status !== 'replied' && (
+                                    <button
+                                      className="mobile-action-btn"
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        handleUpdateContactStatus(contact._id, 'replied');
+                                      }}
+                                      style={{ backgroundColor: '#22c55e', color: 'white', border: 'none' }}
+                                    >
+                                      {language === 'en' ? 'Replied' : 'উত্তর'}
+                                    </button>
+                                  )}
+                                  <button
+                                    className="mobile-action-btn"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      handleDeleteContact(contact._id);
+                                    }}
+                                    style={{ backgroundColor: '#ef4444', color: 'white', border: 'none' }}
+                                  >
+                                    {language === 'en' ? 'Delete' : 'মুছুন'}
+                                  </button>
+                                </div>
+                              </div>
+                            )}
+                          </div>
+                        ))
+                    )}
+                  </div>
+                </>
+              )}
+            </div>
+          )}
+
+          {/* Notices Tab */}
+          {/* Notices Tab */}
+          {/* Notices Tab */}
+          {activeTab === 'notices' && (
+            <div className="admin-tab-content">
+              <div className="admin-tab-header" style={{ marginBottom: '2rem' }}>
+                <h1 className="admin-page-title">{adminContent.manageNotices}</h1>
+                <button
+                  className="admin-btn btn-primary"
+                  onClick={() => setShowCreateNoticeCard(true)}
+                  style={{
+                    backgroundColor: '#22c55e',
+                    border: 'none',
+                    transition: 'all 0.2s',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '0.5rem'
+                  }}
+                  onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#16a34a'}
+                  onMouseLeave={(e) => e.currentTarget.style.backgroundColor = '#22c55e'}
+                >
+                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <line x1="12" y1="5" x2="12" y2="19"></line>
+                    <line x1="5" y1="12" x2="19" y2="12"></line>
+                  </svg>
+                  {adminContent.addNew}
+                </button>
+              </div>
+
+              <div className="admin-notice-grid">
+                {/* Calendar Sidebar */}
+                <div className="admin-notice-card">
+                  <div className="admin-calendar-header" onClick={() => {
+                    if (window.innerWidth <= 1024) {
+                      setIsNoticeCalendarExpanded(!isNoticeCalendarExpanded);
+                    }
+                  }} style={{ cursor: window.innerWidth <= 1024 ? 'pointer' : 'default' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', justifyContent: 'center', width: '100%' }}>
+                      <button onClick={(e) => { e.stopPropagation(); handlePreviousNoticeMonth(); }} className="calendar-nav-btn">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                          <polyline points="15 18 9 12 15 6"></polyline>
+                        </svg>
+                      </button>
+                      <h3 style={{ margin: 0 }}>
+                        {noticeSelectedDate ? (
+                          language === 'en'
+                            ? new Date(noticeSelectedDate).toLocaleDateString('en-US', { day: 'numeric', month: 'long', year: 'numeric' })
+                            : new Date(noticeSelectedDate).toLocaleDateString('bn-BD', { day: 'numeric', month: 'long', year: 'numeric' })
+                        ) : (
+                          language === 'en'
+                            ? new Date(noticeCurrentYear, noticeCurrentMonth).toLocaleString('default', { month: 'long', year: 'numeric' })
+                            : new Date(noticeCurrentYear, noticeCurrentMonth).toLocaleDateString('bn-BD', { month: 'long', year: 'numeric' })
+                        )}
+                      </h3>
+                      <button onClick={(e) => { e.stopPropagation(); handleNextNoticeMonth(); }} className="calendar-nav-btn">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                          <polyline points="9 18 15 12 9 6"></polyline>
+                        </svg>
+                      </button>
+                    </div>
+                    <div className="calendar-expand-icon" style={{ display: 'none' }}>
+                      <svg
+                        width="20"
+                        height="20"
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke="currentColor"
+                        strokeWidth="2"
+                        className={isNoticeCalendarExpanded ? 'rotate-180' : ''}
+                        style={{ transition: 'transform 0.3s ease' }}
+                      >
+                        <polyline points="6 9 12 15 18 9"></polyline>
+                      </svg>
+                    </div>
+                  </div>
+                  <div className={`calendar-content-wrapper ${isNoticeCalendarExpanded ? 'expanded' : ''}`}>
+                    <div className="calendar-grid">
+                      {['S', 'M', 'T', 'W', 'T', 'F', 'S'].map((d, i) => (
+                        <div key={i} className="calendar-day-header">{d}</div>
+                      ))}
+                      {renderNoticeCalendar()}
+                    </div>
+                  </div>
+                  {noticeSelectedDate && (
+                    <div style={{ marginTop: '1.5rem', textAlign: 'center' }}>
+                      <button
+                        className="admin-btn btn-secondary"
+                        onClick={() => setNoticeSelectedDate('')}
+                        style={{ width: '100%' }}
+                      >
+                        {language === 'en' ? 'Show All Notices' : 'সব নোটিশ দেখুন'}
+                      </button>
+                    </div>
+                  )}
+                </div>
+
+                {/* Right Column: Create Card & List */}
+
+                {/* Create Notice Card */}
+                {showCreateNoticeCard && (
+                  <div className="admin-notice-form-overlay" style={{
+                    position: 'fixed',
+                    top: 0,
+                    left: 0,
+                    right: 0,
+                    bottom: 0,
+                    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    zIndex: 1000,
+                    padding: '1rem'
+                  }} onClick={() => setShowCreateNoticeCard(false)}>
+                    <div className="admin-modal-content" style={{ maxWidth: '800px', width: '100%', position: 'relative', overflow: 'hidden', padding: 0 }} onClick={(e) => e.stopPropagation()}>
+                      {/* Decorative Gradients (keeping them inside the card for that premium look) */}
+                      <div style={{
+                        position: 'absolute',
+                        inset: 0,
+                        pointerEvents: 'none',
+                        overflow: 'hidden',
+                        borderRadius: '0.75rem'
+                      }}>
+                        <div style={{
+                          position: 'absolute',
+                          width: '260px',
+                          height: '260px',
+                          top: '-120px',
+                          left: '-80px',
+                          background: 'radial-gradient(circle at 30% 30%, rgba(59,130,246,0.15), transparent 60%)',
+                          filter: 'blur(20px)'
+                        }} />
+                        <div style={{
+                          position: 'absolute',
+                          width: '240px',
+                          height: '240px',
+                          bottom: '-140px',
+                          right: '-100px',
+                          background: 'radial-gradient(circle at 70% 70%, rgba(16,185,129,0.12), transparent 60%)',
+                          filter: 'blur(20px)'
+                        }} />
+                      </div>
+
+                      <div style={{ position: 'relative', zIndex: 1, padding: '1.5rem' }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem', gap: '1rem' }}>
+                          <div>
+                            <h2 style={{ margin: 0, fontSize: '1.5rem', fontWeight: 800, color: '#0f172a' }}>
+                              {language === 'en' ? 'Add Notice' : 'নোটিশ যোগ করুন'}
+                            </h2>
+                            <p style={{ margin: '0.25rem 0 0 0', color: '#475569', fontWeight: 600 }}>
+                              {language === 'en' ? 'Fill in notice details and save' : 'নোটিশের বিবরণ পূরণ করুন এবং সংরক্ষণ করুন'}
+                            </p>
+                          </div>
+                          <button
+                            onClick={() => {
+                              setShowCreateNoticeCard(false)
+                            }}
+                            style={{
+                              background: '#e2e8f0',
+                              border: 'none',
+                              padding: '0.4rem 0.65rem',
+                              borderRadius: '0.375rem',
+                              cursor: 'pointer',
+                              fontWeight: 700,
+                              color: '#475569'
+                            }}
+                          >
+                            ×
+                          </button>
+                        </div>
+
+                        <form onSubmit={handleCreateNotice}>
+                          <div className="admin-form-grid">
+                            <div className="admin-form-group" style={{ gridColumn: 'span 2' }}>
+                              <label>{language === 'en' ? 'Title' : 'শিরোনাম'}</label>
+                              <input
+                                type="text"
+                                value={newNotice.title}
+                                onChange={(e) => setNewNotice({ ...newNotice, title: e.target.value })}
+                                required
+                                style={{ padding: '0.75rem' }}
+                              />
+                            </div>
+                            <div className="admin-form-group">
+                              <label>{language === 'en' ? 'Date' : 'তারিখ'}</label>
+                              <input
+                                type="date"
+                                value={newNotice.date}
+                                onChange={(e) => setNewNotice({ ...newNotice, date: e.target.value })}
+                                required
+                                style={{ width: '100%', padding: '0.75rem', borderRadius: '0.375rem', border: '1px solid #d1d5db' }}
+                              />
+                            </div>
+                            <div className="admin-form-group">
+                              <label>{language === 'en' ? 'Photo (Optional)' : 'ছবি (ঐচ্ছিক)'}</label>
+                              <input
+                                type="file"
+                                accept="image/*"
+                                onChange={(e) => setNoticePhotoFile(e.target.files[0])}
+                                style={{ width: '100%', padding: '0.5rem', borderRadius: '0.375rem', border: '1px solid #d1d5db', fontSize: '0.875rem' }}
+                              />
+                            </div>
+                            <div className="admin-form-group" style={{ gridColumn: 'span 2' }}>
+                              <label>{language === 'en' ? 'Content' : 'বিষয়বস্তু'}</label>
+                              <textarea
+                                value={newNotice.content}
+                                onChange={(e) => setNewNotice({ ...newNotice, content: e.target.value })}
+                                rows="4"
+                                required
+                                style={{ padding: '0.75rem' }}
+                              />
+                            </div>
+                          </div>
+
+                          <div className="admin-form-group checkbox-group" style={{ marginTop: '1rem' }}>
+                            <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer', fontWeight: 600 }}>
+                              <input
+                                type="checkbox"
+                                checked={newNotice.important}
+                                onChange={(e) => setNewNotice({ ...newNotice, important: e.target.checked })}
+                                style={{ width: '1.2rem', height: '1.2rem' }}
+                              />
+                              {language === 'en' ? 'Mark as Important' : 'গুরুত্বপূর্ণ হিসেবে চিহ্নিত করুন'}
+                            </label>
+                          </div>
+
+                          <div style={{ display: 'flex', gap: '0.75rem', marginTop: '1.5rem' }}>
+                            <button
+                              type="submit"
+                              className="admin-save-btn"
+                              disabled={loadingNotices}
+                            >
+                              {loadingNotices ? (language === 'en' ? 'Saving...' : 'সংরক্ষণ হচ্ছে...') : adminContent.save}
+                            </button>
+                            <button
+                              type="button"
+                              className="admin-remove-btn"
+                              onClick={() => setShowCreateNoticeCard(false)}
+                            >
+                              {adminContent.cancel}
+                            </button>
+                          </div>
+                        </form>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* Notices List */}
+                <div className="admin-notice-card">
+                  <div className="notice-list-header">
+                    <h3 className="notice-list-title">
+                      {noticeSelectedDate
+                        ? (language === 'en' ? `Notices for ${noticeSelectedDate}` : `${noticeSelectedDate} তারিখের নোটিশ`)
+                        : (language === 'en' ? 'All Notices' : 'সমস্ত নোটিশ')}
+                    </h3>
+                  </div>
+                  <div className="notice-list-container">
+                    {loadingNotices ? (
+                      <div style={{ padding: '4rem', textAlign: 'center' }}>
+                        <LoadingSpinner />
+                      </div>
+                    ) : (
+                      <>
+                        <div className="admin-table-container">
+                          <table className="admin-table">
+                            <thead>
+                              <tr>
+                                <th style={{ width: '130px' }}>{adminContent.date}</th>
+                                <th>{language === 'en' ? 'Details' : 'বিস্তারিত'}</th>
+                                <th style={{ width: '80px', textAlign: 'right' }}>{language === 'en' ? 'Actions' : 'কার্যক্রম'}</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {notices.length > 0 ? (
+                                notices
+                                  .filter(n => !noticeSelectedDate || normalizeNoticeDate(n.date) === noticeSelectedDate)
+                                  .map((notice) => (
+                                    <tr key={notice._id}>
+                                      <td style={{ verticalAlign: 'top', paddingTop: '1rem' }}>
+                                        <span style={{ fontWeight: 600, color: '#64748b' }}>
+                                          {formatNoticeDate(notice.date)}
+                                        </span>
+                                      </td>
+                                      <td style={{ verticalAlign: 'top', paddingTop: '1rem' }}>
+                                        <div style={{ fontWeight: '700', fontSize: '1.05rem', marginBottom: '0.4rem', color: '#1e293b' }}>
+                                          {notice.title}
+                                        </div>
+                                        <div style={{ color: '#475467', lineHeight: '1.6', fontSize: '0.95rem', marginBottom: '0.5rem' }}>
+                                          {notice.content}
+                                        </div>
+                                        {notice.important && (
+                                          <span className="status-badge status-urgent">
+                                            {language === 'en' ? 'Important' : 'গুরুত্বপূর্ণ'}
+                                          </span>
+                                        )}
+                                      </td>
+                                      <td style={{ verticalAlign: 'top', paddingTop: '1rem', textAlign: 'right' }}>
+                                        <button
+                                          className="btn-delete"
+                                          onClick={() => handleDeleteNotice(notice._id)}
+                                          title={adminContent.delete}
+                                        >
+                                          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ width: '18px', height: '18px' }}>
+                                            <polyline points="3 6 5 6 21 6"></polyline>
+                                            <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
+                                          </svg>
+                                        </button>
+                                      </td>
+                                    </tr>
+                                  ))
+                              ) : (
+                                <tr>
+                                  <td colSpan="3" style={{ textAlign: 'center', padding: '4rem', color: '#94a3b8' }}>
+                                    {adminContent.noData}
+                                  </td>
+                                </tr>
+                              )}
+                            </tbody>
+                          </table>
+                        </div>
+
+                        {/* Mobile Card View for Notices */}
+                        <div className="mobile-card-container">
+                          {notices.length > 0 ? (
+                            notices
+                              .filter(n => !noticeSelectedDate || normalizeNoticeDate(n.date) === noticeSelectedDate)
+                              .map((notice, index) => (
+                                <div className="mobile-card" key={notice._id || index}>
+                                  <div className="mobile-card-header">
+                                    <div className="mobile-card-avatar" style={{ backgroundColor: notice.important ? '#fef2f2' : '#f8fafc', color: notice.important ? '#ef4444' : '#64748b' }}>
+                                      {notice.important ? '!' : 'N'}
+                                    </div>
+                                    <div className="mobile-card-header-text">
+                                      <div className="mobile-card-title">{notice.title}</div>
+                                      <div className="mobile-card-subtitle">{formatNoticeDate(notice.date)}</div>
+                                    </div>
+                                    <div style={{ marginLeft: 'auto', alignSelf: 'center' }}>
+                                      <button
+                                        onClick={() => handleDeleteNotice(notice._id)}
+                                        style={{ background: 'none', border: 'none', color: '#ef4444', cursor: 'pointer', padding: '0.5rem' }}
+                                      >
+                                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ width: '18px', height: '18px' }}>
+                                          <polyline points="3 6 5 6 21 6"></polyline>
+                                          <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
+                                        </svg>
+                                      </button>
+                                    </div>
+                                  </div>
+                                  <div className="mobile-card-body">
+                                    <div style={{ color: '#475467', lineHeight: '1.6', fontSize: '0.9rem' }}>
+                                      {notice.content}
+                                    </div>
+                                    {notice.important && (
+                                      <div style={{ marginTop: '0.75rem' }}>
+                                        <span className="status-badge status-urgent" style={{ fontSize: '0.7rem' }}>
+                                          {language === 'en' ? 'Important' : 'গুরুত্বপূর্ণ'}
+                                        </span>
+                                      </div>
+                                    )}
+                                  </div>
+                                </div>
+                              ))
+                          ) : (
+                            <div style={{ textAlign: 'center', padding: '2rem', color: '#94a3b8' }}>
+                              {adminContent.noData}
+                            </div>
+                          )}
+                        </div>
+                      </>
+                    )}
+                  </div>
+                </div>
+              </div>
+
+              {/* Add Notice Modal */}
+              {/* Add Notice Modal Removed */}
+            </div>
+          )}
+
+          {activeTab === 'blogs' && (
+            <div className="admin-tab-content">
+              <div className="admin-tab-header">
+                <h1 className="admin-page-title">{adminContent.manageBlogs}</h1>
+                <button
+                  className="admin-add-btn"
+                  onClick={() => {
+                    resetBlogForm()
+                    setShowBlogModal(true)
+                  }}
+                >
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ width: '18px', height: '18px' }}>
+                    <line x1="12" y1="5" x2="12" y2="19"></line>
+                    <line x1="5" y1="12" x2="19" y2="12"></line>
+                  </svg>
+                  {adminContent.addNew}
+                </button>
+              </div>
+
+              <div className="admin-notice-card">
+                <div className="notice-list-container">
+                  {loadingBlogs ? (
+                    <div style={{ padding: '4rem', textAlign: 'center' }}>
+                      <LoadingSpinner />
+                    </div>
+                  ) : (
+                    <div className="admin-blog-grid">
+                      {blogs.length > 0 ? (
+                        blogs.map((blog) => (
+                          <div className="admin-blog-card" key={blog._id}>
+                            <div className="admin-blog-card-image-container">
+                              <img
+                                src={getImageUrl(blog.image)}
+                                alt={language === 'en' ? blog.title : (blog.titleBn || blog.title)}
+                                className="admin-blog-card-image"
+                              />
+                              <div className="admin-blog-card-category">{blog.category}</div>
+                            </div>
+                            <div className="admin-blog-card-content">
+                              <h3 className="admin-blog-card-title">{language === 'en' ? blog.title : (blog.titleBn || blog.title)}</h3>
+                              <div className="admin-blog-card-meta">
+                                <span className="admin-blog-card-author">{language === 'en' ? blog.author : (blog.authorBn || blog.author)}</span>
+                                <span className="admin-blog-card-date">{blog.date}</span>
+                              </div>
+                            </div>
+                            <div className="admin-blog-card-actions">
+                              <button className="btn-edit" onClick={() => handleEditBlog(blog)} title={adminContent.edit}>
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ width: '18px', height: '18px' }}>
+                                  <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path>
+                                  <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path>
+                                </svg>
+                              </button>
+                              <button className="btn-delete" onClick={() => handleDeleteBlog(blog._id)} title={adminContent.delete}>
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ width: '18px', height: '18px' }}>
+                                  <polyline points="3 6 5 6 21 6"></polyline>
+                                  <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
+                                </svg>
+                              </button>
+                            </div>
+                          </div>
+                        ))
+                      ) : (
+                        <div style={{ gridColumn: '1 / -1', textAlign: 'center', padding: '4rem', color: '#94a3b8' }}>
+                          {adminContent.noData}
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
               </div>
             </div>
           )}
@@ -8159,7 +9398,7 @@ function AdminPage({ language, toggleLanguage, t }) {
                             nameEn: '', nameBn: '',
                             roleEn: '', roleBn: '',
                             expertiseEn: '', expertiseBn: '',
-                            photo: '',
+                            photo: '', photoAdjustment: { top: 50, left: 50 },
                             group: 'management'
                           })
                           setShowTeamModal(true)
@@ -8207,7 +9446,7 @@ function AdminPage({ language, toggleLanguage, t }) {
                                 width: '100%',
                                 height: '100%',
                                 objectFit: 'cover',
-                                objectPosition: 'center top'
+                                objectPosition: `${member.photoAdjustment?.left || 50}% ${member.photoAdjustment?.top || 50}%`
                               }}
                             />
                             <div style={{
@@ -8284,7 +9523,7 @@ function AdminPage({ language, toggleLanguage, t }) {
                                     roleBn: member.role?.bn || '',
                                     expertiseEn: member.expertise?.en || '',
                                     expertiseBn: member.expertise?.bn || '',
-                                    photo: member.photo || '',
+                                    photo: member.photo || '', photoAdjustment: member.photoAdjustment || { top: 50, left: 50 },
                                     group: member.group || 'management'
                                   })
                                   setShowTeamModal(true)
@@ -8708,7 +9947,7 @@ function AdminPage({ language, toggleLanguage, t }) {
                     phone: '',
                     email: '',
                     address: '',
-                    photo: '',
+                    photo: '', photoAdjustment: { top: 50, left: 50 },
                     nid: '',
                     tradeLicense: '',
                     pesticideLicense: '',
@@ -8766,7 +10005,7 @@ function AdminPage({ language, toggleLanguage, t }) {
                             phone: '',
                             email: '',
                             address: '',
-                            photo: '',
+                            photo: '', photoAdjustment: { top: 50, left: 50 },
                             nid: '',
                             tradeLicense: '',
                             pesticideLicense: '',
@@ -8977,7 +10216,7 @@ function AdminPage({ language, toggleLanguage, t }) {
                                 phone: '',
                                 email: '',
                                 address: '',
-                                photo: '',
+                                photo: '', photoAdjustment: { top: 50, left: 50 },
                                 nid: '',
                                 tradeLicense: '',
                                 pesticideLicense: '',
@@ -11420,7 +12659,7 @@ function AdminPage({ language, toggleLanguage, t }) {
                                     setEmployeeStatus(language === 'en' ? 'Saved to database' : 'ডাটাবেজে সংরক্ষিত')
                                   }
 
-                                  setNewEmployee({ name: '', email: '', phone: '', address: '', nid: '', document: '', emergencyContactName: '', emergencyContact: '', salary: '', salesTarget: '', bankName: '', bankBranch: '', accountNumber: '', department: '', regionId: '', areaId: '', territoryId: '', postingArea: '', role: '', designation: '', photo: '', status: 'Unpaid' })
+                                  setNewEmployee({ name: '', email: '', phone: '', address: '', nid: '', document: '', emergencyContactName: '', emergencyContact: '', salary: '', salesTarget: '', bankName: '', bankBranch: '', accountNumber: '', department: '', regionId: '', areaId: '', territoryId: '', postingArea: '', role: '', designation: '', photo: '', photoAdjustment: { top: 50, left: 50 }, status: 'Unpaid' })
                                   // Don't close form if credentials are shown
                                   if (!data.data.generatedPassword) {
                                     setShowEmployeeForm(false)
@@ -17222,27 +18461,59 @@ function AdminPage({ language, toggleLanguage, t }) {
                                 <td>
                                   <div style={{ display: 'flex', gap: '0.5rem' }}>
                                     <button
-                                      className="admin-action-btn edit"
                                       onClick={() => {
                                         setTerritoryForm(territory)
                                         setShowTerritoryForm(true)
                                       }}
+                                      style={{
+                                        padding: '0.4rem 0.8rem',
+                                        fontSize: '0.75rem',
+                                        backgroundColor: '#3b82f6',
+                                        color: 'white',
+                                        border: 'none',
+                                        borderRadius: '6px',
+                                        cursor: 'pointer',
+                                        fontWeight: '500',
+                                        transition: 'all 0.2s',
+                                        display: 'flex',
+                                        alignItems: 'center',
+                                        gap: '0.25rem'
+                                      }}
+                                      onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#2563eb'}
+                                      onMouseLeave={(e) => e.currentTarget.style.backgroundColor = '#3b82f6'}
                                       title={language === 'en' ? 'Edit' : 'সম্পাদনা'}
                                     >
-                                      <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                                        <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-                                        <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+                                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ width: '14px', height: '14px' }}>
+                                        <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" strokeLinecap="round" strokeLinejoin="round" />
+                                        <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" strokeLinecap="round" strokeLinejoin="round" />
                                       </svg>
+                                      {language === 'en' ? 'Edit' : 'সম্পাদনা'}
                                     </button>
                                     <button
-                                      className="admin-action-btn delete"
                                       onClick={() => handleDeleteTerritory(territory._id)}
+                                      style={{
+                                        padding: '0.4rem 0.8rem',
+                                        fontSize: '0.75rem',
+                                        backgroundColor: '#ef4444',
+                                        color: 'white',
+                                        border: 'none',
+                                        borderRadius: '6px',
+                                        cursor: 'pointer',
+                                        fontWeight: '500',
+                                        transition: 'all 0.2s',
+                                        display: 'flex',
+                                        alignItems: 'center',
+                                        gap: '0.25rem'
+                                      }}
+                                      onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#dc2626'}
+                                      onMouseLeave={(e) => e.currentTarget.style.backgroundColor = '#ef4444'}
                                       title={language === 'en' ? 'Delete' : 'মুছুন'}
                                     >
-                                      <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                                        <polyline points="3 6 5 6 21 6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-                                        <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+                                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ width: '14px', height: '14px' }}>
+                                        <polyline points="3 6 5 6 21 6" strokeLinecap="round" strokeLinejoin="round" />
+                                        <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" strokeLinecap="round" strokeLinejoin="round" />
                                       </svg>
+                                      {language === 'en' ? 'Delete' : 'মুছুন'}
                                     </button>
                                   </div>
                                 </td>
@@ -17336,6 +18607,7 @@ function AdminPage({ language, toggleLanguage, t }) {
                     <div className="admin-revenue-controls">
                       <div className="revenue-filters">
                         <select
+                          className="revenue-filter-select"
                           value={revenueFilterType}
                           onChange={(e) => setRevenueFilterType(e.target.value)}
                           style={{
@@ -17353,7 +18625,7 @@ function AdminPage({ language, toggleLanguage, t }) {
                         </select>
 
                         {revenueFilterType === 'monthly' && (
-                          <div style={{ display: 'flex', gap: '0.5rem' }}>
+                          <div className="revenue-sub-filters" style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
                             <select
                               className="revenue-filter-select"
                               value={revenueSelectedMonth}
@@ -17392,8 +18664,9 @@ function AdminPage({ language, toggleLanguage, t }) {
                         )}
 
                         {revenueFilterType === 'half-yearly' && (
-                          <div style={{ display: 'flex', gap: '0.5rem' }}>
+                          <div className="revenue-sub-filters" style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
                             <select
+                              className="revenue-filter-select"
                               value={revenueSelectedHalf}
                               onChange={(e) => setRevenueSelectedHalf(e.target.value)}
                               style={{
@@ -17408,6 +18681,7 @@ function AdminPage({ language, toggleLanguage, t }) {
                               <option value="H2">{language === 'en' ? '2nd Half (Jul-Dec)' : '২য় অর্ধ (জুলাই-ডিসে)'}</option>
                             </select>
                             <select
+                              className="revenue-filter-select"
                               value={revenueSelectedYear}
                               onChange={(e) => setRevenueSelectedYear(parseInt(e.target.value))}
                               style={{
@@ -17427,6 +18701,7 @@ function AdminPage({ language, toggleLanguage, t }) {
 
                         {revenueFilterType === 'yearly' && (
                           <select
+                            className="revenue-filter-select"
                             value={revenueSelectedYear}
                             onChange={(e) => setRevenueSelectedYear(parseInt(e.target.value))}
                             style={{
@@ -17919,43 +19194,35 @@ function AdminPage({ language, toggleLanguage, t }) {
                       </div>
                     </div>
 
-                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(450px, 1fr))', gap: '2rem' }}>
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 450px), 1fr))', gap: '2rem' }}>
 
                       {/* Product-wise Sale Summary */}
-                      <div className="admin-settings-card">
+                      <div className="admin-settings-card" style={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
                         <h3>{language === 'en' ? 'Product Wise Sale Summary' : 'পণ্য অনুযায়ী বিক্রয় সারাংশ'}</h3>
-                        <div className="admin-table-container.no-horizontal-scroll" style={{ maxHeight: '500px', overflowY: 'auto' }}>
-                          <table className="admin-table">
-                            <thead style={{ position: 'sticky', top: 0, zIndex: 10 }}>
+                        <div className="admin-table-container" style={{ maxHeight: '500px', overflowY: 'auto', overflowX: 'auto' }}>
+                          <table className="admin-table" style={{ borderCollapse: 'separate', borderSpacing: 0 }}>
+                            <thead>
                               <tr>
-                                <th>{language === 'en' ? 'ID' : 'আইডি'}</th>
-                                <th>{language === 'en' ? 'Product Name' : 'পণ্যের নাম'}</th>
-                                <th>{language === 'en' ? 'Variant' : 'ভ্যারিয়েন্ট'}</th>
-                                <th>{language === 'en' ? 'Sold Qty' : 'বিক্রিত সংখ্যা'}</th>
-                                <th>{language === 'en' ? 'Total Value' : 'মোট মূল্য'}</th>
+                                <th style={{ position: 'sticky', top: 0, backgroundColor: '#f8fafc', borderBottom: '2px solid #e2e8f0', zIndex: 1000, whiteSpace: 'nowrap', padding: '0.75rem 1rem', textAlign: 'left', fontWeight: '600', color: '#475467' }}>{language === 'en' ? 'ID' : 'আইডি'}</th>
+                                <th style={{ position: 'sticky', top: 0, backgroundColor: '#f8fafc', borderBottom: '2px solid #e2e8f0', zIndex: 1000, whiteSpace: 'nowrap', padding: '0.75rem 1rem', textAlign: 'left', fontWeight: '600', color: '#475467' }}>{language === 'en' ? 'Product Name' : 'পণ্যের নাম'}</th>
+                                <th style={{ position: 'sticky', top: 0, backgroundColor: '#f8fafc', borderBottom: '2px solid #e2e8f0', zIndex: 1000, whiteSpace: 'nowrap', padding: '0.75rem 1rem', textAlign: 'left', fontWeight: '600', color: '#475467' }}>{language === 'en' ? 'Variant' : 'ভ্যারিয়েন্ট'}</th>
+                                <th style={{ position: 'sticky', top: 0, backgroundColor: '#f8fafc', borderBottom: '2px solid #e2e8f0', zIndex: 1000, whiteSpace: 'nowrap', padding: '0.75rem 1rem', textAlign: 'left', fontWeight: '600', color: '#475467' }}>{language === 'en' ? 'Sold Qty' : 'বিক্রিত সংখ্যা'}</th>
+                                <th style={{ position: 'sticky', top: 0, backgroundColor: '#f8fafc', borderBottom: '2px solid #e2e8f0', zIndex: 1000, whiteSpace: 'nowrap', padding: '0.75rem 1rem', textAlign: 'left', fontWeight: '600', color: '#475467' }}>{language === 'en' ? 'Total Value' : 'মোট মূল্য'}</th>
                               </tr>
                             </thead>
                             <tbody>
                               {productSalesSummary.items.length > 0 ? (
-                                <>
-                                  {productSalesSummary.items.map((item, index) => (
-                                    <tr key={index}>
-                                      <td>{item.variant?.productCode || '-'}</td>
-                                      <td>
-                                        <div style={{ fontWeight: 500 }}>{item.productName}</div>
-                                      </td>
-                                      <td>{item.variantDisplay || '-'}</td>
-                                      <td>{item.quantity}</td>
-                                      <td>{language === 'en' ? '৳' : '৳'} {Math.round(item.totalValue).toLocaleString()}</td>
-                                    </tr>
-                                  ))}
-                                  {/* Footer for Totals */}
-                                  <tr style={{ backgroundColor: '#f8fafc', fontWeight: 800, borderTop: '2px solid #e2e8f0', position: 'sticky', bottom: 0, zIndex: 10 }}>
-                                    <td colSpan="3" style={{ textAlign: 'right' }}>{language === 'en' ? 'Grand Total:' : 'সর্বমোট:'}</td>
-                                    <td>{productSalesSummary.totals.quantity}</td>
-                                    <td>{language === 'en' ? '৳' : '৳'} {Math.round(productSalesSummary.totals.totalValue).toLocaleString()}</td>
+                                productSalesSummary.items.map((item, index) => (
+                                  <tr key={index}>
+                                    <td style={{ borderBottom: '1px solid #e2e8f0', backgroundColor: '#ffffff', padding: '0.75rem 1rem', verticalAlign: 'middle', fontSize: '0.9rem', color: '#1e293b' }}>{item.variant?.productCode || '-'}</td>
+                                    <td style={{ borderBottom: '1px solid #e2e8f0', backgroundColor: '#ffffff', padding: '0.75rem 1rem', verticalAlign: 'middle', fontSize: '0.9rem', color: '#1e293b' }}>
+                                      <div style={{ fontWeight: 500 }}>{item.productName}</div>
+                                    </td>
+                                    <td style={{ borderBottom: '1px solid #e2e8f0', backgroundColor: '#ffffff', padding: '0.75rem 1rem', verticalAlign: 'middle', fontSize: '0.9rem', color: '#1e293b' }}>{item.variantDisplay || '-'}</td>
+                                    <td style={{ borderBottom: '1px solid #e2e8f0', backgroundColor: '#ffffff', padding: '0.75rem 1rem', verticalAlign: 'middle', fontSize: '0.9rem', color: '#1e293b' }}>{item.quantity}</td>
+                                    <td style={{ borderBottom: '1px solid #e2e8f0', backgroundColor: '#ffffff', padding: '0.75rem 1rem', verticalAlign: 'middle', fontSize: '0.9rem', color: '#1e293b' }}>{language === 'en' ? '৳' : '৳'} {Math.round(item.totalValue).toLocaleString()}</td>
                                   </tr>
-                                </>
+                                ))
                               ) : (
                                 <tr>
                                   <td colSpan="5" style={{ textAlign: 'center', padding: '2rem', color: '#6b7280' }}>
@@ -17964,12 +19231,84 @@ function AdminPage({ language, toggleLanguage, t }) {
                                 </tr>
                               )}
                             </tbody>
+                            {productSalesSummary.items.length > 0 && (
+                              <tfoot>
+                                <tr>
+                                  <td colSpan="3" style={{ textAlign: 'right', fontWeight: 800, borderTop: '2px solid #e2e8f0', backgroundColor: '#f8fafc', position: 'sticky', bottom: 0, zIndex: 1000, padding: '0.75rem 1rem', color: '#1e293b' }}>{language === 'en' ? 'Grand Total:' : 'সর্বমোট:'}</td>
+                                  <td style={{ fontWeight: 800, borderTop: '2px solid #e2e8f0', backgroundColor: '#f8fafc', position: 'sticky', bottom: 0, zIndex: 1000, padding: '0.75rem 1rem', color: '#1e293b' }}>{productSalesSummary.totals.quantity}</td>
+                                  <td style={{ fontWeight: 800, borderTop: '2px solid #e2e8f0', backgroundColor: '#f8fafc', position: 'sticky', bottom: 0, zIndex: 1000, padding: '0.75rem 1rem', color: '#1e293b' }}>{language === 'en' ? '৳' : '৳'} {Math.round(productSalesSummary.totals.totalValue).toLocaleString()}</td>
+                                </tr>
+                              </tfoot>
+                            )}
                           </table>
+                        </div>
+
+                        {/* Mobile View for Product Sale Summary */}
+                        <div className="mobile-card-container">
+                          {productSalesSummary.items.length > 0 ? (
+                            <>
+                              <div className={!isProductSummaryExpanded ? 'mobile-hidden' : ''}>
+                                {productSalesSummary.items.map((item, index) => (
+                                  <div className="mobile-card" key={index}>
+                                    <div className="mobile-card-header">
+                                      <div className="mobile-card-avatar" style={{ backgroundColor: '#f0fdf4', color: '#16a34a' }}>
+                                        {item.productName.charAt(0).toUpperCase()}
+                                      </div>
+                                      <div className="mobile-card-header-text">
+                                        <div className="mobile-card-title">{item.productName}</div>
+                                        <div className="mobile-card-subtitle">{item.variantDisplay || '-'}</div>
+                                        <div className="mobile-card-subtitle" style={{ fontSize: '0.75rem' }}>{item.variant?.productCode || '-'}</div>
+                                      </div>
+                                    </div>
+                                    <div className="mobile-card-body">
+                                      <div className="mobile-card-row">
+                                        <span className="mobile-card-label">{language === 'en' ? 'Sold Qty' : 'বিক্রিত সংখ্যা'}</span>
+                                        <span className="mobile-card-value" style={{ fontWeight: 700 }}>{item.quantity}</span>
+                                      </div>
+                                      <div className="mobile-card-row">
+                                        <span className="mobile-card-label">{language === 'en' ? 'Total Value' : 'মোট মূল্য'}</span>
+                                        <span className="mobile-card-value" style={{ fontWeight: 700, color: '#16a34a' }}>
+                                          ৳{Math.round(item.totalValue).toLocaleString()}
+                                        </span>
+                                      </div>
+                                    </div>
+                                  </div>
+                                ))}
+                              </div>
+
+                              {/* Total Card for Mobile - Always Visible & Clickable */}
+                              <div
+                                className="mobile-card mobile-collapsible-summary"
+                                style={{ backgroundColor: '#f8fafc', border: '2px solid #e2e8f0', cursor: 'pointer' }}
+                                onClick={() => setIsProductSummaryExpanded(!isProductSummaryExpanded)}
+                              >
+                                <div className="mobile-card-body">
+                                  <div className="mobile-card-row">
+                                    <span className="mobile-card-label" style={{ fontWeight: 800 }}>{language === 'en' ? 'Grand Total Qty' : 'সর্বমোট সংখ্যা'}</span>
+                                    <span className="mobile-card-value" style={{ fontWeight: 800 }}>{productSalesSummary.totals.quantity}</span>
+                                  </div>
+                                  <div className="mobile-card-row">
+                                    <span className="mobile-card-label" style={{ fontWeight: 800 }}>{language === 'en' ? 'Grand Total Value' : 'সর্বমোট মূল্য'}</span>
+                                    <span className="mobile-card-value" style={{ fontWeight: 800, color: '#16a34a', fontSize: '1.1rem' }}>
+                                      ৳{Math.round(productSalesSummary.totals.totalValue).toLocaleString()}
+                                    </span>
+                                  </div>
+                                  <div style={{ textAlign: 'center', marginTop: '0.5rem', color: '#64748b', fontSize: '0.75rem' }}>
+                                    {isProductSummaryExpanded ? (language === 'en' ? 'Tap to collapse' : 'সংকুচিত করতে আলতো চাপুন') : (language === 'en' ? 'Tap to view details' : 'বিস্তারিত দেখতে আলতো চাপুন')}
+                                  </div>
+                                </div>
+                              </div>
+                            </>
+                          ) : (
+                            <div style={{ textAlign: 'center', padding: '2rem', color: '#6b7280', background: 'white', borderRadius: '12px' }}>
+                              {language === 'en' ? 'No sales data found' : 'কোন বিক্রয় তথ্য পাওয়া যায়নি'}
+                            </div>
+                          )}
                         </div>
                       </div>
 
                       {/* Ledger (formerly Customer Wise Sale Summary) */}
-                      <div className="admin-settings-card">
+                      <div className="admin-settings-card" style={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
                         <div style={{ marginBottom: '1.5rem' }}>
                           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: ledgerEmployeeInfo ? '1.5rem' : 0, flexWrap: 'wrap', gap: '1rem' }}>
                             <h3 style={{ margin: 0 }}>{language === 'en' ? 'Ledger' : 'লেজার'}</h3>
@@ -18007,68 +19346,59 @@ function AdminPage({ language, toggleLanguage, t }) {
                             </div>
                           )}
                         </div>
-                        <div className="admin-table-container.no-horizontal-scroll" style={{ maxHeight: '500px', overflowY: 'auto' }}>
-                          <table className="admin-table">
-                            <thead style={{ position: 'sticky', top: 0, zIndex: 10 }}>
+                        <div className="admin-table-container" style={{ maxHeight: '500px', overflowY: 'auto', overflowX: 'auto' }}>
+                          <table className="admin-table" style={{ borderCollapse: 'separate', borderSpacing: 0 }}>
+                            <thead>
                               <tr>
                                 {customerSalesSummary.viewMode === 'region' && (
                                   <>
-                                    <th>{language === 'en' ? 'Region ID' : 'অঞ্চল আইডি'}</th>
-                                    <th>{language === 'en' ? 'Zilla' : 'জেলা'}</th>
-                                    <th>{language === 'en' ? 'Total Amount' : 'মোট পরিমাণ'}</th>
-                                    <th>{language === 'en' ? 'Paid' : 'পরিশোধিত'}</th>
-                                    <th>{language === 'en' ? 'Due' : 'বাকি'}</th>
+                                    <th style={{ position: 'sticky', top: 0, backgroundColor: '#f8fafc', borderBottom: '2px solid #e2e8f0', zIndex: 30 }}>{language === 'en' ? 'Region ID' : 'অঞ্চল আইডি'}</th>
+                                    <th style={{ position: 'sticky', top: 0, backgroundColor: '#f8fafc', borderBottom: '2px solid #e2e8f0', zIndex: 30 }}>{language === 'en' ? 'Zilla' : 'জেলা'}</th>
+                                    <th style={{ position: 'sticky', top: 0, backgroundColor: '#f8fafc', borderBottom: '2px solid #e2e8f0', zIndex: 30 }}>{language === 'en' ? 'Total Amount' : 'মোট পরিমাণ'}</th>
+                                    <th style={{ position: 'sticky', top: 0, backgroundColor: '#f8fafc', borderBottom: '2px solid #e2e8f0', zIndex: 30 }}>{language === 'en' ? 'Paid' : 'পরিশোধিত'}</th>
+                                    <th style={{ position: 'sticky', top: 0, backgroundColor: '#f8fafc', borderBottom: '2px solid #e2e8f0', zIndex: 30 }}>{language === 'en' ? 'Due' : 'বাকি'}</th>
                                   </>
                                 )}
                                 {customerSalesSummary.viewMode === 'area' && (
                                   <>
-                                    <th>{language === 'en' ? 'Area ID' : 'এলাকা আইডি'}</th>
-                                    <th>{language === 'en' ? 'Area' : 'এলাকা'}</th>
-                                    <th>{language === 'en' ? 'Total Amount' : 'মোট পরিমাণ'}</th>
-                                    <th>{language === 'en' ? 'Paid' : 'পরিশোধিত'}</th>
-                                    <th>{language === 'en' ? 'Due' : 'বাকি'}</th>
+                                    <th style={{ position: 'sticky', top: 0, backgroundColor: '#f8fafc', borderBottom: '2px solid #e2e8f0', zIndex: 30 }}>{language === 'en' ? 'Area ID' : 'এলাকা আইডি'}</th>
+                                    <th style={{ position: 'sticky', top: 0, backgroundColor: '#f8fafc', borderBottom: '2px solid #e2e8f0', zIndex: 30 }}>{language === 'en' ? 'Area' : 'এলাকা'}</th>
+                                    <th style={{ position: 'sticky', top: 0, backgroundColor: '#f8fafc', borderBottom: '2px solid #e2e8f0', zIndex: 30 }}>{language === 'en' ? 'Total Amount' : 'মোট পরিমাণ'}</th>
+                                    <th style={{ position: 'sticky', top: 0, backgroundColor: '#f8fafc', borderBottom: '2px solid #e2e8f0', zIndex: 30 }}>{language === 'en' ? 'Paid' : 'পরিশোধিত'}</th>
+                                    <th style={{ position: 'sticky', top: 0, backgroundColor: '#f8fafc', borderBottom: '2px solid #e2e8f0', zIndex: 30 }}>{language === 'en' ? 'Due' : 'বাকি'}</th>
                                   </>
                                 )}
                                 {customerSalesSummary.viewMode === 'territory' && (
                                   <>
-                                    <th>{language === 'en' ? 'Territory ID' : 'টেরিটরি আইডি'}</th>
-                                    <th>{language === 'en' ? 'Area' : 'এলাকা'}</th>
-                                    <th>{language === 'en' ? 'Total Amount' : 'মোট পরিমাণ'}</th>
-                                    <th>{language === 'en' ? 'Paid' : 'পরিশোধিত'}</th>
-                                    <th>{language === 'en' ? 'Due' : 'বাকি'}</th>
+                                    <th style={{ position: 'sticky', top: 0, backgroundColor: '#f8fafc', borderBottom: '2px solid #e2e8f0', zIndex: 30 }}>{language === 'en' ? 'Territory ID' : 'টেরিটরি আইডি'}</th>
+                                    <th style={{ position: 'sticky', top: 0, backgroundColor: '#f8fafc', borderBottom: '2px solid #e2e8f0', zIndex: 30 }}>{language === 'en' ? 'Area' : 'এলাকা'}</th>
+                                    <th style={{ position: 'sticky', top: 0, backgroundColor: '#f8fafc', borderBottom: '2px solid #e2e8f0', zIndex: 30 }}>{language === 'en' ? 'Total Amount' : 'মোট পরিমাণ'}</th>
+                                    <th style={{ position: 'sticky', top: 0, backgroundColor: '#f8fafc', borderBottom: '2px solid #e2e8f0', zIndex: 30 }}>{language === 'en' ? 'Paid' : 'পরিশোধিত'}</th>
+                                    <th style={{ position: 'sticky', top: 0, backgroundColor: '#f8fafc', borderBottom: '2px solid #e2e8f0', zIndex: 30 }}>{language === 'en' ? 'Due' : 'বাকি'}</th>
                                   </>
                                 )}
                                 {customerSalesSummary.viewMode === 'dealer' && (
                                   <>
-                                    <th>{language === 'en' ? 'CID' : 'সিআইডি'}</th>
-                                    <th>{language === 'en' ? 'Customer' : 'কাস্টমার'}</th>
-                                    <th>{language === 'en' ? 'Grand Total' : 'মোট পরিমাণ'}</th>
-                                    <th>{language === 'en' ? 'Paid' : 'পরিশোধিত'}</th>
-                                    <th>{language === 'en' ? 'Due' : 'বাকি'}</th>
+                                    <th style={{ position: 'sticky', top: 0, backgroundColor: '#f8fafc', borderBottom: '2px solid #e2e8f0', zIndex: 30 }}>{language === 'en' ? 'CID' : 'সিআইডি'}</th>
+                                    <th style={{ position: 'sticky', top: 0, backgroundColor: '#f8fafc', borderBottom: '2px solid #e2e8f0', zIndex: 30 }}>{language === 'en' ? 'Customer' : 'কাস্টমার'}</th>
+                                    <th style={{ position: 'sticky', top: 0, backgroundColor: '#f8fafc', borderBottom: '2px solid #e2e8f0', zIndex: 30 }}>{language === 'en' ? 'Grand Total' : 'মোট পরিমাণ'}</th>
+                                    <th style={{ position: 'sticky', top: 0, backgroundColor: '#f8fafc', borderBottom: '2px solid #e2e8f0', zIndex: 30 }}>{language === 'en' ? 'Paid' : 'পরিশোধিত'}</th>
+                                    <th style={{ position: 'sticky', top: 0, backgroundColor: '#f8fafc', borderBottom: '2px solid #e2e8f0', zIndex: 30 }}>{language === 'en' ? 'Due' : 'বাকি'}</th>
                                   </>
                                 )}
                               </tr>
                             </thead>
                             <tbody>
                               {customerSalesSummary.items.length > 0 ? (
-                                <>
-                                  {customerSalesSummary.items.map((item, index) => (
-                                    <tr key={index}>
-                                      <td>{item.id}</td>
-                                      <td>{customerSalesSummary.viewMode === 'dealer' ? item.shopName : item.label}</td>
-                                      <td>{language === 'en' ? '৳' : '৳'} {Math.round(item.revenue).toLocaleString()}</td>
-                                      <td>{language === 'en' ? '৳' : '৳'} {Math.round(item.paid).toLocaleString()}</td>
-                                      <td>{language === 'en' ? '৳' : '৳'} {Math.round(item.due).toLocaleString()}</td>
-                                    </tr>
-                                  ))}
-                                  {/* Footer for Totals */}
-                                  <tr style={{ backgroundColor: '#f8fafc', fontWeight: 800, borderTop: '2px solid #e2e8f0', position: 'sticky', bottom: 0, zIndex: 10 }}>
-                                    <td colSpan="2" style={{ textAlign: 'right' }}>{language === 'en' ? 'Total:' : 'মোট:'}</td>
-                                    <td>{language === 'en' ? '৳' : '৳'} {Math.round(customerSalesSummary.totals.revenue).toLocaleString()}</td>
-                                    <td>{language === 'en' ? '৳' : '৳'} {Math.round(customerSalesSummary.totals.paid).toLocaleString()}</td>
-                                    <td>{language === 'en' ? '৳' : '৳'} {Math.round(customerSalesSummary.totals.due).toLocaleString()}</td>
+                                customerSalesSummary.items.map((item, index) => (
+                                  <tr key={index}>
+                                    <td style={{ borderBottom: '1px solid #e2e8f0', backgroundColor: '#ffffff' }}>{item.id}</td>
+                                    <td style={{ borderBottom: '1px solid #e2e8f0', backgroundColor: '#ffffff' }}>{customerSalesSummary.viewMode === 'dealer' ? item.shopName : item.label}</td>
+                                    <td style={{ borderBottom: '1px solid #e2e8f0', backgroundColor: '#ffffff' }}>{language === 'en' ? '৳' : '৳'} {Math.round(item.revenue).toLocaleString()}</td>
+                                    <td style={{ borderBottom: '1px solid #e2e8f0', backgroundColor: '#ffffff' }}>{language === 'en' ? '৳' : '৳'} {Math.round(item.paid).toLocaleString()}</td>
+                                    <td style={{ borderBottom: '1px solid #e2e8f0', backgroundColor: '#ffffff' }}>{language === 'en' ? '৳' : '৳'} {Math.round(item.due).toLocaleString()}</td>
                                   </tr>
-                                </>
+                                ))
                               ) : (
                                 <tr>
                                   <td colSpan="5" style={{ textAlign: 'center', padding: '2rem', color: '#6b7280' }}>
@@ -18077,7 +19407,86 @@ function AdminPage({ language, toggleLanguage, t }) {
                                 </tr>
                               )}
                             </tbody>
+                            {customerSalesSummary.items.length > 0 && (
+                              <tfoot>
+                                <tr>
+                                  <td colSpan="2" style={{ textAlign: 'right', fontWeight: 800, borderTop: '2px solid #e2e8f0', backgroundColor: '#f8fafc', position: 'sticky', bottom: 0, zIndex: 30 }}>{language === 'en' ? 'Total:' : 'মোট:'}</td>
+                                  <td style={{ fontWeight: 800, borderTop: '2px solid #e2e8f0', backgroundColor: '#f8fafc', position: 'sticky', bottom: 0, zIndex: 30 }}>{language === 'en' ? '৳' : '৳'} {Math.round(customerSalesSummary.totals.revenue).toLocaleString()}</td>
+                                  <td style={{ fontWeight: 800, borderTop: '2px solid #e2e8f0', backgroundColor: '#f8fafc', position: 'sticky', bottom: 0, zIndex: 30 }}>{language === 'en' ? '৳' : '৳'} {Math.round(customerSalesSummary.totals.paid).toLocaleString()}</td>
+                                  <td style={{ fontWeight: 800, borderTop: '2px solid #e2e8f0', backgroundColor: '#f8fafc', position: 'sticky', bottom: 0, zIndex: 30 }}>{language === 'en' ? '৳' : '৳'} {Math.round(customerSalesSummary.totals.due).toLocaleString()}</td>
+                                </tr>
+                              </tfoot>
+                            )}
                           </table>
+                        </div>
+
+                        {/* Mobile View for Ledger */}
+                        <div className="mobile-card-container">
+                          {customerSalesSummary.items.length > 0 ? (
+                            <>
+                              <div className={!isLedgerExpanded ? 'mobile-hidden' : ''}>
+                                {customerSalesSummary.items.map((item, index) => (
+                                  <div className="mobile-card" key={index}>
+                                    <div className="mobile-card-header">
+                                      <div className="mobile-card-avatar" style={{ backgroundColor: '#eff6ff', color: '#2563eb' }}>
+                                        {(customerSalesSummary.viewMode === 'dealer' ? item.shopName : item.label).charAt(0).toUpperCase()}
+                                      </div>
+                                      <div className="mobile-card-header-text">
+                                        <div className="mobile-card-title">{customerSalesSummary.viewMode === 'dealer' ? item.shopName : item.label}</div>
+                                        <div className="mobile-card-subtitle">{item.id}</div>
+                                        {customerSalesSummary.viewMode === 'dealer' && (
+                                          <div className="mobile-card-subtitle" style={{ fontSize: '0.8rem' }}>{item.label}</div>
+                                        )}
+                                      </div>
+                                    </div>
+                                    <div className="mobile-card-body">
+                                      <div className="mobile-card-row">
+                                        <span className="mobile-card-label">{language === 'en' ? 'Total Amount' : 'মোট পরিমাণ'}</span>
+                                        <span className="mobile-card-value" style={{ fontWeight: 600 }}>৳{Math.round(item.revenue).toLocaleString()}</span>
+                                      </div>
+                                      <div className="mobile-card-row">
+                                        <span className="mobile-card-label" style={{ color: '#16a34a' }}>{language === 'en' ? 'Paid' : 'পরিশোধিত'}</span>
+                                        <span className="mobile-card-value font-bold" style={{ color: '#16a34a' }}>৳{Math.round(item.paid).toLocaleString()}</span>
+                                      </div>
+                                      <div className="mobile-card-row">
+                                        <span className="mobile-card-label" style={{ color: '#dc2626' }}>{language === 'en' ? 'Due' : 'বাকি'}</span>
+                                        <span className="mobile-card-value font-bold" style={{ color: '#dc2626' }}>৳{Math.round(item.due).toLocaleString()}</span>
+                                      </div>
+                                    </div>
+                                  </div>
+                                ))}
+                              </div>
+
+                              {/* Total Card for Mobile Ledger */}
+                              <div
+                                className="mobile-card mobile-collapsible-summary"
+                                style={{ backgroundColor: '#f8fafc', border: '2px solid #e2e8f0', cursor: 'pointer' }}
+                                onClick={() => setIsLedgerExpanded(!isLedgerExpanded)}
+                              >
+                                <div className="mobile-card-body">
+                                  <div className="mobile-card-row">
+                                    <span className="mobile-card-label" style={{ fontWeight: 800 }}>{language === 'en' ? 'Total Revenue' : 'মোট বিক্রয়'}</span>
+                                    <span className="mobile-card-value" style={{ fontWeight: 800 }}>৳{Math.round(customerSalesSummary.totals.revenue).toLocaleString()}</span>
+                                  </div>
+                                  <div className="mobile-card-row">
+                                    <span className="mobile-card-label" style={{ fontWeight: 800, color: '#16a34a' }}>{language === 'en' ? 'Total Paid' : 'মোট পরিশোধিত'}</span>
+                                    <span className="mobile-card-value" style={{ fontWeight: 800, color: '#16a34a' }}>৳{Math.round(customerSalesSummary.totals.paid).toLocaleString()}</span>
+                                  </div>
+                                  <div className="mobile-card-row">
+                                    <span className="mobile-card-label" style={{ fontWeight: 800, color: '#dc2626' }}>{language === 'en' ? 'Total Due' : 'মোট বাকি'}</span>
+                                    <span className="mobile-card-value" style={{ fontWeight: 800, color: '#dc2626' }}>৳{Math.round(customerSalesSummary.totals.due).toLocaleString()}</span>
+                                  </div>
+                                  <div style={{ textAlign: 'center', marginTop: '0.5rem', color: '#64748b', fontSize: '0.75rem' }}>
+                                    {isLedgerExpanded ? (language === 'en' ? 'Tap to collapse' : 'সংকুচিত করতে আলতো চাপুন') : (language === 'en' ? 'Tap to view details' : 'বিস্তারিত দেখতে আলতো চাপুন')}
+                                  </div>
+                                </div>
+                              </div>
+                            </>
+                          ) : (
+                            <div style={{ textAlign: 'center', padding: '2rem', color: '#6b7280', background: 'white', borderRadius: '12px' }}>
+                              {language === 'en' ? 'No data found' : 'কোন তথ্য পাওয়া যায়নি'}
+                            </div>
+                          )}
                         </div>
                       </div>
                     </div>
@@ -18093,7 +19502,7 @@ function AdminPage({ language, toggleLanguage, t }) {
               <div className="admin-tab-content">
                 <div className="admin-tab-header">
                   <h1 className="admin-page-title">{adminContent.manageAsset}</h1>
-                  <button className="admin-add-btn">
+                  <button className="admin-add-btn" onClick={() => setIsAddAssetModalOpen(true)}>
                     <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
                       <line x1="12" y1="5" x2="12" y2="19" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
                       <line x1="5" y1="12" x2="19" y2="12" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
@@ -18110,7 +19519,7 @@ function AdminPage({ language, toggleLanguage, t }) {
                     </div>
                     <div className="admin-stat-info">
                       <h3>{language === 'en' ? 'Total Assets' : 'মোট সম্পদ'}</h3>
-                      <p>0</p>
+                      <p>{assets.length}</p>
                     </div>
                   </div>
                   <div className="admin-stat-card">
@@ -18121,7 +19530,7 @@ function AdminPage({ language, toggleLanguage, t }) {
                     </div>
                     <div className="admin-stat-info">
                       <h3>{language === 'en' ? 'Asset Value' : 'সম্পদের মূল্য'}</h3>
-                      <p>৳0</p>
+                      <p>৳{assets.reduce((sum, item) => sum + (parseFloat(item.value) || 0), 0).toLocaleString()}</p>
                     </div>
                   </div>
                   <div className="admin-stat-card">
@@ -18133,31 +19542,505 @@ function AdminPage({ language, toggleLanguage, t }) {
                     </div>
                     <div className="admin-stat-info">
                       <h3>{language === 'en' ? 'Active Assets' : 'সক্রিয় সম্পদ'}</h3>
-                      <p>0</p>
+                      <p>{assets.filter(a => a.status === 'Active').length}</p>
                     </div>
                   </div>
                 </div>
-                <div className="admin-table-container" style={{ marginTop: '2rem' }}>
+
+                <div className="admin-search-bar" style={{ marginTop: '1.5rem', marginBottom: '1.25rem', display: 'flex', justifyContent: 'center' }}>
+                  <div style={{ position: 'relative', width: '100%', maxWidth: '400px' }}>
+                    <svg
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth="2"
+                      style={{
+                        position: 'absolute',
+                        left: '12px',
+                        top: '50%',
+                        transform: 'translateY(-50%)',
+                        width: '18px',
+                        height: '18px',
+                        color: '#64748b'
+                      }}
+                    >
+                      <circle cx="11" cy="11" r="8" />
+                      <line x1="21" y1="21" x2="16.65" y2="16.65" />
+                    </svg>
+                    <input
+                      type="text"
+                      placeholder={language === 'en' ? 'Search by name, category or shop...' : 'নাম, বিভাগ বা দোকান দিয়ে খুঁজুন...'}
+                      value={assetSearchTerm}
+                      onChange={(e) => setAssetSearchTerm(e.target.value)}
+                      style={{
+                        paddingLeft: '40px',
+                        width: '100%'
+                      }}
+                    />
+                  </div>
+                </div>
+
+                <div className="admin-table-container">
                   <table className="admin-table">
                     <thead>
                       <tr>
                         <th>{language === 'en' ? 'Asset Name' : 'সম্পদের নাম'}</th>
                         <th>{language === 'en' ? 'Category' : 'ক্যাটাগরি'}</th>
                         <th>{language === 'en' ? 'Purchase Date' : 'ক্রয়ের তারিখ'}</th>
+                        <th>{language === 'en' ? 'Quantity' : 'পরিমাণ'}</th>
+                        <th>{language === 'en' ? 'Purchase Shop' : 'দোকানের নাম'}</th>
                         <th>{language === 'en' ? 'Value' : 'মূল্য'}</th>
-                        <th>{language === 'en' ? 'Status' : 'স্ট্যাটাস'}</th>
+                        <th>{language === 'en' ? 'Paid' : 'পরিশোধিত'}</th>
+                        <th>{language === 'en' ? 'Due' : 'বাকি'}</th>
                         <th>{language === 'en' ? 'Actions' : 'কার্যক্রম'}</th>
                       </tr>
                     </thead>
                     <tbody>
-                      <tr>
-                        <td colSpan="6" style={{ textAlign: 'center', padding: '2rem' }}>
-                          {adminContent.noData}
-                        </td>
-                      </tr>
+                      {assets
+                        .filter(asset => {
+                          const search = assetSearchTerm.toLowerCase();
+                          return (
+                            asset.name?.toLowerCase().includes(search) ||
+                            asset.category?.toLowerCase().includes(search) ||
+                            asset.purchaseShop?.toLowerCase().includes(search)
+                          );
+                        })
+                        .length > 0 ? (
+                        assets
+                          .filter(asset => {
+                            const search = assetSearchTerm.toLowerCase();
+                            return (
+                              asset.name?.toLowerCase().includes(search) ||
+                              asset.category?.toLowerCase().includes(search) ||
+                              asset.purchaseShop?.toLowerCase().includes(search)
+                            );
+                          })
+                          .map((asset) => (
+                            <tr key={asset._id}>
+                              <td>{asset.name}</td>
+                              <td>{asset.category}</td>
+                              <td>{asset.purchaseDate ? new Date(asset.purchaseDate).toLocaleDateString() : '-'}</td>
+                              <td>{asset.quantity}</td>
+                              <td>{asset.purchaseShop || '-'}</td>
+                              <td>৳{parseFloat(asset.value).toLocaleString()}</td>
+                              <td style={{ color: '#16a34a' }}>৳{parseFloat(asset.paid).toLocaleString()}</td>
+                              <td style={{ color: '#dc2626' }}>৳{(parseFloat(asset.value || 0) - parseFloat(asset.paid || 0)).toLocaleString()}</td>
+                              <td>
+                                <div style={{ display: 'flex', gap: '0.5rem' }}>
+                                  <button
+                                    onClick={() => handleEditAsset(asset)}
+                                    style={{
+                                      padding: '0.4rem 0.8rem',
+                                      fontSize: '0.75rem',
+                                      backgroundColor: '#3b82f6',
+                                      color: 'white',
+                                      border: 'none',
+                                      borderRadius: '6px',
+                                      cursor: 'pointer',
+                                      fontWeight: '500',
+                                      transition: 'all 0.2s',
+                                      display: 'flex',
+                                      alignItems: 'center',
+                                      gap: '0.25rem'
+                                    }}
+                                    onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#2563eb'}
+                                    onMouseLeave={(e) => e.currentTarget.style.backgroundColor = '#3b82f6'}
+                                    title={language === 'en' ? 'Edit' : 'সম্পাদনা'}
+                                  >
+                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ width: '14px', height: '14px' }}>
+                                      <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" strokeLinecap="round" strokeLinejoin="round" />
+                                      <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" strokeLinecap="round" strokeLinejoin="round" />
+                                    </svg>
+                                    {language === 'en' ? 'Edit' : 'সম্পাদনা'}
+                                  </button>
+                                  <button
+                                    onClick={() => handleDeleteAsset(asset._id)}
+                                    style={{
+                                      padding: '0.4rem 0.8rem',
+                                      fontSize: '0.75rem',
+                                      backgroundColor: '#ef4444',
+                                      color: 'white',
+                                      border: 'none',
+                                      borderRadius: '6px',
+                                      cursor: 'pointer',
+                                      fontWeight: '500',
+                                      transition: 'all 0.2s',
+                                      display: 'flex',
+                                      alignItems: 'center',
+                                      gap: '0.25rem'
+                                    }}
+                                    onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#dc2626'}
+                                    onMouseLeave={(e) => e.currentTarget.style.backgroundColor = '#ef4444'}
+                                    title={language === 'en' ? 'Delete' : 'মুছুন'}
+                                  >
+                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ width: '14px', height: '14px' }}>
+                                      <polyline points="3 6 5 6 21 6" strokeLinecap="round" strokeLinejoin="round" />
+                                      <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" strokeLinecap="round" strokeLinejoin="round" />
+                                    </svg>
+                                    {language === 'en' ? 'Delete' : 'মুছুন'}
+                                  </button>
+                                </div>
+                              </td>
+                            </tr>
+                          ))
+                      ) : (
+                        <tr>
+                          <td colSpan="9" style={{ textAlign: 'center', padding: '2rem' }}>
+                            {language === 'en' ? 'No assets found' : 'কোন সম্পদ পাওয়া যায়নি'}
+                          </td>
+                        </tr>
+                      )}
                     </tbody>
                   </table>
                 </div>
+
+                {/* Mobile Card View for Assets */}
+                <div className="mobile-card-container">
+                  {assets
+                    .filter(asset => {
+                      const search = assetSearchTerm.toLowerCase();
+                      return (
+                        asset.name?.toLowerCase().includes(search) ||
+                        asset.category?.toLowerCase().includes(search) ||
+                        asset.purchaseShop?.toLowerCase().includes(search)
+                      );
+                    }).length === 0 ? (
+                    <div style={{ textAlign: 'center', padding: '2rem', color: '#6b7280' }}>
+                      {language === 'en' ? 'No assets found' : 'কোন সম্পদ পাওয়া যায়নি'}
+                    </div>
+                  ) : (
+                    assets
+                      .filter(asset => {
+                        const search = assetSearchTerm.toLowerCase();
+                        return (
+                          asset.name?.toLowerCase().includes(search) ||
+                          asset.category?.toLowerCase().includes(search) ||
+                          asset.purchaseShop?.toLowerCase().includes(search)
+                        );
+                      })
+                      .map((asset, index) => (
+                        <div className="mobile-card" key={asset._id || index}>
+                          <div
+                            className="mobile-card-header"
+                            onClick={() => setExpandedAssetId(prev => (prev === asset._id ? null : asset._id))}
+                            style={{ cursor: 'pointer' }}
+                          >
+                            <div className="mobile-card-avatar" style={{ backgroundColor: '#f0fdf4', color: '#16a34a' }}>
+                              {asset.name?.charAt(0).toUpperCase()}
+                            </div>
+                            <div className="mobile-card-header-text">
+                              <div className="mobile-card-title">{asset.name}</div>
+                              <div className="mobile-card-subtitle">{asset.category}</div>
+                            </div>
+                            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', marginLeft: 'auto', alignSelf: 'center' }}>
+                              <div style={{ fontSize: '0.9rem', fontWeight: 700, color: '#111827' }}>
+                                ৳{(parseFloat(asset.value) || 0).toLocaleString()}
+                              </div>
+                              <div style={{ fontSize: '0.75rem', color: (parseFloat(asset.value || 0) - parseFloat(asset.paid || 0)) > 0 ? '#dc2626' : '#16a34a' }}>
+                                {language === 'en' ? 'Due: ' : 'বাকি: '} ৳{(parseFloat(asset.value || 0) - parseFloat(asset.paid || 0)).toLocaleString()}
+                              </div>
+                            </div>
+                          </div>
+
+                          {expandedAssetId === asset._id && (
+                            <div className="mobile-card-body">
+                              <div className="mobile-card-row">
+                                <span className="mobile-card-label">{language === 'en' ? 'Purchase Date' : 'ক্রয়ের তারিখ'}</span>
+                                <span className="mobile-card-value">{asset.purchaseDate ? new Date(asset.purchaseDate).toLocaleDateString() : '-'}</span>
+                              </div>
+                              <div className="mobile-card-row">
+                                <span className="mobile-card-label">{language === 'en' ? 'Quantity' : 'পরিমাণ'}</span>
+                                <span className="mobile-card-value">{asset.quantity}</span>
+                              </div>
+                              <div className="mobile-card-row">
+                                <span className="mobile-card-label">{language === 'en' ? 'Purchase Shop' : 'দোকানের নাম'}</span>
+                                <span className="mobile-card-value">{asset.purchaseShop || '-'}</span>
+                              </div>
+                              <div className="mobile-card-row">
+                                <span className="mobile-card-label">{language === 'en' ? 'Paid' : 'পরিশোধিত'}</span>
+                                <span className="mobile-card-value" style={{ color: '#16a34a' }}>৳{(parseFloat(asset.paid) || 0).toLocaleString()}</span>
+                              </div>
+                              <div className="mobile-card-row">
+                                <span className="mobile-card-label">{language === 'en' ? 'Status' : 'স্ট্যাটাস'}</span>
+                                <span className="mobile-card-value">{asset.status}</span>
+                              </div>
+                              {asset.notes && (
+                                <div className="mobile-card-row">
+                                  <span className="mobile-card-label">{language === 'en' ? 'Notes' : 'নোট'}</span>
+                                  <span className="mobile-card-value">{asset.notes}</span>
+                                </div>
+                              )}
+                              <div className="mobile-card-actions">
+                                <button
+                                  className="mobile-action-btn"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    handleEditAsset(asset);
+                                  }}
+                                  style={{ backgroundColor: '#3b82f6', color: 'white', border: 'none' }}
+                                >
+                                  {language === 'en' ? 'Edit' : 'সম্পাদনা'}
+                                </button>
+                                <button
+                                  className="mobile-action-btn"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    handleDeleteAsset(asset._id);
+                                  }}
+                                  style={{ backgroundColor: '#ef4444', color: 'white', border: 'none' }}
+                                >
+                                  {language === 'en' ? 'Delete' : 'মুছুন'}
+                                </button>
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      ))
+                  )}
+                </div>
+
+                {/* Add Asset Modal */}
+                {isAddAssetModalOpen && (
+                  <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 9999 }}>
+                    <div style={{
+                      backgroundColor: 'white',
+                      padding: '2rem',
+                      borderRadius: '1rem',
+                      width: '500px',
+                      maxHeight: '90vh',
+                      overflowY: 'auto',
+                      position: 'relative',
+                      boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.25)',
+                      overflow: 'hidden'
+                    }}>
+                      {/* Decorative Background Blobs */}
+                      <div style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', overflow: 'hidden', pointerEvents: 'none', zIndex: 0 }}>
+                        <div style={{
+                          position: 'absolute',
+                          width: '260px',
+                          height: '260px',
+                          top: '-120px',
+                          left: '-80px',
+                          background: 'radial-gradient(circle at 30% 30%, rgba(59,130,246,0.15), transparent 60%)',
+                          filter: 'blur(20px)'
+                        }} />
+                        <div style={{
+                          position: 'absolute',
+                          width: '240px',
+                          height: '240px',
+                          bottom: '-140px',
+                          right: '-100px',
+                          background: 'radial-gradient(circle at 70% 70%, rgba(16,185,129,0.15), transparent 60%)',
+                          filter: 'blur(20px)'
+                        }} />
+                      </div>
+
+                      <div style={{ position: 'relative', zIndex: 1 }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem' }}>
+                          <div>
+                            <h2 style={{ margin: 0, fontSize: '1.5rem', fontWeight: 800, color: '#0f172a' }}>
+                              {isEditingAsset
+                                ? (language === 'en' ? 'Edit Asset' : 'সম্পদ সম্পাদনা করুন')
+                                : (language === 'en' ? 'Add New Asset' : 'নতুন সম্পদ যোগ করুন')
+                              }
+                            </h2>
+                            <p style={{ margin: '0.25rem 0 0 0', color: '#64748b', fontSize: '0.875rem' }}>
+                              {language === 'en' ? 'Enter asset details below' : 'সম্পদের বিবরণ নিচে দিন'}
+                            </p>
+                          </div>
+                          <button
+                            onClick={() => {
+                              setIsAddAssetModalOpen(false)
+                              setIsEditingAsset(false)
+                              setEditingAssetId(null)
+                              setNewAsset({
+                                name: '',
+                                category: '',
+                                purchaseDate: '',
+                                quantity: 1,
+                                purchaseShop: '',
+                                value: 0,
+                                paid: 0,
+                                status: 'Active',
+                                notes: ''
+                              })
+                            }}
+                            style={{
+                              background: '#f1f5f9',
+                              border: 'none',
+                              width: '32px',
+                              height: '32px',
+                              borderRadius: '50%',
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'center',
+                              cursor: 'pointer',
+                              color: '#64748b',
+                              fontSize: '1.25rem',
+                              transition: 'all 0.2s'
+                            }}
+                          >
+                            ×
+                          </button>
+                        </div>
+
+                        <form onSubmit={handleAddAsset}>
+                          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
+                            <div className="admin-form-group">
+                              <label>{language === 'en' ? 'Asset Name' : 'সম্পদের নাম'}</label>
+                              <input
+                                type="text"
+                                required
+                                value={newAsset.name}
+                                onChange={(e) => setNewAsset({ ...newAsset, name: e.target.value })}
+                                style={{ width: '100%', padding: '0.6rem', borderRadius: '0.5rem', border: '1px solid #e2e8f0', backgroundColor: '#f8fafc' }}
+                              />
+                            </div>
+                            <div className="admin-form-group">
+                              <label>{language === 'en' ? 'Category' : 'ক্যাটাগরি'}</label>
+                              <input
+                                type="text"
+                                required
+                                value={newAsset.category}
+                                onChange={(e) => setNewAsset({ ...newAsset, category: e.target.value })}
+                                style={{ width: '100%', padding: '0.6rem', borderRadius: '0.5rem', border: '1px solid #e2e8f0', backgroundColor: '#f8fafc' }}
+                              />
+                            </div>
+                            <div className="admin-form-group">
+                              <label>{language === 'en' ? 'Purchase Date' : 'ক্রয়ের তারিখ'}</label>
+                              <input
+                                type="date"
+                                required
+                                value={newAsset.purchaseDate}
+                                onChange={(e) => setNewAsset({ ...newAsset, purchaseDate: e.target.value })}
+                                style={{ width: '100%', padding: '0.6rem', borderRadius: '0.5rem', border: '1px solid #e2e8f0', backgroundColor: '#f8fafc' }}
+                              />
+                            </div>
+                            <div className="admin-form-group">
+                              <label>{language === 'en' ? 'Quantity' : 'পরিমাণ'}</label>
+                              <input
+                                type="number"
+                                min="1"
+                                required
+                                value={newAsset.quantity}
+                                onChange={(e) => setNewAsset({ ...newAsset, quantity: parseInt(e.target.value) })}
+                                style={{ width: '100%', padding: '0.6rem', borderRadius: '0.5rem', border: '1px solid #e2e8f0', backgroundColor: '#f8fafc' }}
+                              />
+                            </div>
+                            <div className="admin-form-group">
+                              <label>{language === 'en' ? 'Purchase Shop' : 'দোকানের নাম'}</label>
+                              <input
+                                type="text"
+                                value={newAsset.purchaseShop}
+                                onChange={(e) => setNewAsset({ ...newAsset, purchaseShop: e.target.value })}
+                                style={{ width: '100%', padding: '0.6rem', borderRadius: '0.5rem', border: '1px solid #e2e8f0', backgroundColor: '#f8fafc' }}
+                              />
+                            </div>
+                            <div className="admin-form-group">
+                              <label>{language === 'en' ? 'Total Value' : 'মোট মূল্য'}</label>
+                              <input
+                                type="number"
+                                min="0"
+                                required
+                                value={newAsset.value}
+                                onChange={(e) => setNewAsset({ ...newAsset, value: parseFloat(e.target.value) })}
+                                style={{ width: '100%', padding: '0.6rem', borderRadius: '0.5rem', border: '1px solid #e2e8f0', backgroundColor: '#f8fafc' }}
+                              />
+                            </div>
+                            <div className="admin-form-group">
+                              <label>{language === 'en' ? 'Paid Amount' : 'পরিশোধিত পরিমাণ'}</label>
+                              <input
+                                type="number"
+                                min="0"
+                                value={newAsset.paid}
+                                onChange={(e) => setNewAsset({ ...newAsset, paid: parseFloat(e.target.value) })}
+                                style={{ width: '100%', padding: '0.6rem', borderRadius: '0.5rem', border: '1px solid #e2e8f0', backgroundColor: '#f8fafc' }}
+                              />
+                            </div>
+                            <div className="admin-form-group">
+                              <label>{language === 'en' ? 'Status' : 'স্ট্যাটাস'}</label>
+                              <select
+                                value={newAsset.status}
+                                onChange={(e) => setNewAsset({ ...newAsset, status: e.target.value })}
+                                style={{ width: '100%', padding: '0.6rem', borderRadius: '0.5rem', border: '1px solid #e2e8f0', backgroundColor: '#f8fafc' }}
+                              >
+                                <option value="Active">Active</option>
+                                <option value="Inactive">Inactive</option>
+                                <option value="Damaged">Damaged</option>
+                                <option value="Lost">Lost</option>
+                                <option value="Sold">Sold</option>
+                              </select>
+                            </div>
+                          </div>
+                          <div className="admin-form-group" style={{ marginTop: '1rem' }}>
+                            <label>{language === 'en' ? 'Notes' : 'নোট'}</label>
+                            <textarea
+                              value={newAsset.notes}
+                              onChange={(e) => setNewAsset({ ...newAsset, notes: e.target.value })}
+                              style={{ width: '100%', padding: '0.6rem', borderRadius: '0.5rem', border: '1px solid #e2e8f0', backgroundColor: '#f8fafc', minHeight: '80px' }}
+                            />
+                          </div>
+                          <div style={{ marginTop: '2rem', display: 'flex', gap: '1rem', justifyContent: 'flex-end' }}>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setIsAddAssetModalOpen(false)
+                                setIsEditingAsset(false)
+                                setEditingAssetId(null)
+                                setNewAsset({
+                                  name: '',
+                                  category: '',
+                                  purchaseDate: '',
+                                  quantity: 1,
+                                  purchaseShop: '',
+                                  value: 0,
+                                  paid: 0,
+                                  status: 'Active',
+                                  notes: ''
+                                })
+                              }}
+                              style={{
+                                padding: '0.75rem 1.5rem',
+                                borderRadius: '0.5rem',
+                                border: '1px solid #e2e8f0',
+                                background: 'white',
+                                color: '#64748b',
+                                fontWeight: 600,
+                                cursor: 'pointer',
+                                transition: 'all 0.2s'
+                              }}
+                            >
+                              {language === 'en' ? 'Cancel' : 'বাতিল'}
+                            </button>
+                            <button
+                              type="submit"
+                              disabled={isAssetSubmitting}
+                              style={{
+                                padding: '0.75rem 1.5rem',
+                                borderRadius: '0.5rem',
+                                border: 'none',
+                                background: 'linear-gradient(135deg, #10b981 0%, #059669 100%)',
+                                color: 'white',
+                                fontWeight: 600,
+                                boxShadow: '0 4px 6px -1px rgba(16, 185, 129, 0.4)',
+                                cursor: isAssetSubmitting ? 'not-allowed' : 'pointer',
+                                transition: 'all 0.2s'
+                              }}
+                            >
+                              {isAssetSubmitting
+                                ? (language === 'en' ? 'Saving...' : 'সংরক্ষণ করা হচ্ছে...')
+                                : (isEditingAsset
+                                  ? (language === 'en' ? 'Update Asset' : 'সম্পদ আপডেট করুন')
+                                  : (language === 'en' ? 'Save Asset' : 'সংরক্ষণ করুন')
+                                )
+                              }
+                            </button>
+                          </div>
+                        </form>
+                      </div>
+                    </div>
+                  </div>
+                )}
               </div>
             )
           }
@@ -18166,17 +20049,589 @@ function AdminPage({ language, toggleLanguage, t }) {
           {
             activeTab === 'career' && (
               <div className="admin-tab-content">
-                <div className="admin-tab-header">
-                  <h1 className="admin-page-title">{adminContent.careerManagement}</h1>
-                </div>
-                <div className="admin-settings-section">
-                  <div className="admin-settings-card">
-                    <h3>{language === 'en' ? 'Manage career postings' : 'ক্যারিয়ার পোস্ট পরিচালনা করুন'}</h3>
-                    <p style={{ color: '#6b7280', marginTop: '0.5rem' }}>
-                      {language === 'en' ? 'Coming soon. Add and manage job openings here.' : 'শীঘ্রই আসছে। এখানে চাকরির শূন্যপদ যোগ ও পরিচালনা করুন।'}
-                    </p>
+                <div className="admin-tab-header" style={{ gap: '0.75rem', flexWrap: 'wrap' }}>
+                  <h1 className="admin-page-title" style={{ flex: 1 }}>{adminContent.careerManagement}</h1>
+                  <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
+                    <button
+                      className="admin-add-btn"
+                      onClick={() => {
+                        setCareerForm({
+                          jobId: '',
+                          title: '',
+                          titleBn: '',
+                          location: '',
+                          locationBn: '',
+                          type: '',
+                          typeBn: '',
+                          summary: '',
+                          summaryBn: '',
+                          overview: '',
+                          overviewBn: '',
+                          salary: '',
+                          salaryBn: '',
+                          benefits: [],
+                          benefitsBn: [],
+                          responsibilities: [],
+                          responsibilitiesBn: [],
+                          description: '',
+                          descriptionBn: '',
+                          requirements: [],
+                          requirementsBn: [],
+                          isActive: true,
+                          isOpen: true
+                        })
+                        setIsEditingCareer(false)
+                        setEditingCareerId(null)
+                        setShowCareerModal(true)
+                      }}
+                    >
+                      <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                        <line x1="12" y1="5" x2="12" y2="19" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+                        <line x1="5" y1="12" x2="19" y2="12" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+                      </svg>
+                      {language === 'en' ? 'Add New Job' : 'নতুন চাকরি যোগ করুন'}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => fetchCareers()}
+                      className="admin-add-btn"
+                      style={{ backgroundColor: '#e2e8f0', color: '#0f172a' }}
+                    >
+                      {language === 'en' ? 'Refresh' : 'রিফ্রেশ'}
+                    </button>
                   </div>
                 </div>
+
+                {/* Job Listings */}
+                <div className="admin-settings-section">
+                  <div className="admin-settings-card">
+                    <h3>{language === 'en' ? 'Job Postings' : 'চাকরির পোস্ট'}</h3>
+                    {loadingCareers ? (
+                      <LoadingSpinner />
+                    ) : careers.length === 0 ? (
+                      <p style={{ color: '#6b7280', marginTop: '1rem' }}>
+                        {language === 'en' ? 'No jobs posted yet.' : 'এখনও কোনো চাকরি পোস্ট করা হয়নি।'}
+                      </p>
+                    ) : (
+                      <div className="admin-blog-grid" style={{ marginTop: '1.5rem' }}>
+                        {careers.map(career => (
+                          <div key={career._id} className="admin-blog-card">
+                            <div className="admin-blog-card-content">
+                              <h4 className="admin-blog-card-title">
+                                {language === 'en' ? career.title : career.titleBn || career.title}
+                              </h4>
+                              <p style={{ fontSize: '0.875rem', color: '#64748b', marginTop: '0.5rem' }}>
+                                {language === 'en' ? career.location : career.locationBn || career.location} • {language === 'en' ? career.type : career.typeBn || career.type}
+                              </p>
+                              <p style={{ fontSize: '0.875rem', color: '#475569', marginTop: '0.75rem' }}>
+                                {language === 'en' ? career.summary : career.summaryBn || career.summary}
+                              </p>
+                              <div style={{ marginTop: '0.75rem', display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
+                                <span style={{
+                                  padding: '0.25rem 0.75rem',
+                                  borderRadius: '9999px',
+                                  fontSize: '0.75rem',
+                                  fontWeight: 600,
+                                  background: career.isActive ? '#dcfce7' : '#fee2e2',
+                                  color: career.isActive ? '#16a34a' : '#dc2626'
+                                }}>
+                                  {career.isActive ? (language === 'en' ? 'Active' : 'সক্রিয়') : (language === 'en' ? 'Inactive' : 'নিষ্ক্রিয়')}
+                                </span>
+                                <span style={{
+                                  padding: '0.25rem 0.75rem',
+                                  borderRadius: '9999px',
+                                  fontSize: '0.75rem',
+                                  fontWeight: 600,
+                                  background: career.isOpen ? '#dbeafe' : '#f3f4f6',
+                                  color: career.isOpen ? '#2563eb' : '#6b7280'
+                                }}>
+                                  {career.isOpen ? (language === 'en' ? 'Open' : 'খোলা') : (language === 'en' ? 'Closed' : 'বন্ধ')}
+                                </span>
+                              </div>
+                            </div>
+                            <div className="admin-blog-card-actions">
+                              <button
+                                onClick={() => {
+                                  setCareerForm(career)
+                                  setIsEditingCareer(true)
+                                  setEditingCareerId(career._id)
+                                  setShowCareerModal(true)
+                                }}
+                                style={{
+                                  padding: '0.5rem 1rem',
+                                  borderRadius: '0.375rem',
+                                  border: '1px solid #e2e8f0',
+                                  background: 'white',
+                                  color: '#475569',
+                                  fontSize: '0.875rem',
+                                  fontWeight: 500,
+                                  cursor: 'pointer'
+                                }}
+                              >
+                                {language === 'en' ? 'Edit' : 'সম্পাদনা'}
+                              </button>
+                              <button
+                                onClick={async () => {
+                                  if (window.confirm(language === 'en' ? 'Delete this job posting?' : 'এই চাকরির পোস্ট মুছবেন?')) {
+                                    try {
+                                      const response = await authFetch(`${API_BASE}/api/careers/${career._id}`, {
+                                        method: 'DELETE'
+                                      })
+                                      if (response.ok) {
+                                        fetchCareers()
+                                      }
+                                    } catch (error) {
+                                      console.error('Delete career error:', error)
+                                    }
+                                  }
+                                }}
+                                className="btn-delete"
+                              >
+                                {language === 'en' ? 'Delete' : 'মুছুন'}
+                              </button>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                {/* Applications */}
+                <div className="admin-settings-section" style={{ marginTop: '2rem' }}>
+                  <div className="admin-settings-card">
+                    <h3>{language === 'en' ? 'Job Applications' : 'চাকরির আবেদন'}</h3>
+                    <div style={{ display: 'flex', gap: '1rem', marginTop: '1rem', flexWrap: 'wrap' }}>
+                      <select
+                        value={selectedCareerFilter}
+                        onChange={(e) => setSelectedCareerFilter(e.target.value)}
+                        style={{
+                          padding: '0.5rem',
+                          borderRadius: '0.375rem',
+                          border: '1px solid #e2e8f0',
+                          fontSize: '0.875rem'
+                        }}
+                      >
+                        <option value="">{language === 'en' ? 'All Jobs' : 'সব চাকরি'}</option>
+                        {careers.map(career => (
+                          <option key={career._id} value={career.jobId}>
+                            {language === 'en' ? career.title : career.titleBn || career.title}
+                          </option>
+                        ))}
+                      </select>
+                      <select
+                        value={selectedStatusFilter}
+                        onChange={(e) => setSelectedStatusFilter(e.target.value)}
+                        style={{
+                          padding: '0.5rem',
+                          borderRadius: '0.375rem',
+                          border: '1px solid #e2e8f0',
+                          fontSize: '0.875rem'
+                        }}
+                      >
+                        <option value="">{language === 'en' ? 'All Status' : 'সব স্ট্যাটাস'}</option>
+                        <option value="Pending">{language === 'en' ? 'Pending' : 'অপেক্ষমাণ'}</option>
+                        <option value="Reviewed">{language === 'en' ? 'Reviewed' : 'পর্যালোচিত'}</option>
+                        <option value="Shortlisted">{language === 'en' ? 'Shortlisted' : 'শর্টলিস্টেড'}</option>
+                        <option value="Rejected">{language === 'en' ? 'Rejected' : 'প্রত্যাখ্যাত'}</option>
+                      </select>
+                    </div>
+                    {loadingApplications ? (
+                      <LoadingSpinner />
+                    ) : applications.filter(app =>
+                      (!selectedCareerFilter || app.jobId === selectedCareerFilter) &&
+                      (!selectedStatusFilter || app.status === selectedStatusFilter)
+                    ).length === 0 ? (
+                      <p style={{ color: '#6b7280', marginTop: '1rem' }}>
+                        {language === 'en' ? 'No applications yet.' : 'এখনও কোনো আবেদন নেই।'}
+                      </p>
+                    ) : (
+                      <div style={{ marginTop: '1.5rem', overflowX: 'auto' }}>
+                        <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                          <thead>
+                            <tr style={{ background: '#f8fafc', borderBottom: '2px solid #e2e8f0' }}>
+                              <th style={{ padding: '0.75rem', textAlign: 'left', fontSize: '0.875rem', fontWeight: 600 }}>
+                                {language === 'en' ? 'Name' : 'নাম'}
+                              </th>
+                              <th style={{ padding: '0.75rem', textAlign: 'left', fontSize: '0.875rem', fontWeight: 600 }}>
+                                {language === 'en' ? 'Job Title' : 'চাকরির শিরোনাম'}
+                              </th>
+                              <th style={{ padding: '0.75rem', textAlign: 'left', fontSize: '0.875rem', fontWeight: 600 }}>
+                                {language === 'en' ? 'Email' : 'ইমেইল'}
+                              </th>
+                              <th style={{ padding: '0.75rem', textAlign: 'left', fontSize: '0.875rem', fontWeight: 600 }}>
+                                {language === 'en' ? 'Phone' : 'ফোন'}
+                              </th>
+                              <th style={{ padding: '0.75rem', textAlign: 'left', fontSize: '0.875rem', fontWeight: 600 }}>
+                                {language === 'en' ? 'Status' : 'স্ট্যাটাস'}
+                              </th>
+                              <th style={{ padding: '0.75rem', textAlign: 'left', fontSize: '0.875rem', fontWeight: 600 }}>
+                                {language === 'en' ? 'CV' : 'সিভি'}
+                              </th>
+                              <th style={{ padding: '0.75rem', textAlign: 'left', fontSize: '0.875rem', fontWeight: 600 }}>
+                                {language === 'en' ? 'Actions' : 'কার্যক্রম'}
+                              </th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {applications
+                              .filter(app =>
+                                (!selectedCareerFilter || app.jobId === selectedCareerFilter) &&
+                                (!selectedStatusFilter || app.status === selectedStatusFilter)
+                              )
+                              .map(app => (
+                                <tr key={app._id} style={{ borderBottom: '1px solid #e2e8f0' }}>
+                                  <td style={{ padding: '0.75rem', fontSize: '0.875rem' }}>{app.fullName}</td>
+                                  <td style={{ padding: '0.75rem', fontSize: '0.875rem' }}>{app.jobTitle}</td>
+                                  <td style={{ padding: '0.75rem', fontSize: '0.875rem' }}>{app.email}</td>
+                                  <td style={{ padding: '0.75rem', fontSize: '0.875rem' }}>{app.phone}</td>
+                                  <td style={{ padding: '0.75rem' }}>
+                                    <select
+                                      value={app.status}
+                                      onChange={async (e) => {
+                                        try {
+                                          const response = await authFetch(`${API_BASE}/api/applications/${app._id}`, {
+                                            method: 'PUT',
+                                            headers: { 'Content-Type': 'application/json' },
+                                            body: JSON.stringify({ status: e.target.value })
+                                          })
+                                          if (response.ok) {
+                                            fetchApplications()
+                                          }
+                                        } catch (error) {
+                                          console.error('Update status error:', error)
+                                        }
+                                      }}
+                                      style={{
+                                        padding: '0.25rem 0.5rem',
+                                        borderRadius: '0.25rem',
+                                        border: '1px solid #e2e8f0',
+                                        fontSize: '0.75rem',
+                                        background: app.status === 'Pending' ? '#fef3c7' :
+                                          app.status === 'Reviewed' ? '#dbeafe' :
+                                            app.status === 'Shortlisted' ? '#dcfce7' : '#fee2e2',
+                                        color: app.status === 'Pending' ? '#92400e' :
+                                          app.status === 'Reviewed' ? '#1e40af' :
+                                            app.status === 'Shortlisted' ? '#166534' : '#991b1b'
+                                      }}
+                                    >
+                                      <option value="Pending">{language === 'en' ? 'Pending' : 'অপেক্ষমাণ'}</option>
+                                      <option value="Reviewed">{language === 'en' ? 'Reviewed' : 'পর্যালোচিত'}</option>
+                                      <option value="Shortlisted">{language === 'en' ? 'Shortlisted' : 'শর্টলিস্টেড'}</option>
+                                      <option value="Rejected">{language === 'en' ? 'Rejected' : 'প্রত্যাখ্যাত'}</option>
+                                    </select>
+                                  </td>
+                                  <td style={{ padding: '0.75rem' }}>
+                                    {app.cvPath && (
+                                      <a
+                                        href={`${API_BASE}${app.cvPath}`}
+                                        target="_blank"
+                                        rel="noopener noreferrer"
+                                        style={{
+                                          color: '#2563eb',
+                                          textDecoration: 'none',
+                                          fontSize: '0.875rem',
+                                          fontWeight: 500
+                                        }}
+                                      >
+                                        {language === 'en' ? 'View CV' : 'সিভি দেখুন'}
+                                      </a>
+                                    )}
+                                  </td>
+                                  <td style={{ padding: '0.75rem' }}>
+                                    <button
+                                      onClick={async () => {
+                                        if (window.confirm(language === 'en' ? 'Delete this application?' : 'এই আবেদন মুছবেন?')) {
+                                          try {
+                                            const response = await authFetch(`${API_BASE}/api/applications/${app._id}`, {
+                                              method: 'DELETE'
+                                            })
+                                            if (response.ok) {
+                                              fetchApplications()
+                                            }
+                                          } catch (error) {
+                                            console.error('Delete application error:', error)
+                                          }
+                                        }
+                                      }}
+                                      style={{
+                                        padding: '0.25rem 0.75rem',
+                                        borderRadius: '0.25rem',
+                                        border: 'none',
+                                        background: '#fee2e2',
+                                        color: '#dc2626',
+                                        fontSize: '0.75rem',
+                                        cursor: 'pointer'
+                                      }}
+                                    >
+                                      {language === 'en' ? 'Delete' : 'মুছুন'}
+                                    </button>
+                                  </td>
+                                </tr>
+                              ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                {/* Career Modal */}
+                {showCareerModal && (
+                  <div className="admin-employee-form-overlay" style={{
+                    position: 'fixed',
+                    top: 0,
+                    left: 0,
+                    right: 0,
+                    bottom: 0,
+                    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    zIndex: 1000,
+                    padding: '1rem'
+                  }} onClick={() => setShowCareerModal(false)}>
+                    <div className="admin-modal-content" onClick={(e) => e.stopPropagation()} style={{ maxWidth: '800px', position: 'relative' }}>
+                      <div style={{ position: 'absolute', inset: 0, pointerEvents: 'none', zIndex: 0, overflow: 'hidden', borderRadius: '0.75rem' }}>
+                        <div style={{ position: 'absolute', width: '260px', height: '260px', top: '-120px', left: '-80px', background: 'radial-gradient(circle at 30% 30%, rgba(59,130,246,0.25), transparent 60%)', filter: 'blur(20px)' }} />
+                        <div style={{ position: 'absolute', width: '240px', height: '240px', bottom: '-140px', right: '-100px', background: 'radial-gradient(circle at 70% 70%, rgba(16,185,129,0.22), transparent 60%)', filter: 'blur(20px)' }} />
+                      </div>
+                      <div style={{ position: 'relative', zIndex: 1 }}>
+                        <div className="admin-modal-header">
+                          <h2>{isEditingCareer ? (language === 'en' ? 'Edit Job' : 'চাকরি সম্পাদনা') : (language === 'en' ? 'Add New Job' : 'নতুন চাকরি যোগ করুন')}</h2>
+                          <button onClick={() => setShowCareerModal(false)} className="admin-modal-close">×</button>
+                        </div>
+                        <form onSubmit={async (e) => {
+                          e.preventDefault()
+                          setLoadingCareers(true)
+                          try {
+                            const url = isEditingCareer ? `${API_BASE}/api/careers/${editingCareerId}` : `${API_BASE}/api/careers`
+                            const method = isEditingCareer ? 'PUT' : 'POST'
+
+                            // Filter out empty strings from array fields
+                            const cleanedForm = {
+                              ...careerForm,
+                              benefits: careerForm.benefits.filter(item => item && item.trim() !== ''),
+                              benefitsBn: careerForm.benefitsBn.filter(item => item && item.trim() !== ''),
+                              responsibilities: careerForm.responsibilities.filter(item => item && item.trim() !== ''),
+                              responsibilitiesBn: careerForm.responsibilitiesBn.filter(item => item && item.trim() !== ''),
+                              requirements: careerForm.requirements.filter(item => item && item.trim() !== ''),
+                              requirementsBn: careerForm.requirementsBn.filter(item => item && item.trim() !== '')
+                            }
+
+                            const response = await authFetch(url, {
+                              method,
+                              headers: { 'Content-Type': 'application/json' },
+                              body: JSON.stringify(cleanedForm)
+                            })
+                            if (response.ok) {
+                              fetchCareers()
+                              setShowCareerModal(false)
+                            }
+                          } catch (error) {
+                            console.error('Career submit error:', error)
+                          } finally {
+                            setLoadingCareers(false)
+                          }
+                        }}>
+                          <div className="admin-modal-body">
+                            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
+                              <div className="admin-form-group">
+                                <label>{language === 'en' ? 'Job ID' : 'চাকরি আইডি'}</label>
+                                <input
+                                  type="text"
+                                  value={careerForm.jobId}
+                                  onChange={(e) => setCareerForm({ ...careerForm, jobId: e.target.value })}
+                                  required
+                                  placeholder="e.g., area-sales-manager"
+                                />
+                              </div>
+                              <div className="admin-form-group">
+                                <label>{language === 'en' ? 'Type' : 'ধরন'}</label>
+                                <input
+                                  type="text"
+                                  value={careerForm.type}
+                                  onChange={(e) => setCareerForm({ ...careerForm, type: e.target.value })}
+                                  required
+                                  placeholder="Full-time"
+                                />
+                              </div>
+                            </div>
+                            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
+                              <div className="admin-form-group">
+                                <label>{language === 'en' ? 'Title (English)' : 'শিরোনাম (ইংরেজি)'}</label>
+                                <input
+                                  type="text"
+                                  value={careerForm.title}
+                                  onChange={(e) => setCareerForm({ ...careerForm, title: e.target.value })}
+                                  required
+                                />
+                              </div>
+                              <div className="admin-form-group">
+                                <label>{language === 'en' ? 'Title (Bengali)' : 'শিরোনাম (বাংলা)'}</label>
+                                <input
+                                  type="text"
+                                  value={careerForm.titleBn}
+                                  onChange={(e) => setCareerForm({ ...careerForm, titleBn: e.target.value })}
+                                />
+                              </div>
+                            </div>
+                            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
+                              <div className="admin-form-group">
+                                <label>{language === 'en' ? 'Location (English)' : 'অবস্থান (ইংরেজি)'}</label>
+                                <input
+                                  type="text"
+                                  value={careerForm.location}
+                                  onChange={(e) => setCareerForm({ ...careerForm, location: e.target.value })}
+                                  required
+                                />
+                              </div>
+                              <div className="admin-form-group">
+                                <label>{language === 'en' ? 'Location (Bengali)' : 'অবস্থান (বাংলা)'}</label>
+                                <input
+                                  type="text"
+                                  value={careerForm.locationBn}
+                                  onChange={(e) => setCareerForm({ ...careerForm, locationBn: e.target.value })}
+                                />
+                              </div>
+                            </div>
+                            <div className="admin-form-group">
+                              <label>{language === 'en' ? 'Summary (English)' : 'সারসংক্ষেপ (ইংরেজি)'}</label>
+                              <textarea
+                                value={careerForm.summary}
+                                onChange={(e) => setCareerForm({ ...careerForm, summary: e.target.value })}
+                                required
+                                rows={3}
+                              />
+                            </div>
+                            <div className="admin-form-group">
+                              <label>{language === 'en' ? 'Summary (Bengali)' : 'সারসংক্ষেপ (বাংলা)'}</label>
+                              <textarea
+                                value={careerForm.summaryBn}
+                                onChange={(e) => setCareerForm({ ...careerForm, summaryBn: e.target.value })}
+                                rows={3}
+                              />
+                            </div>
+                            <div className="admin-form-group">
+                              <label>{language === 'en' ? 'Overview (English)' : 'ওভারভিউ (ইংরেজি)'}</label>
+                              <textarea
+                                value={careerForm.overview}
+                                onChange={(e) => setCareerForm({ ...careerForm, overview: e.target.value })}
+                                rows={3}
+                                placeholder="Brief overview of the role..."
+                              />
+                            </div>
+                            <div className="admin-form-group">
+                              <label>{language === 'en' ? 'Overview (Bengali)' : 'ওভারভিউ (বাংলা)'}</label>
+                              <textarea
+                                value={careerForm.overviewBn}
+                                onChange={(e) => setCareerForm({ ...careerForm, overviewBn: e.target.value })}
+                                rows={3}
+                              />
+                            </div>
+                            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
+                              <div className="admin-form-group">
+                                <label>{language === 'en' ? 'Salary (English)' : 'বেতন (ইংরেজি)'}</label>
+                                <input
+                                  type="text"
+                                  value={careerForm.salary}
+                                  onChange={(e) => setCareerForm({ ...careerForm, salary: e.target.value })}
+                                  placeholder="e.g., BDT 45,000–65,000 per month"
+                                />
+                              </div>
+                              <div className="admin-form-group">
+                                <label>{language === 'en' ? 'Salary (Bengali)' : 'বেতন (বাংলা)'}</label>
+                                <input
+                                  type="text"
+                                  value={careerForm.salaryBn}
+                                  onChange={(e) => setCareerForm({ ...careerForm, salaryBn: e.target.value })}
+                                />
+                              </div>
+                            </div>
+                            <div className="admin-form-group">
+                              <label>{language === 'en' ? 'Benefits (English) - One per line' : 'সুবিধা (ইংরেজি) - প্রতি লাইনে একটি'}</label>
+                              <textarea
+                                value={careerForm.benefits.join('\n')}
+                                onChange={(e) => setCareerForm({ ...careerForm, benefits: e.target.value.split('\n') })}
+                                rows={4}
+                                placeholder="Monthly sales incentives&#10;Festival bonuses&#10;Travel allowance"
+                              />
+                            </div>
+                            <div className="admin-form-group">
+                              <label>{language === 'en' ? 'Benefits (Bengali) - One per line' : 'সুবিধা (বাংলা) - প্রতি লাইনে একটি'}</label>
+                              <textarea
+                                value={careerForm.benefitsBn.join('\n')}
+                                onChange={(e) => setCareerForm({ ...careerForm, benefitsBn: e.target.value.split('\n') })}
+                                rows={4}
+                              />
+                            </div>
+                            <div className="admin-form-group">
+                              <label>{language === 'en' ? 'Key Responsibilities (English) - One per line' : 'মূল দায়িত্ব (ইংরেজি) - প্রতি লাইনে একটি'}</label>
+                              <textarea
+                                value={careerForm.responsibilities.join('\n')}
+                                onChange={(e) => setCareerForm({ ...careerForm, responsibilities: e.target.value.split('\n') })}
+                                rows={5}
+                                placeholder="Plan and deliver sales targets&#10;Build dealer networks&#10;Execute field campaigns"
+                              />
+                            </div>
+                            <div className="admin-form-group">
+                              <label>{language === 'en' ? 'Key Responsibilities (Bengali) - One per line' : 'মূল দায়িত্ব (বাংলা) - প্রতি লাইনে একটি'}</label>
+                              <textarea
+                                value={careerForm.responsibilitiesBn.join('\n')}
+                                onChange={(e) => setCareerForm({ ...careerForm, responsibilitiesBn: e.target.value.split('\n') })}
+                                rows={5}
+                              />
+                            </div>
+
+                            <div className="admin-form-group">
+                              <label>{language === 'en' ? 'Requirements (English) - One per line' : 'প্রয়োজনীয়তা (ইংরেজি) - প্রতি লাইনে একটি'}</label>
+                              <textarea
+                                value={careerForm.requirements.join('\n')}
+                                onChange={(e) => setCareerForm({ ...careerForm, requirements: e.target.value.split('\n') })}
+                                rows={5}
+                                placeholder="Graduate in Agriculture/Marketing/Business&#10;2-5 years experience&#10;Strong communication skills"
+                              />
+                            </div>
+                            <div className="admin-form-group">
+                              <label>{language === 'en' ? 'Requirements (Bengali) - One per line' : 'প্রয়োজনীয়তা (বাংলা) - প্রতি লাইনে একটি'}</label>
+                              <textarea
+                                value={careerForm.requirementsBn.join('\n')}
+                                onChange={(e) => setCareerForm({ ...careerForm, requirementsBn: e.target.value.split('\n') })}
+                                rows={5}
+                              />
+                            </div>
+                            <div style={{ display: 'flex', gap: '1rem' }}>
+                              <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                                <input
+                                  type="checkbox"
+                                  checked={careerForm.isActive}
+                                  onChange={(e) => setCareerForm({ ...careerForm, isActive: e.target.checked })}
+                                />
+                                {language === 'en' ? 'Active' : 'সক্রিয়'}
+                              </label>
+                              <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                                <input
+                                  type="checkbox"
+                                  checked={careerForm.isOpen}
+                                  onChange={(e) => setCareerForm({ ...careerForm, isOpen: e.target.checked })}
+                                />
+                                {language === 'en' ? 'Open for Applications' : 'আবেদনের জন্য খোলা'}
+                              </label>
+                            </div>
+                          </div>
+                          <div className="admin-modal-footer">
+                            <button type="button" onClick={() => setShowCareerModal(false)} className="admin-btn btn-secondary">
+                              {language === 'en' ? 'Cancel' : 'বাতিল'}
+                            </button>
+                            <button type="submit" className="admin-btn btn-primary" disabled={loadingCareers}>
+                              {loadingCareers ? (language === 'en' ? 'Saving...' : 'সংরক্ষণ করা হচ্ছে...') : (isEditingCareer ? (language === 'en' ? 'Update' : 'আপডেট') : (language === 'en' ? 'Create' : 'তৈরি করুন'))}
+                            </button>
+                          </div>
+                        </form>
+                      </div>
+                    </div>
+                  </div>
+                )}
               </div>
             )
           }
@@ -18220,6 +20675,250 @@ function AdminPage({ language, toggleLanguage, t }) {
             document.body
           )
         }
+
+        {/* Blog Modal */}
+        {showBlogModal && (
+          <div className="admin-employee-view-overlay" style={{
+            position: 'fixed',
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            backgroundColor: 'rgba(0, 0, 0, 0.5)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            zIndex: 1000,
+            padding: '1rem'
+          }} onClick={() => setShowBlogModal(false)}>
+            <div className="admin-modal-content" style={{ maxWidth: '900px', width: '100%', position: 'relative', overflow: 'hidden', padding: 0 }} onClick={(e) => e.stopPropagation()}>
+              <div style={{
+                position: 'absolute',
+                inset: 0,
+                pointerEvents: 'none',
+                overflow: 'hidden',
+                borderRadius: '0.75rem'
+              }}>
+                <div style={{
+                  position: 'absolute',
+                  width: '260px',
+                  height: '260px',
+                  top: '-120px',
+                  left: '-80px',
+                  background: 'radial-gradient(circle at 30% 30%, rgba(59,130,246,0.15), transparent 60%)',
+                  filter: 'blur(20px)'
+                }} />
+                <div style={{
+                  position: 'absolute',
+                  width: '240px',
+                  height: '240px',
+                  bottom: '-140px',
+                  right: '-100px',
+                  background: 'radial-gradient(circle at 70% 70%, rgba(16,185,129,0.12), transparent 60%)',
+                  filter: 'blur(20px)'
+                }} />
+              </div>
+
+              <div style={{ position: 'relative', zIndex: 1, padding: '1.5rem', maxHeight: '90vh', overflowY: 'auto' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem', gap: '1rem' }}>
+                  <div>
+                    <h2 style={{ margin: 0, fontSize: '1.5rem', fontWeight: 800, color: '#0f172a' }}>
+                      {isEditingBlog ? (language === 'en' ? 'Edit Blog' : 'ব্লগ সম্পাদনা করুন') : (language === 'en' ? 'Add Blog' : 'ব্লগ যোগ করুন')}
+                    </h2>
+                    <p style={{ margin: '0.25rem 0 0 0', color: '#475569', fontWeight: 600 }}>
+                      {language === 'en' ? 'Fill in blog details and save' : 'ব্লগের বিবরণ পূরণ করুন এবং সংরক্ষণ করুন'}
+                    </p>
+                  </div>
+                  <button
+                    onClick={() => setShowBlogModal(false)}
+                    style={{
+                      background: '#e2e8f0',
+                      border: 'none',
+                      padding: '0.4rem 0.65rem',
+                      borderRadius: '0.375rem',
+                      cursor: 'pointer',
+                      fontWeight: 700,
+                      color: '#475569'
+                    }}
+                  >
+                    ×
+                  </button>
+                </div>
+
+                <form onSubmit={handleBlogSubmit}>
+                  <div className="admin-form-grid">
+                    <div className="admin-form-group">
+                      <label>{language === 'en' ? 'Title (English)' : 'শিরোনাম (ইংরেজি)'}</label>
+                      <input
+                        type="text"
+                        value={blogForm.title}
+                        onChange={(e) => setBlogForm({ ...blogForm, title: e.target.value })}
+                        required
+                        style={{ padding: '0.75rem' }}
+                      />
+                    </div>
+                    <div className="admin-form-group">
+                      <label>{language === 'en' ? 'Title (Bengali)' : 'শিরোনাম (বাংলা)'}</label>
+                      <input
+                        type="text"
+                        value={blogForm.titleBn}
+                        onChange={(e) => setBlogForm({ ...blogForm, titleBn: e.target.value })}
+                        style={{ padding: '0.75rem' }}
+                      />
+                    </div>
+                    <div className="admin-form-group">
+                      <label>{language === 'en' ? 'Author (English)' : 'লেখক (ইংরেজি)'}</label>
+                      <input
+                        type="text"
+                        value={blogForm.author}
+                        onChange={(e) => setBlogForm({ ...blogForm, author: e.target.value })}
+                        required
+                        style={{ padding: '0.75rem' }}
+                      />
+                    </div>
+                    <div className="admin-form-group">
+                      <label>{language === 'en' ? 'Author (Bengali)' : 'লেখক (বাংলা)'}</label>
+                      <input
+                        type="text"
+                        value={blogForm.authorBn}
+                        onChange={(e) => setBlogForm({ ...blogForm, authorBn: e.target.value })}
+                        style={{ padding: '0.75rem' }}
+                      />
+                    </div>
+                    <div className="admin-form-group">
+                      <label>{language === 'en' ? 'Category (English)' : 'বিভাগ (ইংরেজি)'}</label>
+                      <input
+                        type="text"
+                        value={blogForm.category}
+                        onChange={(e) => setBlogForm({ ...blogForm, category: e.target.value })}
+                        required
+                        style={{ padding: '0.75rem' }}
+                      />
+                    </div>
+                    <div className="admin-form-group">
+                      <label>{language === 'en' ? 'Category (Bengali)' : 'বিভাগ (বাংলা)'}</label>
+                      <input
+                        type="text"
+                        value={blogForm.categoryBn}
+                        onChange={(e) => setBlogForm({ ...blogForm, categoryBn: e.target.value })}
+                        style={{ padding: '0.75rem' }}
+                      />
+                    </div>
+                    <div className="admin-form-group">
+                      <label>{language === 'en' ? 'Date' : 'তারিখ'}</label>
+                      <input
+                        type="date"
+                        value={blogForm.date}
+                        onChange={(e) => setBlogForm({ ...blogForm, date: e.target.value })}
+                        required
+                        style={{ width: '100%', padding: '0.75rem', borderRadius: '0.375rem', border: '1px solid #d1d5db' }}
+                      />
+                    </div>
+                    <div className="admin-form-group">
+                      <label>{language === 'en' ? 'Blog Image' : 'ব্লগ ইমেজ'}</label>
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+                        <input
+                          type="file"
+                          accept="image/*"
+                          onChange={(e) => setBlogForm({ ...blogForm, image: e.target.files[0] })}
+                          style={{
+                            padding: '0.5rem',
+                            border: '1px dashed #cbd5e1',
+                            borderRadius: '0.5rem',
+                            cursor: 'pointer'
+                          }}
+                        />
+                        {blogForm.image && (
+                          <div style={{ position: 'relative', width: '100px', height: '60px', borderRadius: '4px', overflow: 'hidden', border: '1px solid #e2e8f0' }}>
+                            <img
+                              src={typeof blogForm.image === 'string' ? blogForm.image : URL.createObjectURL(blogForm.image)}
+                              alt="Preview"
+                              style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                            />
+                          </div>
+                        )}
+                        <p style={{ fontSize: '0.75rem', color: '#64748b', margin: 0 }}>
+                          {language === 'en' ? 'Upload a high-quality image (JPEG, PNG, GIF)' : 'একটি উচ্চ-মানের ছবি আপলোড করুন (JPEG, PNG, GIF)'}
+                        </p>
+                      </div>
+                    </div>
+                    <div className="admin-form-group" style={{ gridColumn: 'span 2' }}>
+                      <label>{language === 'en' ? 'Excerpt (English)' : 'সংক্ষিপ্ত বিবরণ (ইংরেজি)'}</label>
+                      <textarea
+                        value={blogForm.excerpt}
+                        onChange={(e) => setBlogForm({ ...blogForm, excerpt: e.target.value })}
+                        rows="2"
+                        style={{ padding: '0.75rem' }}
+                      />
+                    </div>
+                    <div className="admin-form-group" style={{ gridColumn: 'span 2' }}>
+                      <label>{language === 'en' ? 'Excerpt (Bengali)' : 'সংক্ষিপ্ত বিবরণ (বাংলা)'}</label>
+                      <textarea
+                        value={blogForm.excerptBn}
+                        onChange={(e) => setBlogForm({ ...blogForm, excerptBn: e.target.value })}
+                        rows="2"
+                        style={{ padding: '0.75rem' }}
+                      />
+                    </div>
+                    <div className="admin-form-group" style={{ gridColumn: 'span 2' }}>
+                      <label>{language === 'en' ? 'Content (English)' : 'বিষয়বস্তু (ইংরেজি)'}</label>
+                      <textarea
+                        value={blogForm.content}
+                        onChange={(e) => setBlogForm({ ...blogForm, content: e.target.value })}
+                        rows="6"
+                        required
+                        style={{ padding: '0.75rem' }}
+                      />
+                    </div>
+                    <div className="admin-form-group" style={{ gridColumn: 'span 2' }}>
+                      <label>{language === 'en' ? 'Content (Bengali)' : 'বিষয়বস্তু (বাংলা)'}</label>
+                      <textarea
+                        value={blogForm.contentBn}
+                        onChange={(e) => setBlogForm({ ...blogForm, contentBn: e.target.value })}
+                        rows="6"
+                        style={{ padding: '0.75rem' }}
+                      />
+                    </div>
+                  </div>
+
+                  <div style={{ display: 'flex', gap: '1.5rem', marginTop: '1rem' }}>
+                    <div className="admin-form-group checkbox-group">
+                      <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer', fontWeight: 600 }}>
+                        <input
+                          type="checkbox"
+                          checked={blogForm.isFeatured}
+                          onChange={(e) => setBlogForm({ ...blogForm, isFeatured: e.target.checked })}
+                          style={{ width: '1.2rem', height: '1.2rem' }}
+                        />
+                        {language === 'en' ? 'Featured Post' : 'সেরা পোস্ট'}
+                      </label>
+                    </div>
+                    <div className="admin-form-group checkbox-group">
+                      <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer', fontWeight: 600 }}>
+                        <input
+                          type="checkbox"
+                          checked={blogForm.isActive}
+                          onChange={(e) => setBlogForm({ ...blogForm, isActive: e.target.checked })}
+                          style={{ width: '1.2rem', height: '1.2rem' }}
+                        />
+                        {language === 'en' ? 'Active' : 'সক্রিয়'}
+                      </label>
+                    </div>
+                  </div>
+
+                  <div style={{ display: 'flex', gap: '0.75rem', marginTop: '1.5rem' }}>
+                    <button type="submit" className="admin-save-btn" disabled={loadingBlogs}>
+                      {loadingBlogs ? (language === 'en' ? 'Saving...' : 'সংরক্ষণ হচ্ছে...') : adminContent.save}
+                    </button>
+                    <button type="button" className="admin-remove-btn" onClick={() => setShowBlogModal(false)}>
+                      {adminContent.cancel}
+                    </button>
+                  </div>
+                </form>
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* Inventory Form Modal */}
         {
@@ -18543,10 +21242,10 @@ function AdminPage({ language, toggleLanguage, t }) {
                 </div>
                 <div className="admin-form-group" style={{ gridColumn: '1 / -1' }}>
                   <label>{language === 'en' ? 'Member Photo' : 'সদস্যের ছবি'}</label>
-                  <div style={{ display: 'flex', gap: '1rem', alignItems: 'center' }}>
+                  <div style={{ display: 'flex', gap: '1rem', alignItems: 'flex-start' }}>
                     <div style={{
-                      width: '64px',
-                      height: '64px',
+                      width: '100px',
+                      height: '100px',
                       borderRadius: '8px',
                       background: '#f1f5f9',
                       display: 'flex',
@@ -18556,9 +21255,18 @@ function AdminPage({ language, toggleLanguage, t }) {
                       border: '1px solid #e2e8f0'
                     }}>
                       {teamMemberForm.photo ? (
-                        <img src={teamMemberForm.photo} alt="Preview" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                        <img
+                          src={teamMemberForm.photo}
+                          alt="Preview"
+                          style={{
+                            width: '100%',
+                            height: '100%',
+                            objectFit: 'cover',
+                            objectPosition: `${teamMemberForm.photoAdjustment?.left || 50}% ${teamMemberForm.photoAdjustment?.top || 50}%`
+                          }}
+                        />
                       ) : (
-                        <svg viewBox="0 0 24 24" fill="none" stroke="#94a3b8" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ width: '24px', height: '24px' }}>
+                        <svg viewBox="0 0 24 24" fill="none" stroke="#94a3b8" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ width: '32px', height: '32px' }}>
                           <rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect>
                           <circle cx="8.5" cy="8.5" r="1.5"></circle>
                           <polyline points="21 15 16 10 5 21"></polyline>
@@ -18566,28 +21274,78 @@ function AdminPage({ language, toggleLanguage, t }) {
                       )}
                     </div>
                     <div style={{ flex: 1 }}>
-                      <label className="admin-upload-btn" style={{ marginBottom: '0.5rem', width: 'fit-content' }}>
-                        {language === 'en' ? 'Upload Photo' : 'ছবি আপলোড করুন'}
+                      <div style={{ marginBottom: '1rem' }}>
+                        <label className="admin-upload-btn" style={{ marginBottom: '0.5rem', width: 'fit-content' }}>
+                          {language === 'en' ? 'Upload Photo' : 'ছবি আপলোড করুন'}
+                          <input
+                            type="file"
+                            accept="image/*"
+                            onChange={async (e) => {
+                              const file = e.target.files?.[0]
+                              if (file) {
+                                const base64 = await fileToBase64(file)
+                                setTeamMemberForm({ ...teamMemberForm, photo: base64 })
+                              }
+                            }}
+                            style={{ display: 'none' }}
+                          />
+                        </label>
                         <input
-                          type="file"
-                          accept="image/*"
-                          onChange={async (e) => {
-                            const file = e.target.files?.[0]
-                            if (file) {
-                              const base64 = await fileToBase64(file)
-                              setTeamMemberForm({ ...teamMemberForm, photo: base64 })
-                            }
-                          }}
-                          style={{ display: 'none' }}
+                          type="text"
+                          value={teamMemberForm.photo}
+                          onChange={e => setTeamMemberForm({ ...teamMemberForm, photo: e.target.value })}
+                          placeholder="Or paste image URL..."
+                          style={{ width: '100%', padding: '0.5rem', borderRadius: '0.375rem', border: '1px solid #d1d5db', fontSize: '0.75rem' }}
                         />
-                      </label>
-                      <input
-                        type="text"
-                        value={teamMemberForm.photo}
-                        onChange={e => setTeamMemberForm({ ...teamMemberForm, photo: e.target.value })}
-                        placeholder="Or paste image URL..."
-                        style={{ width: '100%', padding: '0.5rem', borderRadius: '0.375rem', border: '1px solid #d1d5db', fontSize: '0.75rem' }}
-                      />
+                      </div>
+
+                      {teamMemberForm.photo && (
+                        <div style={{ background: '#f8fafc', padding: '1rem', borderRadius: '8px', border: '1px solid #e2e8f0' }}>
+                          <div style={{ fontSize: '0.75rem', fontWeight: 600, color: '#64748b', marginBottom: '0.75rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                              <path d="M12 19l7-7 3 3-7 7-3-3z"></path>
+                              <path d="M18 13l-1.5-7.5L2 2l3.5 14.5L13 18l5-5z"></path>
+                              <path d="M2 2l7.5 1.5"></path>
+                              <path d="M7 11l-3 3"></path>
+                            </svg>
+                            {language === 'en' ? 'Adjust Photo Position' : 'ছবি এর অবস্থান সমন্বয় করুন'}
+                          </div>
+                          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
+                            <div>
+                              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.7rem' }}>
+                                <label>{language === 'en' ? 'Vertical' : 'উল্লম্ব'}</label>
+                                <span>{teamMemberForm.photoAdjustment?.top}%</span>
+                              </div>
+                              <input
+                                type="range"
+                                min="0" max="100"
+                                value={teamMemberForm.photoAdjustment?.top || 50}
+                                onChange={e => setTeamMemberForm({
+                                  ...teamMemberForm,
+                                  photoAdjustment: { ...teamMemberForm.photoAdjustment, top: parseInt(e.target.value) }
+                                })}
+                                style={{ width: '100%', accentColor: '#3b82f6' }}
+                              />
+                            </div>
+                            <div>
+                              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.7rem' }}>
+                                <label>{language === 'en' ? 'Horizontal' : 'অনুভূমিক'}</label>
+                                <span>{teamMemberForm.photoAdjustment?.left}%</span>
+                              </div>
+                              <input
+                                type="range"
+                                min="0" max="100"
+                                value={teamMemberForm.photoAdjustment?.left || 50}
+                                onChange={e => setTeamMemberForm({
+                                  ...teamMemberForm,
+                                  photoAdjustment: { ...teamMemberForm.photoAdjustment, left: parseInt(e.target.value) }
+                                })}
+                                style={{ width: '100%', accentColor: '#3b82f6' }}
+                              />
+                            </div>
+                          </div>
+                        </div>
+                      )}
                     </div>
                   </div>
                 </div>

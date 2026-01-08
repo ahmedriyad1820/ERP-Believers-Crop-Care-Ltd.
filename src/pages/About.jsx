@@ -138,9 +138,8 @@ function AboutPage({ language, toggleLanguage, t }) {
     )
 
     sections.forEach(section => observer.observe(section))
-
     return () => observer.disconnect()
-  }, [])
+  }, [contentUpdate])
 
   return (
     <div className="app about-page">

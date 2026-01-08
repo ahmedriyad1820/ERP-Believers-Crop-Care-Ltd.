@@ -164,9 +164,8 @@ function ProductPage({ language, toggleLanguage, t, editedContent = {} }) {
     )
 
     sections.forEach(section => observer.observe(section))
-
     return () => observer.disconnect()
-  }, [])
+  }, [products, productsLoading])
 
   // Scroll to product card when returning from details page
   useEffect(() => {
@@ -221,7 +220,7 @@ function ProductPage({ language, toggleLanguage, t, editedContent = {} }) {
     <div className="app product-page">
       <SiteHeader language={language} toggleLanguage={toggleLanguage} t={t} />
       <main className="product-page-main">
-        <section className="product-hero-banner">
+        <section className="product-hero-banner fade-section">
           <div
             className="product-hero-banner-content"
             style={{
@@ -234,7 +233,7 @@ function ProductPage({ language, toggleLanguage, t, editedContent = {} }) {
           </div>
         </section>
 
-        <section className="products-grid-section">
+        <section className="products-grid-section fade-section">
           <div className="products-grid-container">
             {/* Search and Category Filter */}
             <div className="product-filters-wrapper">

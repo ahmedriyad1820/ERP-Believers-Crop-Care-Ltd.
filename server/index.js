@@ -14,17 +14,30 @@ import orderRoutes from './routes/orderRoutes.js'
 import settingsRoutes from './routes/settingsRoutes.js'
 import inventoryRoutes from './routes/inventoryRoutes.js'
 import territoryRoutes from './routes/territoryRoutes.js'
+import noticeRoutes from './routes/noticeRoutes.js'
+import assetRoutes from './routes/assetRoutes.js'
+import blogRoutes from './routes/blogRoutes.js'
+import careerRoutes from './routes/careerRoutes.js'
+import applicationRoutes from './routes/applicationRoutes.js'
 
 import helmet from 'helmet'
 import xss from 'xss-clean'
 import mongoSanitize from 'mongo-sanitize'
 import hpp from 'hpp'
 import rateLimit from 'express-rate-limit'
+import path from 'path'
+import { fileURLToPath } from 'url'
+
+const __filename = fileURLToPath(import.meta.url)
+const __dirname = path.dirname(__filename)
 
 // Load environment variables
 dotenv.config()
 
 const app = express()
+
+// Serve static files from the 'uploads' directory
+app.use('/uploads', express.static(path.join(__dirname, '../uploads')))
 
 // Middleware
 // Enable CORS first to handle preflight and errors correctly
@@ -87,6 +100,11 @@ app.use('/api/products', productRoutes)
 app.use('/api/orders', orderRoutes)
 app.use('/api/settings', settingsRoutes)
 app.use('/api/inventory', inventoryRoutes)
+app.use('/api/notices', noticeRoutes)
+app.use('/api/assets', assetRoutes)
+app.use('/api/blogs', blogRoutes)
+app.use('/api/careers', careerRoutes)
+app.use('/api/applications', applicationRoutes)
 app.use('/api/territories', territoryRoutes)
 
 // Error handling middleware

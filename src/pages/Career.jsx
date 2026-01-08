@@ -3,9 +3,13 @@ import { Link } from 'react-router-dom'
 import SiteHeader from '../components/SiteHeader.jsx'
 import logoImage from '../assets/logo.png'
 
+const API_BASE = import.meta.env.VITE_API_BASE || 'http://localhost:5000'
+
 function CareerPage({ language, toggleLanguage, t }) {
   const isBn = language === 'bn'
   const [contentUpdate, setContentUpdate] = useState(0)
+  const [careers, setCareers] = useState([])
+  const [loadingCareers, setLoadingCareers] = useState(true)
 
   // Listen for content updates
   useEffect(() => {
@@ -15,10 +19,10 @@ function CareerPage({ language, toggleLanguage, t }) {
     const handleContentUpdate = () => {
       setContentUpdate(prev => prev + 1)
     }
-    
+
     window.addEventListener('storage', handleStorageChange)
     window.addEventListener('contentUpdated', handleContentUpdate)
-    
+
     return () => {
       window.removeEventListener('storage', handleStorageChange)
       window.removeEventListener('contentUpdated', handleContentUpdate)
@@ -29,16 +33,16 @@ function CareerPage({ language, toggleLanguage, t }) {
   const editedContentStr = localStorage.getItem('editedContent')
   const editedContent = editedContentStr ? JSON.parse(editedContentStr) : {}
   const careerHero = editedContent.career?.hero || {}
-  
+
   // eslint-disable-next-line react-hooks/exhaustive-deps
   const currentCareerHero = (() => {
     const str = localStorage.getItem('editedContent')
     const content = str ? JSON.parse(str) : {}
     return content.career?.hero || {}
   })()
-  
+
   const displayCareerHero = contentUpdate > 0 ? currentCareerHero : careerHero
-  
+
   const pageImages = useMemo(() => {
     const pageImagesStr = localStorage.getItem('pageImages')
     return pageImagesStr ? JSON.parse(pageImagesStr) : {}
@@ -49,91 +53,91 @@ function CareerPage({ language, toggleLanguage, t }) {
     subtitle: displayCareerHero.subtitle || (isBn
       ? 'বেলিভার্স ক্রপ কেয়ার টিমে যোগ দিয়ে দেশের কৃষি উন্নয়নের অংশ হোন।'
       : 'Join Believers Crop Care and help us build a stronger future for farmers across Bangladesh.')
-      }
+  }
 
   const whyItems = isBn
     ? [
-        {
-          title: 'অর্থবহ কাজ',
-          desc: 'আপনার প্রতিটি কাজ সরাসরি কৃষক, ডিলার ও মাঠের মানুষের উপকারে আসে।'
-        },
-        {
-          title: 'শেখার সুযোগ',
-          desc: 'এগ্রোনমি, সাপ্লাই চেইন, সেলস ও অপারেশনে অভিজ্ঞ টিমের সাথে কাজ করার সুযোগ।'
-        },
-        {
-          title: 'দলভিত্তিক সংস্কৃতি',
-          desc: 'সহযোগী, সম্মানজনক ও পরিবারভিত্তিক সংস্কৃতি যেখানে সবাইকে মূল্য দেওয়া হয়।'
-        }
-      ]
+      {
+        title: 'অর্থবহ কাজ',
+        desc: 'আপনার প্রতিটি কাজ সরাসরি কৃষক, ডিলার ও মাঠের মানুষের উপকারে আসে।'
+      },
+      {
+        title: 'শেখার সুযোগ',
+        desc: 'এগ্রোনমি, সাপ্লাই চেইন, সেলস ও অপারেশনে অভিজ্ঞ টিমের সাথে কাজ করার সুযোগ।'
+      },
+      {
+        title: 'দলভিত্তিক সংস্কৃতি',
+        desc: 'সহযোগী, সম্মানজনক ও পরিবারভিত্তিক সংস্কৃতি যেখানে সবাইকে মূল্য দেওয়া হয়।'
+      }
+    ]
     : [
-        {
-          title: 'Meaningful impact',
-          desc: 'Every project you work on helps real farmers, dealers, and communities on the ground.'
-        },
-        {
-          title: 'Room to grow',
-          desc: 'Work closely with senior leaders across agronomy, supply chain, sales, and operations.'
-        },
-        {
-          title: 'Team-first culture',
-          desc: 'A collaborative, respectful, and people-centric culture where your voice matters.'
-        }
-      ]
+      {
+        title: 'Meaningful impact',
+        desc: 'Every project you work on helps real farmers, dealers, and communities on the ground.'
+      },
+      {
+        title: 'Room to grow',
+        desc: 'Work closely with senior leaders across agronomy, supply chain, sales, and operations.'
+      },
+      {
+        title: 'Team-first culture',
+        desc: 'A collaborative, respectful, and people-centric culture where your voice matters.'
+      }
+    ]
 
   const roles = isBn
     ? [
-        {
-          id: 'area-sales-manager',
-          title: 'এরিয়া সেলস ম্যানেজার',
-          location: 'বিভিন্ন জেলা',
-          type: 'ফুল টাইম',
-          summary:
-            'ডিস্ট্রিবিউটর ও ডিলার নেটওয়ার্ক পরিচালনা, সেলস টার্গেট অর্জন এবং মাঠ পর্যায়ে সম্পর্ক গড়ে তোলার দায়িত্ব।'
-        },
-        {
-          id: 'field-agronomy-officer',
-          title: 'ফিল্ড এগ্রোনমি অফিসার',
-          location: 'ফিল্ড বেসড',
-          type: 'ফুল টাইম',
-          summary:
-            'ডেমো প্লট, কৃষক মিটিং ও ট্রেনিং-এর মাধ্যমে প্রযুক্তিগত সহায়তা প্রদান এবং ফিডব্যাক সংগ্রহ।'
-        },
-        {
-          id: 'supply-chain-coordinator',
-          title: 'সাপ্লাই চেইন কো-অর্ডিনেটর',
-          location: 'হেড অফিস',
-          type: 'ফুল টাইম',
-          summary:
-            'অর্ডার প্রসেসিং, স্টক প্ল্যানিং এবং লজিস্টিকস টিমের সাথে সমন্বয়ের মাধ্যমে সময়মতো পণ্য সরবরাহ নিশ্চিত করা।'
-        }
-      ]
+      {
+        id: 'area-sales-manager',
+        title: 'এরিয়া সেলস ম্যানেজার',
+        location: 'বিভিন্ন জেলা',
+        type: 'ফুল টাইম',
+        summary:
+          'ডিস্ট্রিবিউটর ও ডিলার নেটওয়ার্ক পরিচালনা, সেলস টার্গেট অর্জন এবং মাঠ পর্যায়ে সম্পর্ক গড়ে তোলার দায়িত্ব।'
+      },
+      {
+        id: 'field-agronomy-officer',
+        title: 'ফিল্ড এগ্রোনমি অফিসার',
+        location: 'ফিল্ড বেসড',
+        type: 'ফুল টাইম',
+        summary:
+          'ডেমো প্লট, কৃষক মিটিং ও ট্রেনিং-এর মাধ্যমে প্রযুক্তিগত সহায়তা প্রদান এবং ফিডব্যাক সংগ্রহ।'
+      },
+      {
+        id: 'supply-chain-coordinator',
+        title: 'সাপ্লাই চেইন কো-অর্ডিনেটর',
+        location: 'হেড অফিস',
+        type: 'ফুল টাইম',
+        summary:
+          'অর্ডার প্রসেসিং, স্টক প্ল্যানিং এবং লজিস্টিকস টিমের সাথে সমন্বয়ের মাধ্যমে সময়মতো পণ্য সরবরাহ নিশ্চিত করা।'
+      }
+    ]
     : [
-        {
-          id: 'area-sales-manager',
-          title: 'Area Sales Manager',
-          location: 'Multiple districts',
-          type: 'Full-time',
-          summary:
-            'Own dealer relationships, drive sales targets, and support field activations in your assigned territory.'
-        },
-        {
-          id: 'field-agronomy-officer',
-          title: 'Field Agronomy Officer',
-          location: 'Field-based',
-          type: 'Full-time',
-          summary:
-            'Lead demo plots, farmer meetings, and trainings while bringing back insights to improve our products.'
-        },
-        {
-          id: 'supply-chain-coordinator',
-          title: 'Supply Chain Coordinator',
-          location: 'Head office',
-          type: 'Full-time',
-          summary:
-            'Coordinate order processing, stock planning, and logistics to keep products available in every season.'
-        }
-      ]
+      {
+        id: 'area-sales-manager',
+        title: 'Area Sales Manager',
+        location: 'Multiple districts',
+        type: 'Full-time',
+        summary:
+          'Own dealer relationships, drive sales targets, and support field activations in your assigned territory.'
+      },
+      {
+        id: 'field-agronomy-officer',
+        title: 'Field Agronomy Officer',
+        location: 'Field-based',
+        type: 'Full-time',
+        summary:
+          'Lead demo plots, farmer meetings, and trainings while bringing back insights to improve our products.'
+      },
+      {
+        id: 'supply-chain-coordinator',
+        title: 'Supply Chain Coordinator',
+        location: 'Head office',
+        type: 'Full-time',
+        summary:
+          'Coordinate order processing, stock planning, and logistics to keep products available in every season.'
+      }
+    ]
 
   useEffect(() => {
     const sections = document.querySelectorAll('.fade-section')
@@ -155,8 +159,25 @@ function CareerPage({ language, toggleLanguage, t }) {
     )
 
     sections.forEach(section => observer.observe(section))
-
     return () => observer.disconnect()
+  }, [contentUpdate])
+
+  // Fetch careers from API
+  useEffect(() => {
+    const fetchCareers = async () => {
+      try {
+        const response = await fetch(`${API_BASE}/api/careers?isActive=true`)
+        const data = await response.json()
+        if (response.ok && data.success) {
+          setCareers(data.data.filter(c => c.isOpen))
+        }
+      } catch (error) {
+        console.error('Error fetching careers:', error)
+      } finally {
+        setLoadingCareers(false)
+      }
+    }
+    fetchCareers()
   }, [])
 
   useEffect(() => {
@@ -180,9 +201,9 @@ function CareerPage({ language, toggleLanguage, t }) {
       <main className="about-page-main">
         {/* Hero */}
         <section className="about-hero-banner fade-section">
-          <div 
-            className="about-hero-banner-content" 
-            style={{ 
+          <div
+            className="about-hero-banner-content"
+            style={{
               fontWeight: 700,
               background: `linear-gradient(135deg, rgba(9, 17, 31, 0.40), rgba(19, 56, 98, 0.40)), url(${pageImages.careerHero || '/hero-image.jpg'}) center 40% / cover no-repeat`
             }}
@@ -193,7 +214,7 @@ function CareerPage({ language, toggleLanguage, t }) {
         </section>
 
         {/* Why work with us */}
-        <section 
+        <section
           className="about-values-section fade-section"
           style={{
             background: `linear-gradient(180deg, rgba(248, 250, 252, 0.192), rgba(232, 247, 241, 0.192)), url(${pageImages.careerValuesBackground || 'https://images.stockcake.com/public/e/6/e/e6e4865c-08b7-4633-b428-f5658462485e_large/farmers-tending-crops-stockcake.jpg'}) center/cover no-repeat`
@@ -235,22 +256,32 @@ function CareerPage({ language, toggleLanguage, t }) {
               </p>
             </div>
             <div className="about-stats-grid">
-              {roles.map(role => (
-                <Link
-                  key={role.id}
-                  to={`/career/${role.id}`}
-                  className="about-stat-card"
-                >
-                  <div className="about-stat-label-block">
-                    <small>{role.type}</small>
-                    <span className="about-stat-value">{role.title}</span>
-                  </div>
-                  <p>{role.summary}</p>
-                  <p style={{ marginTop: '0.5rem', fontSize: '0.9rem', opacity: 0.9 }}>
-                    {isBn ? 'লোকেশন' : 'Location'}: {role.location}
-                  </p>
-                </Link>
-              ))}
+              {loadingCareers ? (
+                <p style={{ textAlign: 'center', width: '100%', padding: '2rem' }}>
+                  {isBn ? 'লোড হচ্ছে...' : 'Loading...'}
+                </p>
+              ) : careers.length === 0 ? (
+                <p style={{ textAlign: 'center', width: '100%', padding: '2rem' }}>
+                  {isBn ? 'বর্তমানে কোনো শূন্যপদ নেই।' : 'No current openings.'}
+                </p>
+              ) : (
+                careers.map(career => (
+                  <Link
+                    key={career._id}
+                    to={`/career/${career.jobId}`}
+                    className="about-stat-card"
+                  >
+                    <div className="about-stat-label-block">
+                      <small>{isBn ? career.typeBn || career.type : career.type}</small>
+                      <span className="about-stat-value">{isBn ? career.titleBn || career.title : career.title}</span>
+                    </div>
+                    <p>{isBn ? career.summaryBn || career.summary : career.summary}</p>
+                    <p style={{ marginTop: '0.5rem', fontSize: '0.9rem', opacity: 0.9 }}>
+                      {isBn ? 'লোকেশন' : 'Location'}: {isBn ? career.locationBn || career.location : career.location}
+                    </p>
+                  </Link>
+                ))
+              )}
             </div>
           </div>
         </section>

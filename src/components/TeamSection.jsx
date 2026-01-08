@@ -139,6 +139,9 @@ function TeamSection({ t, language, className = '', showManagement = true, teamM
                                   src={member.photo}
                                   alt={getField(member.name, language)}
                                   loading="lazy"
+                                  style={{
+                                    objectPosition: `${member.photoAdjustment?.left || 50}% ${member.photoAdjustment?.top || 50}%`
+                                  }}
                                   onError={e => {
                                     e.currentTarget.src = '/hero-image.jpg'
                                   }}
@@ -179,6 +182,9 @@ function TeamSection({ t, language, className = '', showManagement = true, teamM
                           src={member.photo}
                           alt={getField(member.name, language)}
                           loading="lazy"
+                          style={{
+                            objectPosition: `${member.photoAdjustment?.left || 50}% ${member.photoAdjustment?.top || 50}%`
+                          }}
                           onError={e => {
                             e.currentTarget.src = '/hero-image.jpg'
                           }}

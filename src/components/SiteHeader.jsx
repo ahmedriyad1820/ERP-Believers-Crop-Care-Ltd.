@@ -29,15 +29,15 @@ function SiteHeader({ language, toggleLanguage, t }) {
     <header className="header">
       <div className="header-content">
         <div className="logo-container">
-          <button 
+          <button
             type="button"
             className="logo-button"
             onClick={handleLogoClick}
             aria-label={language === 'en' ? 'Go to homepage' : 'হোম পেইজে যান'}
           >
-            <img 
-              src={logoImage} 
-              alt="Believers Crop Care Ltd." 
+            <img
+              src={logoImage}
+              alt="Believers Crop Care Ltd."
               className="logo-image"
               onLoad={() => console.log('Logo loaded successfully')}
               onError={(e) => {
@@ -47,9 +47,9 @@ function SiteHeader({ language, toggleLanguage, t }) {
             />
           </button>
         </div>
-        
+
         <nav className={`nav-links ${mobileMenuOpen ? 'mobile-menu-open' : ''}`}>
-          <Link 
+          <Link
             to="/"
             className={`nav-link ${isActive('/') ? 'active' : ''}`}
             onClick={() => {
@@ -59,35 +59,28 @@ function SiteHeader({ language, toggleLanguage, t }) {
           >
             {t.nav.home}
           </Link>
-          <Link 
+          <Link
             to="/about"
             className={`nav-link ${isActive('/about') ? 'active' : ''}`}
             onClick={() => setMobileMenuOpen(false)}
           >
             {t.nav.about}
           </Link>
-          <Link 
+          <Link
             to="/product"
             className={`nav-link ${isActive('/product') ? 'active' : ''}`}
             onClick={() => setMobileMenuOpen(false)}
           >
             {t.nav.product}
           </Link>
-          <Link 
-            to="/notices"
-            className={`nav-link ${isActive('/notices') ? 'active' : ''}`}
-            onClick={() => setMobileMenuOpen(false)}
-          >
-            {t.nav.notices}
-          </Link>
-          <Link 
+          <Link
             to="/career"
             className={`nav-link ${isActive('/career') ? 'active' : ''}`}
             onClick={() => setMobileMenuOpen(false)}
           >
             {t.nav.career}
           </Link>
-          <Link 
+          <Link
             to="/blog"
             className={`nav-link ${isActive('/blog') ? 'active' : ''}`}
             onClick={() => setMobileMenuOpen(false)}
@@ -95,8 +88,8 @@ function SiteHeader({ language, toggleLanguage, t }) {
             {t.nav.blog}
           </Link>
           <div className="mobile-menu-actions">
-            <button 
-              className="mobile-language-btn" 
+            <button
+              className="mobile-language-btn"
               onClick={() => {
                 toggleLanguage()
                 // Keep menu open so user can see language change
@@ -105,16 +98,16 @@ function SiteHeader({ language, toggleLanguage, t }) {
             >
               <span>{language === 'en' ? 'বাংলা' : 'EN'}</span>
             </button>
-            <Link 
-              to="/contact" 
-              className="mobile-contact-btn" 
+            <Link
+              to="/contact"
+              className="mobile-contact-btn"
               onClick={() => setMobileMenuOpen(false)}
             >
               {t.nav.contact}
             </Link>
           </div>
         </nav>
-        
+
         <div className="header-right">
           <button className="language-btn" onClick={toggleLanguage} title={language === 'en' ? 'বাংলায় পরিবর্তন করুন' : 'Switch to English'}>
             <span>{language === 'en' ? 'বাংলা' : 'EN'}</span>
@@ -122,7 +115,7 @@ function SiteHeader({ language, toggleLanguage, t }) {
           <Link to="/contact" className="contact-btn">
             {t.nav.contact}
           </Link>
-          <button 
+          <button
             className="mobile-menu-toggle"
             onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
             aria-label="Toggle menu"
